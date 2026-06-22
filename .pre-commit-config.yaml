@@ -1,0 +1,27 @@
+# Cancello locale VOKARI (ADR-031). Installa con: uvx pre-commit install
+# ⚠ Le `rev` sono indicative → allinearle alla versione in uso (es. `uvx pre-commit autoupdate`).
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks          # blocca il commit accidentale della key Anthropic (ADR-003/-017)
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-merge-conflict
+  - repo: local
+    hooks:
+      - id: eslint
+        name: eslint (frontend)
+        entry: pnpm -C frontend exec eslint
+        language: system
+        files: ^frontend/src/.*\.(ts|tsx)$
+        pass_filenames: false

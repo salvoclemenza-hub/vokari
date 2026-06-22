@@ -1,0 +1,78 @@
+[project]
+name = "vokari"
+version = "0.1.1"
+description = "Voce -> conoscenza strutturata, 100% in locale."
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "typer>=0.12",
+    "platformdirs>=4.2",
+    "keyring>=25.0",
+    "pydub>=0.25",
+    "faster-whisper>=1.1",
+    "anthropic>=0.40",
+    "pydantic>=2.6",
+    "httpx>=0.27",
+    "numpy>=1.26",
+    "sounddevice>=0.4",
+    "PyAudioWPatch>=0.2.12 ; sys_platform == 'win32'",
+    "pywebview>=5.0",
+    "fpdf2>=2.8.7",
+    "psutil>=5.9",
+]
+
+[project.scripts]
+vokari = "vokari.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.6",
+]
+
+[tool.ruff]
+src = ["src", "tests"]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "S", "C4", "RUF"]
+# SIM rimosso: 16 try/except→contextlib.suppress richiedono refactor non-banale sul codice esistente
+# PERF rimosso: 6 list-comprehension su codice esistente, refactor non triviale senza test di perf
+
+[tool.ruff.lint.per-file-ignores]
+# i test importano per sezione-milestone dopo commenti esplicativi (pattern voluto)
+"tests/test_cli.py" = ["E402"]
+# le stringhe di prompt LLM (few-shot, istruzioni) sono dati, non codice — righe lunghe ok
+"src/vokari/analyze/prompts.py" = ["E501"]
+# assert è il pattern standard dei test — S101 non applicabile
+# S108 flagga /tmp/ nelle stringhe-path fake nei test (non veri tmpfile): false positive nei test
+# RUF001 flagga en-dash/virgolette tipografiche negli expected-output dei test: falso positivo
+# E701/E702: stile compatto una-riga per stub di test (intentional, pattern da spec)
+"tests/**" = ["S101", "S108", "RUF001", "E701", "E702"]
+# RUF001/RUF003: en-dash e virgolette tipografiche nelle stringhe di output Obsidian/PDF sono intenzionali
+"src/vokari/render/obsidian.py" = ["RUF001", "RUF003"]
+"src/vokari/render/pdf.py" = ["RUF001"]
+# E701/E702: stile compatto nella funzione _bump (if/elif su una riga, leggibilità voluta)
+"scripts/bump_version.py" = ["E701", "E702"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/vokari"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "."]
+testpaths = ["tests"]
+markers = ["slow: test che richiedono risorse esterne (ffmpeg, rete)"]
+
+[tool.coverage.run]
+source = ["src/vokari", "app"]
+omit = ["app/main.py"]
+
+[tool.coverage.report]
+show_missing = true
+# baseline misurata a 79% (2026-06-12, Wave 3): fail_under impostato a 78 per guardia regressioni
+fail_under = 78

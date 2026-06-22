@@ -1,0 +1,1141 @@
+/* VOKARI — design system condiviso. Stessi token e componenti della Home,
+   piu' i componenti delle nuove schermate. Ogni schermata e' una .vk-screen-app
+   che riempie il proprio artboard. */
+:root{
+  --paper:#efe9dd; --surface:#faf7f0; --surface2:#f4efe4;
+  /* Testo terziario scurito per WCAG AA (era #736d5d/#9a9381/#7e7a66, sotto 4.5:1
+     su crema/console — review 2026-06-15 A0). Hierarchy faint<mut preservata, hue caldo invariato. */
+  --ink:#1b1812; --ink2:#3a352b; --mut:#655f50; --faint:#7d7765;
+  --line:#e4ddcd; --line2:#d8d0bd;
+  --green:#1f8f5b; --green-d:#176c45; --green-soft:#e6f0e6; --green-ring:rgba(31,143,91,.16);
+  --console:#15140e; --console2:#1b1a12; --con-line:#2c2a1e; --con-ink:#dcd8c7; --con-dim:#9a9580;
+  --phos:#5fd98f; --amber:#d8a24c; --red:#ec5b49; --violet:#9a7ad6;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --disp:"Space Grotesk",system-ui,sans-serif;
+  --sans:"Hanken Grotesk",system-ui,sans-serif;
+  --r:14px;
+  /* Elevazione coerente per ruolo (round 2 E4): card statica=1, elemento flottante=2, console=3.
+     Sostituisce le ombre ad-hoc sparse (0 10px 34px / 0 2px 4px / 0 6px 20px / 0 24px 60px). */
+  --shadow-1:0 1px 2px rgba(40,33,20,.06);
+  --shadow-2:0 6px 20px rgba(20,17,8,.18);
+  --shadow-3:0 24px 60px -28px rgba(20,17,8,.75);
+  /* Scala spaziature 4/8 (round 2 B1) — adottata in modo incrementale, non un big-bang. */
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px; --sp-6:24px; --sp-7:32px;
+  /* Scala tipografica + interlinea nominata (round 2 D1/D2): il sistema vive qui,
+     l'adozione è incrementale (gli anchor sotto la usano, il resto migra nel tempo). */
+  --fs-h1:30px; --fs-h2:22px; --fs-title:15.5px; --fs-body:13.5px; --fs-meta:12px; --fs-micro:11px;
+  --lh-body:1.6; --lh-list:1.55; --lh-ui:1.4;
+  --r-ctl:8px;  /* raggio unico dei controlli piccoli (round 2 C1): prima 7/8/9 misti */
+}
+*{box-sizing:border-box;}
+kbd{font-family:var(--mono);font-size:11px;font-weight:500;}
+
+/* ── Window (flush, fills artboard) ───────────────────── */
+.vk-screen-app{position:relative;width:100%;height:100%;background:var(--paper);color:var(--ink);
+  font-family:var(--sans);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+  display:flex;flex-direction:column;overflow:hidden;}
+
+/* ── Titlebar ─────────────────────────────────────────── */
+.vk-tbar{height:56px;flex:0 0 auto;display:flex;align-items:center;gap:16px;padding:0 18px;
+  border-bottom:1px solid var(--line);background:linear-gradient(180deg,#f3eee2,#efe9dc);}
+.vk-dots{display:flex;gap:8px;margin-right:2px;}
+.vk-dots i{width:12px;height:12px;border-radius:50%;display:block;}
+.vk-dots i:nth-child(1){background:#e0a09a;}.vk-dots i:nth-child(2){background:#e3c79a;}.vk-dots i:nth-child(3){background:#a9cda6;}
+.vk-caret{display:inline-block;width:9px;height:17px;background:var(--green);border-radius:1px;margin-left:3px;transform:translateY(2px);}
+@media (prefers-reduced-motion:no-preference){.vk-caret{animation:vkblink 1.15s steps(1) infinite;}}
+@keyframes vkblink{50%{opacity:0;}}
+@keyframes vkfade{from{opacity:0;}to{opacity:1;}}
+@media (prefers-reduced-motion:no-preference){.vk-proc-card .sub.rot{animation:vkfade .5s ease;}}
+.vk-cmd{flex:1 1 auto;max-width:440px;margin:0 auto;display:flex;align-items:center;gap:10px;
+  height:34px;padding:0 12px;border-radius:9px;background:var(--surface);border:1px solid var(--line);color:var(--faint);font-size:13px;cursor:text;}
+.vk-cmd .k{font-family:var(--mono);font-size:11px;color:var(--mut);background:var(--surface2);border:1px solid var(--line);border-radius:5px;padding:2px 6px;}
+.vk-tbar-r{display:flex;align-items:center;gap:10px;margin-left:auto;}
+/* ★ e versione come pill bordate coerenti (allineate ai mock del chrome, 2026-06-17). */
+.vk-star{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 11px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-family:var(--mono);font-size:11.5px;font-weight:500;color:var(--mut);}
+.vk-star svg{width:12px;height:12px;color:var(--amber);}
+.vk-ver{display:inline-flex;align-items:center;height:28px;padding:0 11px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-family:var(--mono);font-size:11.5px;font-weight:500;color:var(--mut);}
+.vk-ver b{color:var(--green-d);font-weight:700;}
+.vk-icbtn{width:28px;height:28px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--mut);display:flex;align-items:center;justify-content:center;cursor:pointer;}
+.vk-icbtn svg{width:15px;height:15px;}
+
+/* ── Shell + sidebar ──────────────────────────────────── */
+.vk-shell{flex:1 1 auto;min-height:0;display:flex;}
+.vk-side{width:216px;flex:0 0 auto;border-right:1px solid var(--line);background:linear-gradient(180deg,#efe9dc,#ebe4d6);display:flex;flex-direction:column;padding:16px 12px;}
+.vk-side-brand{display:flex;align-items:baseline;gap:2px;font-family:var(--mono);font-size:17px;font-weight:700;letter-spacing:-.01em;color:var(--ink);padding:4px 8px 4px;}
+.vk-side-tag{font-family:var(--mono);font-size:10.5px;color:var(--faint);padding:2px 10px 16px;letter-spacing:.04em;}
+.vk-nav{display:flex;flex-direction:column;gap:2px;}
+.vk-nav a{position:relative;display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--r-ctl);font-size:13.5px;font-weight:500;color:var(--mut);cursor:pointer;transition:.12s;}
+.vk-nav a .gl{width:6px;height:6px;border-radius:50%;background:var(--line2);flex:0 0 auto;transition:background .12s;}
+.vk-nav a:hover{background:rgba(40,33,20,.04);color:var(--ink2);}
+/* Voce attiva SOBRIA (redesign sidebar 2026-06-17): barra verde a sinistra + testo verde
+   + dot verde, niente pill piena (prima sfondo surface + ombra). */
+.vk-nav a.on{color:var(--green-d);font-weight:600;background:transparent;box-shadow:none;}
+.vk-nav a.on .gl{background:var(--green);}
+.vk-nav a.on::before{content:"";position:absolute;left:-12px;top:50%;transform:translateY(-50%);width:3px;height:18px;background:var(--green);border-radius:0 2px 2px 0;}
+.vk-side-sec{display:flex;justify-content:space-between;align-items:baseline;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin:18px 10px 7px;}
+.vk-side-sec a{text-transform:none;letter-spacing:0;color:var(--green-d);cursor:pointer;font-weight:500;}
+.vk-side-rc .r{padding:7px 10px;border-radius:8px;cursor:pointer;transition:.12s;}
+.vk-side-rc .r.rec{display:flex;gap:8px;align-items:flex-start;}
+.vk-side-rc .r:hover{background:rgba(40,33,20,.04);}
+.vk-side-rc .rc-b{min-width:0;flex:1 1 auto;}
+.vk-side-rc .t{font-size:12.5px;font-weight:600;color:var(--ink2);line-height:1.35;}
+.vk-side-rc .m{font-family:var(--mono);font-size:10px;color:var(--faint);margin-top:1px;}
+/* Chip tipo sessione nei recenti: riun=verde, solo=ocra caldo (famiglia amber). */
+.vk-rc-tag{flex:0 0 auto;margin-top:1px;font-family:var(--mono);font-size:8.5px;font-weight:500;border-radius:4px;padding:1px 5px;line-height:1.4;}
+.vk-rc-tag.riun{color:var(--green-d);background:var(--green-soft);border:1px solid #c7e0cf;}
+.vk-rc-tag.solo{color:#8a5a16;background:#f3e6cf;border:1px solid #e7d3ad;}
+.vk-side-foot{margin-top:auto;display:flex;align-items:center;gap:9px;padding:10px 11px;border-radius:10px;background:var(--green-soft);border:1px solid #d3e4d3;color:var(--green-d);font-size:12.5px;font-weight:600;}
+.vk-side-foot svg{width:15px;height:15px;flex:0 0 auto;}
+.vk-main{flex:1 1 auto;min-width:0;padding:24px 28px 20px;display:flex;flex-direction:column;overflow:hidden;}
+
+/* ── Greeting / page head ─────────────────────────────── */
+/* Header schermata unificato (round 2 B2): margine UNICO per tutte le primarie
+   (prima Home=18, Sessioni/Modelli=14, Impostazioni=16 via override inline → cugine). */
+.vk-greet{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:16px;}
+.vk-kick{font-family:var(--mono);font-size:12.5px;font-weight:500;color:var(--green-d);margin-bottom:10px;}
+.vk-greet h1{font-family:var(--disp);font-size:var(--fs-h1);line-height:1.05;font-weight:600;letter-spacing:-.02em;margin:0;color:var(--ink);}
+.vk-greet p{margin:8px 0 0;font-size:14.5px;color:var(--mut);max-width:58ch;line-height:1.5;}
+.vk-greet p b{color:var(--ink2);font-weight:600;}
+.vk-greet-r{flex:0 0 auto;min-width:160px;white-space:nowrap;display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--mut);background:var(--green-soft);border:1px solid #d3e4d3;border-radius:999px;padding:8px 14px;font-weight:600;}
+.vk-greet-r svg{width:14px;height:14px;color:var(--green-d);}
+
+/* ── Status bar ───────────────────────────────────────── */
+.vk-status{height:40px;flex:0 0 auto;display:flex;align-items:center;gap:14px;padding:0 18px;border-top:1px solid var(--line);background:linear-gradient(180deg,#efe9dc,#ebe4d6);font-family:var(--mono);font-size:12px;color:var(--mut);}
+.vk-status .priv{display:flex;align-items:center;gap:7px;color:var(--green-d);font-weight:500;}
+.vk-status .priv .dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 7px var(--green-ring);}
+.vk-status .sep{color:var(--line2);}
+.vk-status-r{margin-left:auto;display:flex;align-items:center;gap:8px;}
+.vk-status-r .it{display:flex;align-items:center;gap:5px;color:var(--mut);}
+.vk-status-r .it svg{width:12px;height:12px;color:var(--amber);}
+.vk-status-r a{color:var(--green-d);text-decoration:none;font-weight:500;display:flex;align-items:center;gap:4px;}
+.vk-status-r .res{display:flex;align-items:center;gap:6px;color:var(--mut);font-variant-numeric:tabular-nums;}
+.vk-status-r .res .dot{width:7px;height:7px;border-radius:50%;background:var(--green);}
+.vk-status .repo{color:var(--green-d);font-weight:500;background:none;border:none;cursor:pointer;font-family:inherit;font-size:inherit;padding:0;}
+.vk-status .repo:hover{text-decoration:underline;}
+
+/* ── Buttons (shared) ─────────────────────────────────── */
+.vk-btn-g{display:inline-flex;align-items:center;gap:8px;font-family:var(--sans);font-size:13px;font-weight:600;color:#fff;background:var(--green);border:0;border-radius:9px;padding:9px 15px;cursor:pointer;box-shadow:0 2px 6px rgba(31,143,91,.3);transition:.14s;}
+.vk-btn-g:hover{background:var(--green-d);}
+.vk-btn-g svg{width:15px;height:15px;}
+.vk-btn-gh{display:inline-flex;align-items:center;gap:8px;font-family:var(--sans);font-size:13px;font-weight:600;color:var(--ink2);background:var(--surface);border:1px solid var(--line2);border-radius:9px;padding:9px 15px;cursor:pointer;}
+.vk-btn-gh:hover{background:var(--surface2);}
+.vk-btn-gh svg{width:15px;height:15px;color:var(--mut);}
+/* I bottoni etichettati non vanno a capo (es. "Apri cartella" su finestra stretta). */
+.vk-btn-g,.vk-btn-gh{white-space:nowrap;}
+
+/* ── Document (markdown preview) ──────────────────────── */
+.vk-doc{flex:1 1 auto;min-height:0;overflow:hidden;padding:20px 24px;position:relative;}
+.vk-doc.fade::after{content:"";position:absolute;left:0;right:0;bottom:0;height:46px;background:linear-gradient(180deg,rgba(250,247,240,0),var(--surface));pointer-events:none;}
+.vk-doc .fm{font-family:var(--mono);font-size:11px;color:var(--faint);margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--line);}
+.vk-doc h2{font-family:var(--disp);font-size:22px;font-weight:600;letter-spacing:-.01em;margin:0 0 3px;color:var(--ink);}
+.vk-doc .meta{font-size:12px;color:var(--mut);margin-bottom:16px;}
+.vk-doc h3{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--green-d);font-weight:700;margin:18px 0 8px;}
+.vk-doc h3::before{content:"## ";color:var(--line2);}
+.vk-doc ul{margin:0;padding:0;list-style:none;}
+.vk-doc li{font-size:13.5px;line-height:1.55;color:var(--ink2);padding-left:17px;position:relative;margin-bottom:6px;}
+.vk-doc li::before{content:"–";position:absolute;left:0;color:var(--green);}
+.vk-doc li.todo::before{content:"☐";color:var(--green);}
+.vk-doc li b{color:var(--ink);font-weight:700;}
+.vk-doc p{font-size:var(--fs-body);line-height:var(--lh-body);color:var(--ink2);margin:0 0 10px;}
+.vk-doc .tag{font-family:var(--mono);font-size:12px;color:var(--green-d);background:var(--green-soft);border-radius:5px;padding:1px 6px;}
+.vk-doc .lnk{color:var(--green-d);font-weight:600;border-bottom:1px solid #bcdcc4;}
+
+/* ── Tabs ─────────────────────────────────────────────── */
+.vk-tabs{display:flex;align-items:center;gap:2px;padding:9px 10px;border-bottom:1px solid var(--line);background:var(--surface2);}
+.vk-tabs button{font-family:var(--mono);font-size:12.5px;font-weight:500;color:var(--mut);background:transparent;border:0;padding:6px 11px;border-radius:7px;cursor:pointer;transition:.14s;}
+.vk-tabs button:hover{color:var(--ink2);}
+.vk-tabs button.on{background:var(--surface);color:var(--green-d);box-shadow:0 1px 2px rgba(40,33,20,.08),inset 0 0 0 1px var(--line);}
+.vk-tabs .vk-tabs-grow{flex:1 1 auto;}
+.vk-tabs .vk-copy{font-family:var(--mono);font-size:12px;color:var(--mut);border:1px solid var(--line);background:var(--surface);padding:5px 10px;}
+/* Pallino colore-tipo per orientarsi tra i 4 artefatti (verde/ambra/viola/grigio). */
+.vk-tabs button .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--line2);margin-right:6px;vertical-align:1px;transition:.14s;}
+.vk-tabs button.t-brief .dot{background:var(--green);}
+.vk-tabs button.t-recap .dot{background:var(--amber);}
+.vk-tabs button.t-obs .dot{background:var(--violet);}
+.vk-tabs button.t-trans .dot{background:var(--mut);}
+.vk-tabs button:disabled{opacity:.45;cursor:not-allowed;}
+.vk-tabs button:disabled .dot{background:var(--line2);}
+.vk-readtime{font-family:var(--mono);font-size:10.5px;color:var(--faint);white-space:nowrap;}
+
+/* ════════ SCHERMATA 1 — REGISTRAZIONE LIVE ════════════ */
+.vk-live{flex:1 1 auto;min-height:0;background:var(--console);border-radius:var(--r);border:1px solid var(--con-line);
+  position:relative;overflow-y:auto;display:flex;flex-direction:column;padding:22px 28px 18px;
+  background-image:radial-gradient(rgba(255,255,255,.022) 1px,transparent 0);background-size:15px 15px;box-shadow:0 24px 60px -28px rgba(20,17,8,.75);}
+/* alone rosso "che respira" mentre registra — inset box-shadow (non scrolla col contenuto) */
+@media (prefers-reduced-motion:no-preference){.vk-live{animation:vk-recglow 3.4s ease-in-out infinite;}}
+@media (prefers-reduced-motion:reduce){.vk-live{box-shadow:0 24px 60px -28px rgba(20,17,8,.75),inset 0 0 0 2px rgba(236,91,73,.16);}}
+.vk-live.paused{animation:none;box-shadow:0 24px 60px -28px rgba(20,17,8,.75);}
+@keyframes vk-recglow{0%,100%{box-shadow:0 24px 60px -28px rgba(20,17,8,.75),inset 0 0 0 2px rgba(236,91,73,.10);}50%{box-shadow:0 24px 60px -28px rgba(20,17,8,.75),inset 0 0 0 2px rgba(236,91,73,.34);}}
+@keyframes vkpulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+@keyframes vkwv{0%,100%{transform:scaleY(.22);}50%{transform:scaleY(1);}}
+
+/* top: etichetta REC + titolo + contesto · sorgenti status a destra */
+.vk-live-top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex:0 0 auto;}
+.vk-live-topl{min-width:0;flex:1 1 auto;}
+.vk-rec-lbl{display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:13px;letter-spacing:.06em;color:var(--con-dim);}
+.vk-rec-dot{width:11px;height:11px;border-radius:50%;background:var(--red);box-shadow:0 0 12px var(--red);flex:0 0 auto;}
+@media (prefers-reduced-motion:no-preference){.vk-rec-dot{animation:vkpulse 1.3s ease-in-out infinite;}}
+.vk-live.paused .vk-rec-dot{animation:none;background:var(--con-dim);box-shadow:none;}
+.vk-rec-lbl .st{color:var(--red);font-weight:500;}
+.vk-live.paused .vk-rec-lbl .st{color:var(--amber);}
+.vk-rec-title{background:transparent;border:0;border-bottom:1px dashed var(--con-line);color:var(--con-ink);
+  font-family:var(--sans);font-size:13px;letter-spacing:normal;outline:none;padding:0 2px 1px;min-width:150px;max-width:300px;}
+.vk-rec-title::placeholder{color:var(--con-dim);}
+.vk-rec-title:focus{border-bottom-color:var(--con-dim);}
+.vk-ctx-wrap{margin-top:14px;max-width:520px;}
+.vk-ctx-lbl{font-family:var(--mono);font-size:11px;color:var(--con-dim);margin-bottom:6px;}
+.vk-ctx-lbl span{color:var(--con-line);}
+.vk-ctx{width:100%;font-family:var(--sans);font-size:13.5px;color:var(--con-ink);background:var(--console2);
+  border:1px solid var(--con-line);border-radius:var(--r-ctl);padding:9px 12px;outline:none;}
+.vk-ctx::placeholder{color:var(--con-dim);}
+.vk-ctx:focus-visible{box-shadow:0 0 0 3px var(--green-ring);border-color:rgba(95,217,143,.4);}
+
+/* sorgenti INERTI (status, non bottoni) */
+.vk-src{display:flex;gap:8px;flex:0 0 auto;}
+.vk-src .s{display:flex;align-items:center;gap:8px;border:1px solid var(--con-line);border-radius:var(--r-ctl);padding:7px 11px;opacity:.5;}
+.vk-src .s svg{width:15px;height:15px;color:var(--con-dim);flex:0 0 auto;}
+.vk-src .s .nm{font-family:var(--sans);font-size:12px;color:var(--con-ink);}
+.vk-src .s .ds{font-family:var(--mono);font-size:9px;color:var(--con-dim);}
+.vk-src .s.on{opacity:1;border-color:rgba(95,217,143,.4);background:rgba(95,217,143,.07);}
+.vk-src .s.on svg{color:var(--phos);}
+.vk-src .s.on .ds{color:var(--phos);}
+
+/* timer protagonista */
+.vk-timer-wrap{text-align:center;margin:24px 0 14px;flex:0 0 auto;}
+.vk-timer{font-family:var(--mono);font-weight:700;font-size:78px;line-height:1;color:var(--phos);letter-spacing:2px;text-shadow:0 0 26px rgba(95,217,143,.28);}
+.vk-live.paused .vk-timer{color:var(--con-dim);text-shadow:none;}
+@media (prefers-reduced-motion:no-preference){.vk-timer .cln{animation:vkblink 1.1s steps(1) infinite;}}
+.vk-live.paused .vk-timer .cln{animation:none;}
+.vk-pausetag{margin-top:8px;font-family:var(--mono);font-size:12px;letter-spacing:.1em;color:var(--amber);}
+
+/* meter onde (lane) */
+.vk-meters{max-width:760px;width:100%;margin:0 auto 16px;flex:0 0 auto;}
+
+/* segnalibro + feedback transiente */
+.vk-bm-wrap{text-align:center;margin:14px 0 4px;position:relative;flex:0 0 auto;}
+.vk-bm{font-family:var(--mono);font-size:12px;color:var(--con-ink);background:var(--console2);border:1px solid var(--con-line);
+  border-radius:999px;padding:7px 14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;}
+.vk-bm:hover{border-color:var(--con-dim);}
+.vk-bm svg{width:14px;height:14px;color:var(--con-ink);}
+.vk-bm kbd{font-family:var(--mono);font-size:9px;color:var(--con-dim);border:1px solid var(--con-line);border-radius:4px;padding:0 5px;}
+.vk-bm .ct{color:var(--phos);font-weight:600;}
+.vk-bm-flash{position:absolute;left:50%;top:-26px;transform:translateX(-50%);font-family:var(--mono);font-size:11px;color:var(--phos);
+  background:rgba(95,217,143,.1);border:1px solid rgba(95,217,143,.3);border-radius:999px;padding:3px 10px;pointer-events:none;}
+@media (prefers-reduced-motion:no-preference){.vk-bm-flash.show{animation:vkfade .25s ease;}}
+.vk-bm-line{max-width:760px;margin:12px auto 0;width:100%;flex:0 0 auto;}
+.vk-bm-track{position:relative;height:8px;background:var(--console2);border:1px solid var(--con-line);border-radius:999px;}
+.vk-bm-track i{position:absolute;top:-3px;width:2px;height:12px;background:var(--phos);border-radius:2px;}
+.vk-bm-list{font-family:var(--mono);font-size:11px;color:var(--con-dim);margin-top:8px;text-align:center;}
+
+.vk-kbd-hint{text-align:center;font-family:var(--mono);font-size:10px;color:var(--con-dim);margin-top:12px;flex:0 0 auto;}
+.vk-kbd-hint kbd{font-family:var(--mono);font-size:10px;color:var(--con-ink);border:1px solid var(--con-line);border-radius:4px;padding:0 5px;}
+
+/* footer azioni */
+.vk-live-ctrl{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:14px;flex:0 0 auto;}
+.vk-cbtn{display:flex;align-items:center;gap:9px;font-family:var(--sans);font-size:14px;font-weight:600;border-radius:var(--r-ctl);padding:11px 20px;cursor:pointer;transition:.14s;}
+.vk-cbtn svg{width:16px;height:16px;}
+.vk-cbtn.pause{background:var(--console2);border:1px solid var(--con-line);color:var(--con-ink);}
+.vk-cbtn.pause:hover{background:rgba(255,255,255,.06);}
+.vk-cbtn.stop{background:var(--red);border:0;color:#fff;box-shadow:0 8px 22px rgba(236,91,73,.38);}
+.vk-cbtn.ghost{background:transparent;border:0;color:var(--con-dim);padding:11px 14px;}
+.vk-cbtn.ghost:hover{color:var(--con-ink);}
+.vk-live-foot{flex:0 0 auto;margin-top:16px;padding-top:13px;border-top:1px solid var(--con-line);display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:11px;color:var(--con-dim);}
+.vk-live-foot .ok{display:flex;align-items:center;gap:7px;color:#86c79a;}
+.vk-live-foot .ok .dot{width:7px;height:7px;border-radius:50%;background:var(--phos);box-shadow:0 0 8px var(--phos);}
+.vk-live-foot .model{margin-left:auto;color:#6f6c58;}
+
+/* ════════ SCHERMATA 2 — TRASCRIZIONE & ELABORAZIONE ════ */
+/* Card ancorata al terzo superiore (round 2 B3/FD4): centrata verticalmente "ballava"
+   su finestra alta e sprecava il campo visivo dove l'utente guarda di più. */
+.vk-proc{flex:1 1 auto;min-height:0;display:flex;align-items:flex-start;justify-content:center;
+  padding-top:clamp(16px,6vh,64px);overflow:auto;}
+.vk-proc-card{width:min(1100px,92%);background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:30px 34px;box-shadow:0 10px 34px -16px rgba(40,33,20,.18);}
+.vk-proc-card h2{font-family:var(--disp);font-size:23px;font-weight:600;letter-spacing:-.01em;margin:0 0 4px;color:var(--ink);}
+.vk-proc-card .sub{font-size:13.5px;color:var(--mut);margin-bottom:24px;}
+.vk-steps{display:flex;align-items:center;gap:0;margin-bottom:26px;}
+.vk-step{display:flex;align-items:center;gap:11px;flex:0 0 auto;}
+.vk-step .n{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:13px;font-weight:700;flex:0 0 auto;}
+.vk-step.done .n{background:var(--green);color:#fff;}
+.vk-step.active .n{background:var(--green-soft);color:var(--green-d);box-shadow:0 0 0 4px var(--green-ring);}
+.vk-step.pending .n{background:var(--surface2);color:var(--faint);border:1px solid var(--line);}
+.vk-step .lb{font-size:13.5px;font-weight:600;}
+.vk-step.pending .lb{color:var(--faint);}
+.vk-step.active .lb{color:var(--ink);}
+.vk-step.done .lb{color:var(--ink2);}
+.vk-step-line{flex:1 1 auto;height:2px;background:var(--line);margin:0 14px;border-radius:2px;}
+.vk-step-line.done{background:var(--green);}
+/* Badge idoneità trascrizione↔modello (evento analysis_fit): persistente per tutta
+   l'elaborazione, distinto dal banner warning transiente. Ambra=riassunta, rosso=sfora. */
+.vk-fit-badge{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;margin-bottom:18px;
+  border-radius:12px;background:var(--amber-soft,rgba(216,162,76,.14));
+  border:1px solid rgba(216,162,76,.45);}
+.vk-fit-badge[data-level="over_even_summarized"]{background:rgba(236,91,73,.12);border-color:rgba(236,91,73,.5);}
+.vk-fit-ico{font-size:15px;line-height:1.2;color:var(--amber-d,#8a5a16);flex:0 0 auto;}
+.vk-fit-badge[data-level="over_even_summarized"] .vk-fit-ico{color:var(--red);}
+.vk-fit-body{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.vk-fit-title{font-size:13px;font-weight:700;color:var(--ink);}
+.vk-fit-meta{font-family:var(--mono);font-size:11.5px;color:var(--mut);font-variant-numeric:tabular-nums;}
+.vk-fit-rec{font-size:12.5px;color:var(--ink2);margin-top:2px;}
+.vk-proc-meta{display:flex;align-items:center;justify-content:space-between;font-family:var(--mono);font-size:12.5px;color:var(--mut);margin-bottom:8px;}
+.vk-proc-meta .pct{color:var(--green-d);font-weight:700;font-size:14px;}
+.vk-progress{height:10px;border-radius:6px;background:var(--surface2);overflow:hidden;border:1px solid var(--line);}
+.vk-progress i{display:block;height:100%;background:linear-gradient(90deg,var(--green),#34b97c);border-radius:6px;}
+/* Console "terminale" (redesign 2026-06-17): header fisso con chip + stream scrollabile
+   + scanline. Header e scanline non scorrono col testo (outer non-scroll, inner scroll). */
+.vk-proc-log{margin-top:20px;position:relative;display:flex;flex-direction:column;overflow:hidden;
+  background:var(--console);border:1px solid var(--con-line);border-radius:12px;height:clamp(180px,36vh,440px);
+  background-image:radial-gradient(rgba(255,255,255,.02) 1px,transparent 0);background-size:14px 14px;}
+/* Scanline radiale tenue (identità "terminale"): vignetta fissa sopra il contenuto. */
+.vk-proc-log::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:2;
+  background:radial-gradient(120% 80% at 50% 0%,transparent 60%,rgba(0,0,0,.36) 100%);}
+.vk-con-head{flex:0 0 auto;z-index:3;display:flex;gap:8px;padding:9px 16px;background:var(--console);border-bottom:1px solid var(--con-line);}
+.vk-chip{font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:6px;border:1px solid transparent;}
+.vk-chip.trans{background:var(--phos);color:var(--console);}
+.vk-chip.reason{border-color:var(--con-line);color:var(--con-dim);background:transparent;}
+/* In analisi/rendering si accende "ragionamento" (viola) e si spegne "trascrizione". */
+.vk-proc-log[data-phase="analyzing"] .vk-chip.trans,
+.vk-proc-log[data-phase="rendering"] .vk-chip.trans{background:transparent;border-color:var(--con-line);color:var(--con-dim);}
+.vk-proc-log[data-phase="analyzing"] .vk-chip.reason,
+.vk-proc-log[data-phase="rendering"] .vk-chip.reason{background:var(--violet);border-color:var(--violet);color:#fff;}
+.vk-proc-stream{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;padding:14px 16px;
+  font-family:var(--mono);font-size:12px;line-height:1.7;color:var(--con-dim);
+  white-space:pre-wrap;word-break:break-word;scrollbar-width:thin;scrollbar-color:var(--con-line) transparent;}
+.vk-proc-stream::-webkit-scrollbar{width:9px;}
+.vk-proc-stream::-webkit-scrollbar-thumb{background:var(--con-line);border-radius:8px;}
+.vk-proc-stream::-webkit-scrollbar-track{background:transparent;}
+.vk-con-prompt{color:var(--phos);}
+.vk-con-line{margin-bottom:8px;}
+.vk-proc-stream .ts{color:#6f6c58;}
+.vk-proc-stream .tx{color:var(--con-ink);}
+.vk-proc-stream .cur{display:inline-block;width:7px;height:13px;background:var(--phos);vertical-align:-2px;margin-left:3px;}
+@media (prefers-reduced-motion:no-preference){.vk-proc-stream .cur{animation:vkblink 1.1s steps(1) infinite;}}
+/* Riga "ragionamento" del modello (anteprima analisi in streaming): ∴ viola + testo dim. */
+.vk-con-reason{display:flex;gap:8px;align-items:baseline;margin-top:12px;padding-top:10px;border-top:1px solid var(--con-line);}
+.vk-con-reason .pre{flex:0 0 auto;color:var(--violet);font-weight:700;}
+.vk-con-reason .txt{color:var(--con-dim);}
+.vk-proc-act{display:flex;align-items:center;justify-content:space-between;margin-top:20px;}
+.vk-proc-hint{font-size:12.5px;color:var(--mut);display:flex;align-items:center;gap:7px;}
+.vk-proc-hint .dot{width:7px;height:7px;border-radius:50%;background:var(--green);}
+
+/* — Redesign processing (handoff schermata `processing`, 2026-06-16) ─────────
+   Header con gerarchia (kicker · titolo sessione prominente · sotto-fase),
+   lane "ragionamento" viola nella console, pannello "Mentre aspetti". */
+.vk-proc-head{margin-bottom:22px;}
+.vk-proc-kick{font-family:var(--mono);font-size:var(--fs-micro);font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--green);margin-bottom:6px;}
+.vk-proc-title{font-family:var(--disp);font-size:var(--fs-h2);font-weight:600;letter-spacing:-.01em;line-height:1.15;margin:0;color:var(--ink);}
+/* Titolo editabile: sembra un titolo, l'affordance di modifica appare su hover/focus. */
+.vk-proc-title-in{font-family:var(--disp);font-size:var(--fs-h2);font-weight:600;letter-spacing:-.01em;line-height:1.15;color:var(--ink);
+  display:block;width:100%;background:transparent;border:none;border-bottom:1px solid transparent;padding:0 0 2px;outline:none;border-radius:0;}
+.vk-proc-title-in::placeholder{color:var(--faint);}
+.vk-proc-title-in:hover{border-bottom-color:var(--line);}
+.vk-proc-title-in:focus{border-bottom-color:var(--green);}
+.vk-proc-sub{font-size:var(--fs-meta);color:var(--mut);margin-top:6px;line-height:1.45;}
+
+.vk-wait{margin-top:16px;display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--line);border-radius:var(--r-ctl);padding:12px 16px;}
+.vk-wait-ico{flex:0 0 auto;width:26px;height:26px;border-radius:50%;background:var(--green-soft);color:var(--green-d);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:13px;font-weight:700;}
+.vk-wait-body{min-width:0;}
+.vk-wait-kick{font-family:var(--mono);font-size:var(--fs-micro);letter-spacing:.05em;text-transform:uppercase;color:var(--green-d);margin-bottom:2px;}
+.vk-wait-msg{font-size:var(--fs-meta);color:var(--ink2);line-height:1.45;}
+@media (prefers-reduced-motion:no-preference){.vk-wait-msg{animation:vkfade .5s ease;}}
+
+/* ════════ SCHERMATA 3 — RIFINITURA / INTERVISTA ═══════ */
+.vk-iv{flex:1 1 auto;min-height:0;overflow:hidden;display:flex;flex-direction:column;align-items:center;}
+.vk-iv-inner{width:min(800px,100%);display:flex;flex-direction:column;min-height:0;}
+.vk-iv-head{margin-bottom:16px;flex:0 0 auto;}
+.vk-iv-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;padding-right:6px;}
+.vk-iv-head h1{font-family:var(--disp);font-size:27px;font-weight:600;letter-spacing:-.02em;margin:6px 0 6px;color:var(--ink);}
+.vk-iv-head p{font-size:14px;color:var(--mut);margin:0;line-height:1.5;}
+.vk-iv-head p b{color:var(--green-d);font-weight:600;}
+/* progresso (dots + contatore + toggle vista) */
+.vk-iv-prog{display:flex;align-items:center;gap:12px;margin:12px 0 14px;flex:0 0 auto;}
+.vk-iv-prog .dots{display:flex;gap:6px;}
+.vk-iv-prog .dots i{width:9px;height:9px;border-radius:50%;background:var(--line2);transition:background .15s,transform .15s;}
+.vk-iv-prog .dots i.done{background:var(--green);transform:scale(1.12);}
+.vk-iv-prog .dots i.skip{background:var(--amber);}
+.vk-iv-prog .lab{font-family:var(--mono);font-size:11px;color:var(--mut);}
+.vk-iv-toggle{display:inline-flex;background:var(--surface2);border:1px solid var(--line);border-radius:999px;padding:2px;gap:2px;margin-left:auto;}
+.vk-iv-toggle button{font-family:var(--sans);font-size:11px;color:var(--mut);background:transparent;border:0;border-radius:999px;padding:4px 11px;cursor:pointer;}
+.vk-iv-toggle button.on{color:#fff;background:var(--green);}
+/* vista "una alla volta": mostra solo la card corrente */
+.vk-iv-scroll.focus .vk-q{display:none;}
+.vk-iv-scroll.focus .vk-q.current{display:block;}
+/* card domanda + stati risposto/saltato */
+.vk-q{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:15px 17px;margin-bottom:11px;box-shadow:var(--shadow-1);transition:opacity .2s;}
+.vk-q.answered{opacity:.72;}
+.vk-q-top{display:flex;align-items:center;gap:11px;margin-bottom:11px;}
+.vk-q-num{flex:0 0 auto;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-family:var(--mono);font-size:11px;font-weight:600;color:var(--green-d);background:var(--green-soft);}
+.vk-q-num svg{width:14px;height:14px;}
+.vk-q.answered .vk-q-num{background:var(--green);color:#fff;}
+.vk-q.skipped .vk-q-num{background:var(--amber-soft,#f3e6cf);color:var(--amber-d,#8a5a16);}
+.vk-q-title{font-size:15px;color:var(--ink);font-weight:500;line-height:1.4;flex:1 1 auto;min-width:0;}
+/* I2: tag "dal tuo audio" — domanda nata da un dettaglio della registrazione (viola). */
+.vk-q-src{flex:0 0 auto;font-family:var(--mono);font-size:9px;color:var(--violet-d,#6e54a8);background:var(--violet-soft,#ece6f7);border:1px solid #d8ccef;border-radius:5px;padding:1px 6px;}
+/* I1: riga "Perché:" — rationale della domanda, allineata sotto il titolo (oltre num+gap). */
+.vk-q-why{font-size:11px;color:var(--mut);line-height:1.5;margin:-2px 0 11px 37px;}
+.vk-q-why b{color:var(--ink2);font-weight:600;}
+.vk-chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:11px;}
+.vk-chip{font-family:var(--sans);font-size:13px;font-weight:500;color:var(--ink2);background:var(--surface2);border:1px solid var(--line);border-radius:20px;padding:7px 14px;cursor:pointer;transition:.12s;}
+.vk-chip:hover{border-color:var(--line2);color:var(--ink);}
+.vk-chip.on{background:var(--green);border-color:var(--green);color:#fff;box-shadow:0 2px 6px rgba(31,143,91,.25);}
+.vk-chip.skip{color:var(--faint);background:transparent;border-style:dashed;}
+.vk-chip.skip.on{background:var(--amber-soft,#f3e6cf);color:var(--amber-d,#8a5a16);border-color:#e7d3ad;border-style:solid;box-shadow:none;}
+/* nav focus (una alla volta) */
+.vk-iv-focusnav{display:flex;align-items:center;gap:12px;margin-top:12px;flex:0 0 auto;}
+.vk-iv-focusnav .pos{font-family:var(--mono);font-size:12px;color:var(--mut);}
+.vk-iv-focusnav .grow{flex:1;}
+.vk-iv-kbd{font-family:var(--mono);font-size:10px;color:var(--faint);}
+.vk-iv-kbd kbd{font-family:var(--mono);font-size:10px;color:var(--ink2);background:var(--surface2);border:1px solid var(--line);border-radius:4px;padding:0 5px;}
+.vk-iv-act{display:flex;align-items:center;justify-content:space-between;margin-top:14px;flex:0 0 auto;gap:12px;flex-wrap:wrap;}
+.vk-iv-note{font-size:12.5px;color:var(--mut);display:flex;align-items:center;gap:7px;}
+.vk-iv-note .dot{width:7px;height:7px;border-radius:50%;background:var(--amber);}
+.vk-btn-g .ct{font-family:var(--mono);font-size:11px;font-weight:500;opacity:.85;}
+
+/* ════════ SCHERMATA 4 — DETTAGLIO / ARTEFATTI ════════ */
+.vk-art-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:14px;flex:0 0 auto;}
+.vk-art-head h1{font-family:var(--disp);font-size:24px;font-weight:600;letter-spacing:-.01em;margin:0 0 5px;color:var(--ink);}
+.vk-art-head .meta{font-family:var(--mono);font-size:12px;color:var(--mut);display:flex;gap:14px;flex-wrap:wrap;}
+.vk-art-head .meta b{color:var(--ink2);font-weight:500;}
+.vk-art-grid{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:1fr 312px;gap:20px;}
+.vk-art-doc{background:var(--surface);border:1px solid var(--line);border-radius:14px;display:flex;flex-direction:column;overflow:hidden;}
+.vk-art-doc .vk-doc{overflow:auto;}
+.vk-art-side{display:flex;flex-direction:column;gap:14px;min-height:0;}
+.vk-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 15px;}
+.vk-card-h{font-size:12px;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin-bottom:10px;}
+
+/* Spalla destra (rail): CTA verde unica + file generati con icone + ⓘ + dettagli. */
+.vk-rail-cta{width:100%;justify-content:center;}
+.vk-rail-sep{height:1px;background:var(--line);margin:14px 0;}
+.vk-rail-lbl{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin-bottom:8px;}
+
+.vk-fileitem{padding:7px 0;}
+.vk-fileitem + .vk-fileitem{border-top:1px solid var(--line);}
+.vk-file{display:flex;align-items:center;gap:11px;}
+.vk-file .ico{flex:0 0 auto;width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:#fff;}
+.vk-file .ico svg{width:17px;height:17px;}
+.vk-file .ico.md{background:var(--green);}
+.vk-file .ico.rc{background:var(--amber);}
+.vk-file .ico.vault{background:var(--violet);}
+.vk-file .info{flex:1 1 auto;min-width:0;}
+.vk-file .info .nm{font-family:var(--mono);font-size:12.5px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.vk-file .info .ds{font-size:11px;color:var(--mut);margin-top:1px;}
+.vk-file .acts{display:flex;align-items:center;gap:6px;flex:0 0 auto;}
+.vk-info-btn{width:24px;height:24px;flex:0 0 auto;padding:0;border-radius:50%;display:grid;place-items:center;border:1px solid var(--line2);background:transparent;color:var(--mut);cursor:pointer;transition:.14s;}
+.vk-info-btn svg{width:13px;height:13px;}
+.vk-info-btn:hover{background:var(--surface2);}
+.vk-fileitem.open .vk-info-btn{background:var(--green-soft);border-color:var(--green);color:var(--green-d);}
+.vk-file-exp{display:none;font-size:11px;color:var(--mut);line-height:1.55;padding:8px 0 2px 43px;}
+.vk-fileitem.open .vk-file-exp{display:block;}
+
+.vk-openfolder{width:100%;font-family:var(--sans);font-size:12.5px;color:var(--ink2);background:transparent;border:1px solid var(--line2);border-radius:9px;padding:9px 12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;transition:.14s;}
+.vk-openfolder:hover{background:var(--surface2);}
+.vk-openfolder svg{width:14px;height:14px;color:var(--mut);}
+
+/* DETTAGLI: riga icona + etichetta + valore. */
+.vk-det-row{display:flex;align-items:center;gap:9px;padding:7px 0;}
+.vk-det-row + .vk-det-row{border-top:1px solid var(--line);}
+.vk-det-row .di{flex:0 0 auto;width:26px;height:26px;border-radius:7px;display:grid;place-items:center;background:var(--surface2);color:var(--mut);}
+.vk-det-row .di svg{width:14px;height:14px;}
+.vk-det-row .di.priv{background:var(--green-soft);color:var(--green-d);}
+.vk-det-row .dl{flex:0 0 auto;width:78px;font-family:var(--mono);font-size:11px;color:var(--faint);}
+.vk-det-row .dv{flex:1 1 auto;font-family:var(--mono);font-size:11px;color:var(--ink2);text-align:right;line-height:1.35;}
+
+/* Mini-indice sezioni + chip "da chiarire" + trascrizione + invito tab vuoto. */
+.vk-doc-toc{margin-bottom:14px;}
+.vk-index{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;}
+.vk-index button{font-family:var(--mono);font-size:11px;color:var(--mut);background:transparent;border:1px solid var(--line);border-radius:999px;padding:2px 10px;cursor:pointer;transition:.14s;}
+.vk-index button:hover{background:var(--surface2);color:var(--ink);}
+.vk-dc-count{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;color:#9a6a1e;background:rgba(216,162,76,.16);border:1px solid rgba(216,162,76,.45);border-radius:999px;padding:3px 11px;cursor:pointer;transition:.14s;}
+.vk-dc-count:hover{background:rgba(216,162,76,.28);}
+.vk-doc .vk-clar-hl{background:var(--amber-soft,rgba(216,162,76,.2));border-radius:8px;transition:background .3s ease;}
+.vk-doc li.vk-clar-hl{margin-left:-6px;padding-left:23px;padding-right:6px;}
+.vk-transcript-pre{white-space:pre-wrap;font-family:var(--sans);font-size:13.5px;line-height:1.85;color:var(--ink2);margin:0;}
+/* Tag della nota Obsidian (chip viola) sotto i collegamenti. */
+.vk-otags{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;}
+.vk-otag{font-family:var(--mono);font-size:11px;color:var(--violet-d,#6e54a8);background:var(--violet-soft,#ece6f7);border:1px solid #d8ccef;border-radius:5px;padding:2px 8px;}
+.vk-doc-empty{color:var(--mut);}
+/* Documento più arioso e con riga più corta (~72ch) nel pannello artefatti, come da mock:
+   recap/obsidian/trascrizione respirano. Scoped a .vk-art-doc per non toccare l'anteprima Home. */
+.vk-art-doc .vk-doc p{line-height:1.78;margin:0 0 16px;}
+.vk-art-doc .vk-doc h2{margin-bottom:8px;}
+.vk-art-doc .vk-doc li{margin-bottom:8px;}
+.vk-art-doc .vk-doc p,
+.vk-art-doc .vk-doc li,
+.vk-art-doc .vk-doc h2,
+.vk-art-doc .vk-doc h3,
+.vk-art-doc .vk-transcript-pre{max-width:72ch;}
+.vk-empty{text-align:center;padding:34px 16px;}
+.vk-empty .ico{width:44px;height:44px;border-radius:11px;display:grid;place-items:center;margin:0 auto 12px;background:var(--violet-soft,#ece6f7);color:var(--violet-d,#6e54a8);}
+.vk-empty .ico svg{width:21px;height:21px;}
+.vk-empty .tt{font-size:13.5px;font-weight:600;color:var(--ink);margin-bottom:4px;}
+.vk-empty .dd{font-size:12px;color:var(--mut);line-height:1.5;margin:0 auto 16px;max-width:42ch;}
+.vk-empty button{display:inline-flex;align-items:center;gap:7px;font-family:var(--sans);font-size:12.5px;font-weight:600;color:var(--ink2);background:var(--surface);border:1px solid var(--line2);border-radius:9px;padding:8px 16px;cursor:pointer;}
+.vk-empty button:hover{background:var(--surface2);}
+.vk-empty button svg{width:14px;height:14px;color:var(--mut);}
+.vk-empty button:disabled{opacity:.55;cursor:default;}
+
+/* ════════ SCHERMATA 5 — IMPOSTAZIONI ════════════════ */
+.vk-set{flex:1 1 auto;min-height:0;overflow:auto;}
+/* Scrollbar sottile e coerente su TUTTE le superfici scrollabili del main (tema chiaro).
+   Include la Home: `.vk-onb` (onboarding colonna dx) e `.vk-main` (scroll responsive <1080px)
+   prima usavano la scrollbar di sistema → incoerente con Modelli/Impostazioni (fix Phase C). */
+.vk-set,.vk-mod-grid,.vk-sess-list,.vk-iv-scroll,.vk-art-doc .vk-doc,.vk-onb,.vk-main{scrollbar-width:thin;scrollbar-color:var(--line2) transparent;}
+.vk-set::-webkit-scrollbar,.vk-mod-grid::-webkit-scrollbar,.vk-sess-list::-webkit-scrollbar,.vk-iv-scroll::-webkit-scrollbar,.vk-art-doc .vk-doc::-webkit-scrollbar,.vk-onb::-webkit-scrollbar,.vk-main::-webkit-scrollbar{width:9px;height:9px;}
+.vk-set::-webkit-scrollbar-thumb,.vk-mod-grid::-webkit-scrollbar-thumb,.vk-sess-list::-webkit-scrollbar-thumb,.vk-iv-scroll::-webkit-scrollbar-thumb,.vk-art-doc .vk-doc::-webkit-scrollbar-thumb,.vk-onb::-webkit-scrollbar-thumb,.vk-main::-webkit-scrollbar-thumb{background:var(--line2);border-radius:8px;}
+.vk-set::-webkit-scrollbar-thumb:hover,.vk-mod-grid::-webkit-scrollbar-thumb:hover,.vk-sess-list::-webkit-scrollbar-thumb:hover,.vk-iv-scroll::-webkit-scrollbar-thumb:hover,.vk-art-doc .vk-doc::-webkit-scrollbar-thumb:hover,.vk-onb::-webkit-scrollbar-thumb:hover,.vk-main::-webkit-scrollbar-thumb:hover{background:var(--mut);}
+.vk-set::-webkit-scrollbar-track,.vk-mod-grid::-webkit-scrollbar-track,.vk-sess-list::-webkit-scrollbar-track,.vk-iv-scroll::-webkit-scrollbar-track,.vk-art-doc .vk-doc::-webkit-scrollbar-track,.vk-onb::-webkit-scrollbar-track,.vk-main::-webkit-scrollbar-track{background:transparent;}
+.vk-set-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;}
+.vk-sc{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px;}
+.vk-sc-h{display:flex;align-items:center;gap:9px;font-family:var(--disp);font-size:15.5px;font-weight:600;color:var(--ink);margin-bottom:3px;}
+.vk-sc-h .ico{width:22px;height:22px;border-radius:7px;background:var(--green-soft);color:var(--green-d);display:flex;align-items:center;justify-content:center;}
+.vk-sc-h .ico svg{width:13px;height:13px;}
+.vk-sc-sub{font-size:12.5px;color:var(--mut);margin-bottom:15px;}
+.vk-field{margin-bottom:13px;}
+.vk-field>label{display:block;font-size:12.5px;font-weight:600;color:var(--ink2);margin-bottom:6px;}
+.vk-input{width:100%;height:36px;background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:0 12px;font-family:var(--mono);font-size:12.5px;color:var(--ink);}
+.vk-input::placeholder{color:var(--faint);}
+.vk-input.key{letter-spacing:.16em;}
+.vk-path{display:flex;gap:8px;}
+.vk-path .vk-input{flex:1 1 auto;}
+.vk-mini{font-family:var(--sans);font-size:12.5px;font-weight:600;color:var(--ink2);background:var(--surface);border:1px solid var(--line2);border-radius:9px;padding:0 13px;cursor:pointer;flex:0 0 auto;}
+.vk-hlp{font-size:11.5px;color:var(--mut);margin-top:6px;line-height:1.4;}
+.vk-model{display:flex;align-items:center;gap:11px;padding:10px 0;border-top:1px solid var(--line);}
+.vk-model:first-of-type{border-top:0;}
+.vk-radio{width:17px;height:17px;border-radius:50%;border:1.5px solid var(--line2);flex:0 0 auto;position:relative;}
+.vk-model.on .vk-radio{border-color:var(--green);}
+.vk-model.on .vk-radio::after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--green);}
+.vk-model .nm{flex:1 1 auto;min-width:0;}
+.vk-model .nm .t{font-size:13px;font-weight:600;color:var(--ink);}
+.vk-model .nm .t .df{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--green-d);background:var(--green-soft);border-radius:5px;padding:1px 6px;margin-left:7px;}
+.vk-model .nm .m{font-family:var(--mono);font-size:11px;color:var(--mut);margin-top:1px;}
+.vk-model .dl{font-size:11.5px;font-weight:600;flex:0 0 auto;}
+.vk-model .dl.ok{color:var(--green-d);display:flex;align-items:center;gap:5px;}
+.vk-model .dl.get{color:var(--ink2);background:var(--surface2);border:1px solid var(--line2);border-radius:8px;padding:5px 10px;cursor:pointer;}
+.vk-seg2{display:inline-flex;background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:3px;gap:2px;}
+.vk-seg2 button{font-family:var(--sans);font-size:12.5px;font-weight:600;color:var(--mut);background:transparent;border:0;padding:6px 14px;border-radius:7px;cursor:pointer;}
+.vk-seg2 button.on{background:var(--green);color:#fff;}
+.vk-set-priv{grid-column:1 / -1;display:flex;align-items:center;gap:10px;background:var(--green-soft);border:1px solid #d3e4d3;border-radius:12px;padding:12px 16px;font-size:13px;color:var(--green-d);font-weight:500;}
+.vk-set-priv svg{width:16px;height:16px;flex:0 0 auto;}
+
+/* ── Impostazioni — redesign 2026-06-17 ──────────────────────────────────────
+   chiave API azionabile (mascherata + Sostituisci), hairline tra sotto-impostazioni,
+   verifica Ollama, cross-link a Modelli AI, nota download, ripristina predefiniti. */
+.vk-greet .vk-reset{flex:0 0 auto;font-family:var(--sans);font-size:12px;font-weight:600;color:var(--mut);background:transparent;border:1px solid var(--line2);border-radius:9px;padding:8px 14px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;}
+.vk-greet .vk-reset:hover{background:var(--surface2);color:var(--ink);}
+/* Hairline tra sotto-impostazioni della stessa card (scoped a .vk-sc per non toccare altre schermate). */
+.vk-sc .vk-field + .vk-field{border-top:1px solid var(--line);padding-top:13px;}
+.vk-hlp.lock{display:flex;align-items:flex-start;gap:6px;}
+.vk-hlp.lock svg{flex:0 0 auto;width:12px;height:12px;color:var(--green-d);margin-top:1px;}
+/* Chiave API impostata: valore mascherato + azione. */
+.vk-key{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.vk-key .val{flex:1 1 auto;height:36px;display:flex;align-items:center;font-family:var(--mono);font-size:12.5px;color:var(--mut);background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:0 12px;letter-spacing:1px;}
+.vk-key .val b{color:var(--green-d);font-weight:600;letter-spacing:0;margin-left:7px;}
+.vk-keyact{flex:0 0 auto;font-family:var(--sans);font-size:11.5px;font-weight:600;color:var(--ink2);background:var(--surface);border:1px solid var(--line2);border-radius:8px;padding:7px 11px;cursor:pointer;}
+.vk-keyact:hover{background:var(--surface2);}
+.vk-keyact:disabled{opacity:.55;cursor:default;}
+/* SET2: variante "Rimuovi" (danger). */
+.vk-keyact.danger{color:#c0392b;}
+.vk-keyact.danger:hover{background:var(--red-soft,#fbe7e3);border-color:#f2c9c1;color:#c0392b;}
+/* SET1: esito verifica chiave (ping a Claude). */
+.vk-verify{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11.5px;}
+.vk-verify.ok{color:var(--green-d);}
+.vk-verify.err{color:#c0392b;}
+.vk-verify.checking{color:var(--mut);}
+.vk-verify svg{flex:0 0 auto;width:13px;height:13px;color:var(--green-d);}
+.vk-linkbtn{display:inline-block;background:none;border:0;padding:0;margin-top:8px;font:inherit;font-size:11.5px;color:var(--green-d);cursor:pointer;text-decoration:underline;}
+/* Stato runtime Ollama (verifica on-demand). */
+.vk-ollama-state{font-family:var(--mono);font-size:11px;color:var(--mut);margin-top:8px;display:flex;align-items:center;gap:6px;}
+.vk-ollama-state .dot{width:7px;height:7px;border-radius:50%;background:var(--amber);flex:0 0 auto;}
+.vk-ollama-state.up .dot{background:var(--green);}
+/* Cross-link "gestione completa → Modelli AI". */
+.vk-xlink{display:inline-flex;align-items:center;gap:5px;margin-top:12px;background:none;border:0;padding:0;cursor:pointer;font-family:var(--sans);font-size:11.5px;font-weight:600;color:var(--green-d);}
+.vk-xlink:hover{text-decoration:underline;}
+.vk-xlink svg{width:13px;height:13px;}
+/* Nota download del modello live (ambra). */
+.vk-dlnote{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px;font-size:11.5px;line-height:1.4;color:var(--amber-d,#8a5a16);}
+.vk-dlnote svg{width:13px;height:13px;flex:0 0 auto;}
+.vk-dlnote b{color:var(--ink2);}
+.vk-dlnote button{background:none;border:0;padding:0;font:inherit;font-weight:700;color:var(--green-d);cursor:pointer;text-decoration:underline;}
+.vk-dlnote button:disabled{opacity:.6;cursor:default;text-decoration:none;}
+
+/* ── Errore — redesign 2026-06-17 ────────────────────────────────────────────
+   Tono calmo: icona contenuta (rosso tenue), messaggio umano, dettaglio su "carta"
+   (non console nera), rassicurazione scudo, recupero (Riprova/Impostazioni) + uscita. */
+.vk-err{width:100%;max-width:560px;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:0 10px 34px -16px rgba(40,33,20,.18);padding:26px 28px 22px;}
+.vk-err-ico{width:46px;height:46px;border-radius:12px;background:var(--red-soft,#fbe7e3);display:grid;place-items:center;margin-bottom:16px;}
+.vk-err-ico svg{width:24px;height:24px;fill:var(--red-d,#b23a2a);}
+.vk-err h1{font-family:var(--disp);font-weight:600;font-size:22px;color:var(--ink);margin:0 0 6px;}
+.vk-err .lead{font-size:13.5px;color:var(--ink2);line-height:1.6;margin:0 0 16px;}
+.vk-err-detail{position:relative;background:var(--surface2);border:1px solid var(--line);border-left:3px solid var(--red);border-radius:8px;padding:12px 14px;margin-bottom:12px;}
+.vk-err-detail .row{display:flex;gap:9px;align-items:flex-start;}
+.vk-err-detail .ic{flex:0 0 auto;width:16px;height:16px;margin-top:1px;}
+.vk-err-detail .ic svg{width:16px;height:16px;fill:var(--red-d,#b23a2a);}
+.vk-err-detail code{font-family:var(--mono);font-size:12px;color:var(--ink2);line-height:1.55;word-break:break-word;}
+.vk-err-detail .copy{position:absolute;top:8px;right:8px;font-family:var(--sans);font-size:11px;color:var(--mut);background:var(--surface);border:1px solid var(--line2);border-radius:6px;padding:3px 8px;cursor:pointer;}
+.vk-err-detail .copy:hover{background:var(--paper);}
+.vk-err-detail .copy.done{color:var(--green-d);border-color:var(--green);}
+.vk-err-warn{display:flex;align-items:flex-start;gap:8px;background:var(--amber-soft,#f7eed9);border:1px solid #e7d3ad;border-radius:8px;padding:10px 13px;margin-bottom:12px;font-size:12px;color:var(--amber-d,#8a5a16);line-height:1.5;}
+.vk-err-warn svg{flex:0 0 auto;width:15px;height:15px;fill:var(--amber-d,#8a5a16);margin-top:1px;}
+.vk-err-foot{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:16px;}
+.vk-reassure{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--green-d);}
+.vk-reassure svg{width:15px;height:15px;fill:var(--green);}
+.vk-err-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.vk-err-actions .vk-link{font-family:var(--sans);font-size:13px;color:var(--mut);background:transparent;border:0;cursor:pointer;padding:9px 8px;}
+.vk-err-actions .vk-link:hover{color:var(--ink);}
+.vk-err-actions .vk-ghost{font-family:var(--sans);font-size:13px;color:var(--ink2);background:transparent;border:1px solid var(--line2);border-radius:8px;padding:9px 16px;cursor:pointer;}
+.vk-err-actions .vk-ghost:hover{background:var(--surface2);}
+.vk-err-actions .vk-primary{font-family:var(--sans);font-weight:600;font-size:13px;color:#fff;background:var(--green);border:0;border-radius:8px;padding:9px 18px;cursor:pointer;display:inline-flex;align-items:center;gap:7px;transition:background .15s ease;}
+.vk-err-actions .vk-primary:hover{background:var(--green-d);}
+.vk-err-actions .vk-primary svg{width:15px;height:15px;fill:#fff;}
+@media (max-width:560px){.vk-err-foot{flex-direction:column;align-items:stretch;}.vk-err-actions{justify-content:flex-end;}}
+
+/* (Live · selettore sorgente .vk-src3 rimosso: sostituito da .vk-src status — redesign 2026-06-17) */
+
+/* ── Interview · risposte aperte ──────────────────────── */
+.vk-chips-lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin:0 0 8px;}
+.vk-qi{width:100%;background:var(--surface2);border:1px solid var(--line);border-radius:11px;padding:11px 13px;
+  font-family:var(--sans);font-size:13.5px;color:var(--ink);resize:none;line-height:1.5;margin-top:11px;}
+.vk-qi::placeholder{color:var(--faint);}
+.vk-qi.one{height:40px;padding-top:10px;}
+.vk-qi:focus{outline:none;border-color:var(--green);background:var(--surface);}
+.vk-q-or{display:flex;align-items:center;gap:9px;margin-top:11px;font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:.04em;}
+.vk-q-or::after{content:"";flex:1;height:1px;background:var(--line);}
+
+/* ════════ SCHERMATA — SESSIONI (libreria) ════════════ */
+.vk-sess-bar{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex:0 0 auto;flex-wrap:wrap;}
+.vk-srch{flex:1 1 auto;min-width:220px;display:flex;align-items:center;gap:9px;height:38px;padding:0 13px;
+  background:var(--surface);border:1px solid var(--line2);border-radius:var(--r-ctl);color:var(--faint);font-size:13.5px;}
+.vk-srch svg{width:15px;height:15px;color:var(--faint);flex:0 0 auto;}
+.vk-srch input::placeholder{color:var(--faint);}
+.vk-srch:focus-within{border-color:var(--green);box-shadow:0 0 0 3px var(--green-ring);}
+.vk-flt{display:inline-flex;background:var(--surface2);border:1px solid var(--line);border-radius:var(--r-ctl);padding:2px;gap:2px;}
+.vk-flt button{font-family:var(--sans);font-size:12px;font-weight:600;color:var(--mut);background:transparent;border:0;padding:6px 12px;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;}
+.vk-flt button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(40,33,20,.08);}
+.vk-flt button .c{font-family:var(--mono);font-size:9px;font-weight:500;color:var(--faint);}
+.vk-flt button.on .c{color:var(--green-d);}
+.vk-sort{font-family:var(--sans);font-size:12px;color:var(--ink2);background:var(--surface);border:1px solid var(--line2);border-radius:var(--r-ctl);padding:8px 10px;cursor:pointer;}
+.vk-sort:focus-visible{outline:none;box-shadow:0 0 0 3px var(--green-ring);}
+
+/* contatore risultati (solo filtrando/cercando) */
+.vk-count{font-family:var(--mono);font-size:11px;color:var(--mut);margin:0 4px 10px;flex:0 0 auto;}
+
+/* barra selezione (appare quando ci sono righe selezionate) */
+.vk-selbar{display:flex;align-items:center;gap:12px;background:var(--green-soft);border:1px solid #c7e0cf;border-radius:var(--r-ctl);padding:8px 14px;margin-bottom:12px;flex:0 0 auto;}
+.vk-selbar .n{font-size:12px;font-weight:600;color:var(--green-d);}
+.vk-selbar .grow{flex:1;}
+.vk-selbar button{font-family:var(--sans);font-size:12px;font-weight:600;border-radius:6px;padding:6px 13px;cursor:pointer;}
+.vk-selbar .del{color:#fff;background:var(--red);border:0;}
+.vk-selbar .del:hover{filter:brightness(1.06);}
+.vk-selbar .ann{color:var(--ink2);background:transparent;border:1px solid var(--line2);}
+.vk-selbar .ann:hover{background:var(--surface);}
+
+/* barra lista: seleziona tutto + legenda artefatti */
+.vk-listbar{display:flex;align-items:center;gap:12px;margin:0 4px 8px;flex:0 0 auto;}
+.vk-listbar .grow{flex:1;}
+.vk-selall{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--mut);cursor:pointer;user-select:none;}
+.vk-selall input{width:16px;height:16px;accent-color:var(--green);cursor:pointer;margin:0;}
+.vk-legend{display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:10px;color:var(--faint);}
+.vk-legend span{display:inline-flex;align-items:center;gap:5px;}
+.vk-legend i{width:8px;height:8px;border-radius:50%;display:inline-block;}
+.vk-legend .brief{background:var(--green);}.vk-legend .recap{background:var(--amber);}.vk-legend .vault{background:var(--violet);}
+
+.vk-sess-list{flex:1 1 auto;min-height:0;overflow:auto;}
+.vk-sgrp{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);padding:10px 14px 6px;}
+.vk-sgrp + .vk-sgrp,.vk-srow + .vk-sgrp{margin-top:8px;}
+.vk-srow{display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:var(--r-ctl);cursor:pointer;transition:background .12s;}
+.vk-srow:hover{background:var(--surface2);}
+.vk-srow.sel{background:var(--green-soft);}
+.vk-srow-chk{flex:0 0 auto;width:16px;height:16px;accent-color:var(--green);cursor:pointer;margin:0;opacity:0;transition:opacity .12s;}
+.vk-srow:hover .vk-srow-chk,.vk-srow.sel .vk-srow-chk,.vk-sess-list.selecting .vk-srow-chk{opacity:1;}
+.vk-srow .ic{width:32px;height:32px;border-radius:8px;flex:0 0 auto;background:var(--surface2);border:1px solid var(--line);color:var(--mut);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:10px;font-weight:700;}
+.vk-srow .nm{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;}
+.vk-srow .nm .ti{display:flex;align-items:center;gap:6px;min-width:0;}
+.vk-srow .nm .t{font-size:13.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:0;}
+.vk-srow .nm .m{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:2px;}
+/* S1: chip "? N" — domande rimaste da chiarire nel briefing (ambra, accanto al titolo). */
+.vk-srow .vk-dc{flex:0 0 auto;display:inline-flex;align-items:center;gap:3px;font-family:var(--mono);font-size:9px;color:var(--amber-d,#8a5a16);background:var(--amber-soft,#f3e6cf);border:1px solid #e7d3ad;border-radius:5px;padding:1px 6px;}
+.vk-srow .mode{font-family:var(--mono);font-size:10px;font-weight:600;border-radius:5px;padding:2px 8px;flex:0 0 auto;}
+.vk-srow .mode.riun{color:var(--green-d);background:var(--green-soft);border:1px solid #c7e0cf;}
+.vk-srow .mode.solo{color:var(--amber-d,#8a5a16);background:var(--amber-soft,#f3e6cf);border:1px solid #e7d3ad;}
+.vk-srow .dur{font-family:var(--mono);font-size:12px;color:var(--mut);width:54px;text-align:right;flex:0 0 auto;}
+.vk-srow .out{display:flex;gap:4px;flex:0 0 auto;width:46px;justify-content:center;}
+.vk-srow .out i{width:8px;height:8px;border-radius:50%;display:block;}
+.vk-srow .out .md{background:var(--green);}.vk-srow .out .rc{background:var(--amber);}.vk-srow .out .ob{background:var(--violet);}
+.vk-srow .out i.off{background:transparent;border:1.5px solid var(--line2);}
+.vk-srow-del{flex:0 0 auto;width:30px;height:30px;border-radius:7px;display:grid;place-items:center;background:transparent;border:1px solid transparent;color:var(--mut);cursor:pointer;opacity:0;transition:opacity .12s;}
+.vk-srow:hover .vk-srow-del,.vk-srow.sel .vk-srow-del{opacity:1;}
+.vk-srow-del:hover{background:var(--red-soft,#fbe7e3);border-color:#f2c9c1;color:var(--red);}
+/* S2: bottone "Riproduci" (apre l'audio nel lettore di sistema) — compare su hover, accanto al cestino. */
+.vk-play{flex:0 0 auto;width:30px;height:30px;border-radius:7px;display:grid;place-items:center;background:transparent;border:1px solid transparent;cursor:pointer;opacity:0;transition:opacity .12s;}
+.vk-srow:hover .vk-play,.vk-srow.sel .vk-play{opacity:1;}
+.vk-play svg{width:15px;height:15px;fill:var(--mut);}
+.vk-play:hover{background:var(--green-soft);border-color:#c7e0cf;}
+.vk-play:hover svg{fill:var(--green-d);}
+
+/* ════════ SCHERMATA — MODELLI AI ═════════════════════ */
+.vk-mod-grid{flex:1 1 auto;min-height:0;overflow:auto;display:grid;grid-template-columns:1.25fr .75fr;gap:18px;align-items:start;}
+.vk-mrow{display:flex;align-items:center;gap:14px;padding:13px 12px;margin:0 -12px;border-top:1px solid var(--line);border-radius:0;transition:.12s;}
+.vk-mrow:first-of-type{border-top:0;}
+.vk-mrow.on{background:var(--green-soft);border-radius:10px;border-top-color:transparent;}
+.vk-mrow.on + .vk-mrow{border-top-color:transparent;}
+.vk-mrow .vk-radio{margin-top:1px;display:none;}
+.vk-mrow .nm{flex:1 1 auto;min-width:0;}
+.vk-mrow .nm .t{font-size:14px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:8px;}
+.vk-mrow .nm .t .df{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--green-d);background:var(--green-soft);border-radius:5px;padding:1px 6px;}
+.vk-mrow .nm .badges{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;}
+.vk-badge{font-family:var(--mono);font-size:10.5px;font-weight:500;color:var(--mut);background:var(--surface2);border:1px solid var(--line);border-radius:6px;padding:2px 8px;}
+/* Meter a BARRA: velocità verde, qualità viola (redesign 2026-06-17). */
+.vk-meter{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;color:var(--faint);}
+.vk-meter .bar{width:54px;height:6px;border-radius:999px;background:var(--surface2);border:1px solid var(--line);overflow:hidden;}
+.vk-meter .bar > i{display:block;height:100%;background:var(--green);border-radius:999px;}
+.vk-meter.q .bar > i{background:var(--violet);}
+/* Tag capability come chip-icone colorate (ml=blu · json=viola · tool=ambra · ctx=verde). */
+.vk-tagico{display:inline-flex;gap:5px;align-items:center;}
+.vk-tagico .ti{width:20px;height:20px;border-radius:5px;background:var(--surface2);border:1px solid var(--line);display:grid;place-items:center;cursor:help;}
+.vk-tagico .ti svg{width:12px;height:12px;color:var(--mut);}
+.vk-tagico .ti.ml{background:var(--blue-soft,#e7f0f7);border-color:var(--blue-line,#cfe0ee);}
+.vk-tagico .ti.ml svg{color:var(--blue,#2f6b96);}
+.vk-tagico .ti.json{background:var(--violet-soft,#ece6f7);border-color:#d8ccef;}
+.vk-tagico .ti.json svg{color:var(--violet-d,#6e54a8);}
+.vk-tagico .ti.tool{background:var(--amber-soft,#f7eed9);border-color:#e7d3ad;}
+.vk-tagico .ti.tool svg{color:var(--amber-d,#8a5a16);}
+.vk-tagico .ti.ctx{background:var(--green-soft);border-color:#c7e0cf;}
+.vk-tagico .ti.ctx svg{color:var(--green-d);}
+.vk-mrow .act{flex:0 0 auto;}
+.vk-mrow .act .ok{font-size:11.5px;font-weight:600;color:var(--green-d);display:flex;align-items:center;gap:5px;}
+.vk-mrow .act .ok svg{width:14px;height:14px;}
+.vk-mrow .act .get{font-family:var(--sans);font-size:12px;font-weight:600;color:var(--ink2);background:var(--surface2);border:1px solid var(--line2);border-radius:8px;padding:7px 12px;cursor:pointer;display:flex;align-items:center;gap:6px;}
+.vk-mrow .act .get svg{width:14px;height:14px;}
+.vk-disk{display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding-top:13px;border-top:1px solid var(--line);font-family:var(--mono);font-size:11.5px;color:var(--mut);}
+.vk-brain-card{border:1.5px solid var(--line);border-radius:12px;padding:13px 14px;cursor:pointer;margin-bottom:10px;transition:.14s;}
+.vk-brain-card.on{border-color:var(--green);background:var(--green-soft);}
+.vk-brain-card .bh{display:flex;align-items:center;gap:10px;}
+.vk-brain-card .bh .rd{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--line2);flex:0 0 auto;position:relative;margin-left:auto;}
+.vk-brain-card.on .bh .rd{border-color:var(--green);}
+.vk-brain-card.on .bh .rd::after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--green);}
+.vk-brain-card .bh .ico{width:30px;height:30px;border-radius:8px;background:var(--surface2);color:var(--mut);display:flex;align-items:center;justify-content:center;}
+.vk-brain-card.on .bh .ico{background:#fff;color:var(--green-d);}
+.vk-brain-card .bh .ico svg{width:16px;height:16px;}
+.vk-brain-card .bt{font-size:14px;font-weight:700;color:var(--ink);}
+.vk-brain-card .bs{font-size:11.5px;color:var(--mut);margin-top:1px;}
+.vk-brain-card .bd{font-size:12px;color:var(--ink2);margin-top:9px;line-height:1.45;overflow-wrap:anywhere;}
+.vk-brain-card .bd .mono{font-family:var(--mono);font-size:11.5px;background:rgba(0,0,0,.04);border-radius:4px;padding:1px 5px;}
+
+/* ── Live · meter onde (una lane per sorgente) ─────────── */
+.vk-lane{display:flex;align-items:center;gap:14px;margin-bottom:12px;}
+.vk-lane:last-child{margin-bottom:0;}
+.vk-lane-lbl{flex:0 0 138px;display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11.5px;color:var(--con-ink);}
+.vk-lane-lbl .d{width:8px;height:8px;border-radius:50%;flex:0 0 auto;}
+.vk-lane.mic .d{background:var(--phos);box-shadow:0 0 8px var(--phos);}
+.vk-lane.sys .d{background:var(--amber);box-shadow:0 0 8px rgba(216,162,76,.55);}
+.vk-lane-lbl .lt{line-height:1.2;}
+.vk-lane-lbl .lt small{display:block;color:var(--con-dim);font-size:9.5px;}
+.vk-lane-wave{flex:1 1 auto;display:flex;align-items:center;gap:3px;height:46px;overflow:hidden;}
+.vk-lane-wave i{width:3px;border-radius:2px;flex:0 0 auto;transform-origin:center;}
+.vk-lane.mic .vk-lane-wave i{background:linear-gradient(180deg,var(--phos),#2f9e63);opacity:.92;}
+.vk-lane.sys .vk-lane-wave i{background:linear-gradient(180deg,var(--amber),#9c6f2c);opacity:.85;}
+.vk-lane-db{flex:0 0 auto;font-family:var(--mono);font-size:10.5px;color:var(--con-dim);width:48px;text-align:right;}
+/* avviso "nessun segnale" (mic morto / lane vuota >~3s): rimpiazza l'onda */
+.vk-lane-warn{display:none;flex:1 1 auto;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;color:var(--red);
+  background:rgba(236,91,73,.12);border:1px solid rgba(236,91,73,.32);border-radius:5px;padding:4px 10px;}
+.vk-lane.silent .vk-lane-wave{display:none;}
+.vk-lane.silent .vk-lane-warn{display:inline-flex;}
+@media (prefers-reduced-motion:no-preference){
+  .vk-lane.mic .vk-lane-wave i{animation:vkwv .7s ease-in-out infinite;animation-delay:calc(var(--i) * -0.03s);}
+  .vk-lane.sys .vk-lane-wave i{animation:vkwv .95s ease-in-out infinite;animation-delay:calc(var(--i) * -0.045s);}
+  .vk-live.paused .vk-lane-wave i{animation:none;}   /* onde ferme in pausa */
+}
+
+/* ── Live · pannello dettatura in tempo reale ─────────── */
+.vk-live-transcript{width:100%;max-width:760px;margin:0 auto 16px;text-align:left;}
+.vk-lt-head{font-size:12px;color:var(--mut);margin-bottom:6px;display:flex;flex-direction:column;gap:2px;}
+.vk-lt-head small{color:var(--faint);font-size:11px;}
+.vk-lt-body{background:var(--console2);border:1px solid var(--con-line);border-radius:12px;padding:14px 16px;font-family:var(--mono);font-size:12.5px;line-height:1.7;color:var(--con-dim);height:clamp(120px,24vh,320px);overflow-y:auto;white-space:pre-wrap;word-break:break-word;scrollbar-width:thin;transition:border-color .2s,color .2s;}
+.vk-lt-body.live{color:var(--con-ink);border-color:rgba(95,217,143,.25);}
+.vk-lt-body .cur{display:inline-block;width:7px;height:13px;background:var(--phos);vertical-align:-2px;margin-left:3px;}
+.vk-lt-empty{color:var(--faint);}
+
+/* ── Briefing · frontmatter YAML + [DA CHIARIRE] ──────── */
+.vk-yaml{font-family:var(--mono);font-size:11.5px;line-height:1.75;background:var(--surface2);border:1px solid var(--line);border-left:3px solid var(--green);border-radius:8px;padding:11px 14px;margin-bottom:16px;}
+.vk-yaml .dl{color:var(--faint);}
+.vk-yaml .k{color:var(--green-d);}
+.vk-yaml .v{color:var(--ink2);}
+.vk-clar{display:inline-block;font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.04em;color:#9a6a1e;background:rgba(216,162,76,.18);border:1px solid rgba(216,162,76,.45);border-radius:5px;padding:1px 7px;margin-right:7px;}
+.vk-doc li.clar{color:#7c5a1f;}
+.vk-doc li.clar::before{content:"?";color:var(--amber);font-weight:800;left:1px;}
+
+/* ── Modelli · stato (attivo / scaricato / da scaricare) ── */
+.vk-mrow .act .active{font-size:11.5px;font-weight:700;color:#fff;background:var(--green);border-radius:8px;padding:6px 12px;display:flex;align-items:center;gap:7px;box-shadow:0 2px 6px rgba(31,143,91,.3);}
+.vk-mrow .act .active .d{width:6px;height:6px;border-radius:50%;background:#fff;}
+.vk-mrow .act .saved{font-size:11.5px;font-weight:600;color:var(--mut);display:flex;align-items:center;gap:6px;}
+.vk-mrow .act .saved svg{width:13px;height:13px;color:var(--green-d);}
+.vk-note{font-size:11.5px;color:var(--mut);margin-top:13px;padding-top:12px;border-top:1px solid var(--line);line-height:1.45;display:flex;gap:9px;}
+.vk-note .ni{flex:0 0 auto;color:var(--amber);font-family:var(--mono);font-weight:700;}
+.vk-note b{color:var(--ink2);font-weight:600;}
+
+/* ── Modelli AI — redesign 2026-06-17 (pill disco, toolbar Ollama, barra download) ── */
+.vk-disk{display:inline-flex;align-self:flex-start;justify-content:flex-start;width:max-content;max-width:100%;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:var(--mut);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:6px 13px;margin-bottom:16px;}
+.vk-disk .d{width:7px;height:7px;border-radius:50%;background:var(--green);flex:0 0 auto;}
+.vk-disk b{color:var(--ink2);font-weight:600;}
+/* Bottone download con barra di progresso sotto (whisper + ollama). */
+.vk-getwrap{display:flex;flex-direction:column;align-items:stretch;gap:5px;}
+/* Riga "Scaricando…" + ✕ Annulla (MOD1, solo pull Ollama). */
+.vk-dlrow{display:flex;align-items:center;gap:6px;}
+.vk-dlrow .get{flex:1 1 auto;}
+.vk-dlcancel{flex:0 0 auto;width:30px;height:30px;border-radius:7px;display:grid;place-items:center;background:transparent;border:1px solid var(--line2);color:var(--mut);cursor:pointer;transition:background 120ms ease,color 120ms ease,border-color 120ms ease;}
+.vk-dlcancel svg{width:14px;height:14px;}
+.vk-dlcancel:hover{background:var(--red-soft,#fbe7e3);border-color:#f2c9c1;color:#b23a2a;}
+.vk-dlbar{height:5px;border-radius:999px;background:var(--surface2);border:1px solid var(--line);overflow:hidden;}
+.vk-dlbar > i{display:block;height:100%;background:var(--green);border-radius:999px;transition:width .2s linear;}
+/* MOD3: ETA download sotto la barra + GB usati/liberi nella pill disco. */
+.vk-eta{font-family:var(--mono);font-size:10px;color:var(--mut);text-align:right;}
+.vk-disk .vk-disk-x b{color:var(--ink2);font-weight:600;}
+/* Variante "Rimuovi" (ghost → rosso su hover). */
+.vk-mrow .act .get.ghost{background:transparent;color:var(--mut);border:1px solid var(--line2);}
+.vk-mrow .act .get.ghost:hover{background:var(--red-soft,#fbe7e3);border-color:#f2c9c1;color:#b23a2a;}
+/* Toolbar filtri/ordina Ollama. */
+.vk-otoolbar{display:flex;align-items:center;gap:12px;margin:4px 0 4px;flex-wrap:wrap;}
+.vk-ofilters{display:inline-flex;background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:2px;gap:2px;}
+.vk-ofilters button{font-family:var(--sans);font-size:12px;font-weight:600;color:var(--mut);background:transparent;border:0;border-radius:6px;padding:6px 12px;cursor:pointer;}
+.vk-ofilters button.on{background:var(--surface);color:var(--ink);box-shadow:var(--shadow-1,0 1px 2px rgba(40,33,20,.06));}
+.vk-osort{font-family:var(--sans);font-size:12px;color:var(--ink2);background:var(--surface);border:1px solid var(--line2);border-radius:8px;padding:7px 10px;cursor:pointer;margin-left:auto;}
+/* MOD2: chip ambra "pesante per la tua RAM" sui modelli che sforano la RAM della macchina. */
+.vk-ramwarn{display:inline-flex;align-items:center;font-size:10px;font-weight:600;color:var(--amber-d,#8a5a16);background:var(--amber-soft,#f3e6cf);border:1px solid #e7d3ad;border-radius:5px;padding:1px 7px;}
+/* Stato runtime Ollama come chip discreto (mock `.vk-runtime`): superficie tenue + dot di
+   stato (verde=in esecuzione · ambra=installato/fermo · rosso=assente). Sostituisce la vecchia
+   `.vk-note` verde bordata, che non era lo stile condiviso (fix Phase C). */
+.vk-runtime{display:flex;align-items:center;gap:9px;background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:9px 12px;margin:4px 0 10px;font-size:12px;color:var(--mut);line-height:1.45;flex-wrap:wrap;}
+.vk-runtime .dot{flex:0 0 auto;width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px var(--green-ring);}
+.vk-runtime .dot.warn{background:var(--amber);box-shadow:0 0 0 3px rgba(216,162,76,.18);}
+.vk-runtime .dot.off{background:var(--red);box-shadow:0 0 0 3px rgba(236,91,73,.16);}
+.vk-runtime .dot.spin{background:var(--amber);animation:vk-pulse 1.1s ease-in-out infinite;}
+.vk-runtime .tx{flex:1 1 auto;min-width:170px;}
+.vk-runtime b{color:var(--ink2);font-weight:600;}
+.vk-runtime .vk-mini{flex:0 0 auto;}
+@media (prefers-reduced-motion:reduce){.vk-dlbar > i{transition:none;}.vk-runtime .dot.spin{animation:none;}}
+
+/* ════════ SCHERMATA HOME ════════════════════════════════ */
+.vk-grid{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:1.16fr .84fr;gap:22px;}
+
+/* ── Capture console (dark heart) ─────────────────────── */
+.vk-console{background:var(--console);border-radius:var(--r);border:1px solid var(--con-line);
+  display:flex;flex-direction:column;padding:20px 22px 16px;position:relative;overflow:hidden;
+  box-shadow:0 20px 50px -24px rgba(20,17,8,.7),0 0 0 1px rgba(0,0,0,.2) inset;
+  background-image:radial-gradient(rgba(255,255,255,.022) 1px,transparent 0);background-size:15px 15px;}
+.vk-con-head{display:flex;align-items:center;justify-content:space-between;flex:0 0 auto;}
+.vk-con-tag{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12.5px;color:var(--con-dim);}
+.vk-con-tag .dot{width:8px;height:8px;border-radius:50%;background:var(--phos);box-shadow:0 0 9px var(--phos);}
+.vk-src{display:flex;gap:3px;background:#0f0e09;border:1px solid var(--con-line);border-radius:9px;padding:3px;}
+.vk-src button{font-family:var(--mono);font-size:12px;color:var(--con-dim);background:transparent;border:0;
+  padding:5px 12px;border-radius:6px;cursor:pointer;transition:.14s;}
+.vk-src button:hover{color:var(--con-ink);}
+.vk-src button.on{background:rgba(95,217,143,.14);color:var(--phos);}
+
+/* Righe TIPO / SORGENTE impilate sotto l'header capture (redesign home 2026-06-17):
+   più leggibili dei due gruppi inline; label allineate a sinistra, segmented a seguire. */
+.vk-cap-rows{display:flex;flex-direction:column;gap:8px;margin-top:12px;flex:0 0 auto;}
+.vk-seg-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.vk-seg-row .vk-src-lbl{width:64px;flex:0 0 auto;}
+
+.vk-stage{flex:1 1 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  padding:14px 0 6px;min-height:0;}
+.vk-rec{position:relative;width:104px;height:104px;border-radius:50%;border:0;cursor:pointer;flex:0 0 auto;
+  background:radial-gradient(circle at 50% 38%,#27a86c,#198a55);color:#eafff1;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 10px 28px rgba(20,120,70,.45),inset 0 2px 0 rgba(255,255,255,.25),0 0 0 1px rgba(95,217,143,.3);
+  transition:transform .15s;}
+.vk-rec:hover{transform:scale(1.03);}
+.vk-rec svg{width:40px;height:40px;}
+.vk-rec::before{content:"";position:absolute;inset:-12px;border-radius:50%;border:1px solid rgba(95,217,143,.5);opacity:0;pointer-events:none;}
+@media (prefers-reduced-motion:no-preference){.vk-rec::before{animation:vkring 2.8s ease-out infinite;}}
+@keyframes vkring{0%{transform:scale(.92);opacity:.5;}100%{transform:scale(1.28);opacity:0;}}
+.vk-rec-label{margin-top:16px;font-family:var(--disp);font-size:16px;font-weight:600;color:var(--con-ink);}
+.vk-rec-sub{margin-top:5px;font-size:12.5px;color:var(--con-dim);display:flex;align-items:center;gap:5px;}
+.vk-rec-sub kbd{color:#cfe8d4;background:#11100a;border:1px solid var(--con-line);border-radius:5px;padding:1px 6px;}
+
+.vk-wave{display:flex;align-items:center;justify-content:center;gap:3px;height:46px;margin-top:18px;width:100%;max-width:440px;}
+.vk-wave i{width:3px;border-radius:2px;background:linear-gradient(180deg,#3f7a5b,#2b5a42);flex:0 0 auto;
+  transform-origin:center;opacity:.65;}
+@media (prefers-reduced-motion:no-preference){
+  .vk-wave i{animation:vkwv 1.7s ease-in-out infinite;animation-delay:calc(var(--i) * -0.045s);}
+}
+@keyframes vkwv{0%,100%{transform:scaleY(.32);}50%{transform:scaleY(1);}}
+
+.vk-drop{flex:0 0 auto;margin-top:8px;border:1.4px dashed #34321f;border-radius:11px;padding:12px 16px;
+  display:flex;align-items:center;gap:10px;color:var(--con-dim);font-size:13px;background:rgba(255,255,255,.015);cursor:pointer;}
+.vk-drop b{color:var(--con-ink);font-weight:600;}
+.vk-drop .ar{color:#4a6b54;}
+.vk-drop .ext{margin-left:auto;font-size:11px;color:#6f6c58;}
+.vk-con-foot{flex:0 0 auto;margin-top:12px;padding-top:12px;border-top:1px solid var(--con-line);
+  display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:11.5px;color:var(--con-dim);}
+.vk-con-foot .ok{display:flex;align-items:center;gap:7px;color:#86c79a;}
+.vk-con-foot .ok .dot{width:7px;height:7px;border-radius:50%;background:var(--phos);box-shadow:0 0 8px var(--phos);}
+.vk-con-foot .model{margin-left:auto;color:#6f6c58;}
+
+/* ── Output preview (Home) ────────────────────────────── */
+.vk-output{flex:1 1 auto;min-height:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+  display:flex;flex-direction:column;overflow:hidden;box-shadow:0 2px 4px rgba(40,33,20,.03);}
+/* Footer bar del pannello output (CTA Copia briefing / Apri Impostazioni): striscia ancorata
+   in basso con divisore e sfondo surface2, così il pulsante non galleggia (da Home.html). */
+.vk-out-act{flex:0 0 auto;display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--line);background:var(--surface2);}
+/* CTA "Copia per la tua AI" a tutta larghezza nel footer dell'output (redesign home 2026-06-17). */
+.vk-out-act .vk-btn-g{flex:1 1 auto;justify-content:center;}
+
+/* ── Onboarding primo avvio (colonna destra, redesign home 2026-06-17) ──── */
+.vk-onb{flex:1 1 auto;min-height:0;overflow:auto;padding:24px;}
+.vk-onb-kick{font-family:var(--mono);font-size:var(--fs-micro);letter-spacing:.05em;text-transform:uppercase;color:var(--green-d);}
+.vk-onb h2{font-family:var(--disp);font-size:var(--fs-h2);font-weight:600;letter-spacing:-.01em;color:var(--ink);margin:6px 0 4px;}
+.vk-onb-lead{font-size:var(--fs-body);color:var(--mut);line-height:var(--lh-body);margin:0 0 20px;}
+.vk-onb-steps{display:flex;flex-direction:column;gap:16px;}
+.vk-onb-step{display:flex;gap:12px;align-items:flex-start;}
+.vk-onb-step .n{flex:0 0 auto;width:28px;height:28px;border-radius:50%;background:var(--green-soft);color:var(--green-d);font-family:var(--mono);font-size:var(--fs-meta);font-weight:600;display:flex;align-items:center;justify-content:center;}
+.vk-onb-step .tt{font-size:var(--fs-body);font-weight:600;color:var(--ink);}
+.vk-onb-step .dd{font-size:var(--fs-meta);color:var(--mut);line-height:var(--lh-list);margin-top:2px;}
+.vk-onb-step .dd b{color:var(--ink2);font-weight:700;}
+.vk-onb-assure{display:flex;align-items:center;gap:8px;margin-top:24px;padding-top:16px;border-top:1px solid var(--line);font-size:var(--fs-meta);color:var(--green-d);}
+.vk-onb-assure .dot{width:7px;height:7px;border-radius:50%;background:var(--green);flex:0 0 auto;}
+
+/* ── Recents ──────────────────────────────────────────── */
+.vk-recents{flex:0 0 auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;}
+.vk-rc-head{display:flex;align-items:center;justify-content:space-between;font-size:13px;font-weight:700;color:var(--ink);margin-bottom:8px;}
+.vk-rc-head .n{font-family:var(--mono);font-size:11px;font-weight:500;color:var(--faint);}
+.vk-rc{display:flex;align-items:center;gap:12px;padding:8px 8px;border-radius:9px;cursor:pointer;transition:.12s;}
+.vk-rc:hover{background:var(--surface2);}
+.vk-rc .ic{width:30px;height:30px;border-radius:8px;flex:0 0 auto;background:var(--green-soft);color:var(--green-d);
+  display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;font-weight:700;}
+.vk-rc .nm{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;}
+.vk-rc .nm .t{font-size:13.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.vk-rc .nm .m{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:1px;}
+.vk-rc .out{flex:0 0 auto;display:flex;gap:5px;}
+.vk-rc .out i{width:7px;height:7px;border-radius:2px;display:block;}
+.vk-rc .out .md{background:var(--green);}.vk-rc .out .rc{background:var(--amber);}.vk-rc .out .ob{background:#9a7ad6;}
+
+/* ── Accessibilità & feedback (audit batch 2) ───────────────────────── */
+/* Focus da tastiera sempre visibile: senza, navigare senza mouse è invisibile. */
+:focus-visible{outline:2px solid var(--green);outline-offset:2px;border-radius:6px;}
+/* Stato disabilitato leggibile: i controlli "in arrivo"/non pronti non sembrano cliccabili. */
+button:disabled,[disabled]{opacity:.5;cursor:not-allowed;}
+/* Barra di avanzamento indeterminata (analisi/rendering LLM: nessuna % reale). */
+/* Indeterminata = shimmer continuo (analisi/rendering LLM, nessuna % reale): una banda
+   verde più chiara scorre su base verde-soft senza gap né reset visibile → fluido, "al lavoro". */
+.vk-progress.indet i{width:100%;border-radius:6px;
+  background:linear-gradient(90deg,var(--green-soft) 0%,var(--green) 50%,var(--green-soft) 100%);
+  background-size:200% 100%;animation:vk-indet 1.4s linear infinite;}
+@keyframes vk-indet{0%{background-position:150% 0;}100%{background-position:-150% 0;}}
+/* Pulse del pallino (pill "job in background", banner onboarding). */
+@keyframes vk-pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+
+/* ── Cifre tabulari sui numeri "vivi" (round 2 D3/FD7) ───────────────────
+   Timer, %, durate e dB cambiano in continuazione: senza cifre a larghezza fissa
+   "saltano" lateralmente. .vk-status .res lo aveva già. */
+.vk-timer,.vk-proc-meta,.vk-srow .dur,.vk-lane-db,.vk-mk .tm,.vk-rc .nm .m,.vk-srow .nm .m{font-variant-numeric:tabular-nums;}
+
+/* ── Focus-ring leggibile anche sulle console scure (round 2 UX4/F3) ─────
+   Il ring verde di :focus-visible (tarato sul tema chiaro) sparisce su --console:
+   sulle superfici scure usa il phosphor, che ha contrasto reale. */
+.vk-live :focus-visible,.vk-console :focus-visible,.vk-proc-log :focus-visible,.vk-lt-body :focus-visible{outline-color:var(--phos);}
+
+/* ── Banner riusabile (round 2 F2/FD14) ─────────────────────────────────
+   Sostituisce le 3 copie inline (onboarding Home, warning App, errore). */
+.vk-banner{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 14px;padding:10px 14px;border-radius:10px;font-size:13px;line-height:1.45;}
+.vk-banner .bx{flex:1 1 auto;min-width:220px;}
+.vk-banner .bc{display:flex;gap:8px;flex:0 0 auto;}
+.vk-banner.warn{background:rgba(216,162,76,.14);border:1px solid var(--amber);color:var(--ink);}
+.vk-banner.info{background:var(--green-soft);border:1px solid #d3e4d3;color:var(--green-d);}
+.vk-banner-x{background:none;border:none;color:inherit;cursor:pointer;font-size:16px;line-height:1;padding:0 2px;flex:0 0 auto;}
+
+/* ── Pill flottanti dal sistema (round 2 F1/FD13) ───────────────────────
+   Prima erano interamente inline-style con colori hard-coded (#2a2620, rgba(0,0,0,.18)):
+   unico elemento sempre-visibile fuori dal design system. Ora classe + token. */
+/* ── Pill globali + Toast (overlay feedback) — redesign 2026-06-17 ─────────────
+   Scocca neutra (carta + ombra), colore SOLO come segnale di stato. Pill in basso a
+   SINISTRA (sopra la status bar, impilabili), toast in basso a DESTRA (auto-dismiss;
+   errori persistenti). Sostituisce il vecchio .vk-pill (tutto verde/scuro). */
+.vk-pill-stack{position:fixed;left:16px;bottom:52px;z-index:9998;display:flex;flex-direction:column;gap:10px;}
+.vk-pillc{display:flex;align-items:center;gap:11px;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-2,0 10px 30px -8px rgba(20,17,8,.30));padding:8px 10px;min-width:268px;max-width:340px;animation:vk-in-left 300ms cubic-bezier(.22,.61,.36,1) both;}
+.vk-pillc .ic{flex:none;width:34px;height:34px;border-radius:9px;display:grid;place-items:center;}
+.vk-pillc .ic svg{width:17px;height:17px;}
+.vk-pillc .ic.resume{background:var(--green-soft);}
+.vk-pillc .ic.resume svg{fill:var(--green-d);}
+.vk-pillc .ic.dl{background:var(--surface2);border:1px solid var(--line);}
+.vk-pillc .ic.dl svg{fill:var(--mut);}
+.vk-pillc .body{flex:1;min-width:0;}
+.vk-pillc .body .tt{font-size:12px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.vk-pillc .body .sub{font-size:11px;color:var(--mut);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.vk-pillc .act{flex:none;width:30px;height:30px;border-radius:8px;background:var(--green);border:0;display:grid;place-items:center;cursor:pointer;transition:background .15s ease;}
+.vk-pillc .act:hover{background:var(--green-d);}
+.vk-pillc .act svg{width:15px;height:15px;fill:#fff;}
+.vk-x{flex:none;width:26px;height:26px;border-radius:7px;background:transparent;border:0;display:grid;place-items:center;cursor:pointer;color:var(--faint);font-size:13px;line-height:1;}
+.vk-x:hover{background:var(--surface2);color:var(--ink);}
+.vk-pillbar{height:5px;border-radius:999px;background:var(--surface2);overflow:hidden;margin-top:6px;}
+.vk-pillbar > i{display:block;height:100%;background:var(--green);border-radius:999px;transition:width .2s linear;}
+.vk-toast-stack{position:fixed;right:16px;bottom:52px;z-index:9999;display:flex;flex-direction:column;gap:10px;align-items:flex-end;}
+.vk-toast{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:999px;box-shadow:var(--shadow-2,0 10px 30px -8px rgba(20,17,8,.30));padding:9px 12px 9px 10px;max-width:380px;animation:vk-in-right 280ms cubic-bezier(.22,.61,.36,1) both;}
+.vk-toast .ic{flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;}
+.vk-toast .ic svg{width:13px;height:13px;}
+.vk-toast.ok .ic{background:var(--green-soft);}
+.vk-toast.ok .ic svg{fill:var(--green-d);}
+.vk-toast.info .ic{background:var(--surface2);border:1px solid var(--line);}
+.vk-toast.err{border-color:var(--red-line,#f2c9c1);}
+.vk-toast.err .ic{background:var(--red-soft,#fbe7e3);}
+.vk-toast.err .ic svg{fill:var(--red-d,#b23a2a);}
+.vk-toast .tx{font-size:12px;color:var(--ink2);line-height:1.4;}
+.vk-toast .tx b{color:var(--ink);font-weight:600;}
+/* MDL3: bottone azione del toast ("Annulla" per l'eliminazione differita). */
+.vk-toast-undo{flex:0 0 auto;font-family:var(--sans);font-size:11.5px;font-weight:600;color:var(--green-d);background:transparent;border:0;border-radius:6px;padding:4px 8px;cursor:pointer;}
+.vk-toast-undo:hover{background:var(--green-soft);}
+.vk-spin{width:14px;height:14px;border-radius:50%;border:2px solid var(--line2);border-top-color:var(--mut);animation:vk-rot .8s linear infinite;}
+@keyframes vk-in-left{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:none;}}
+@keyframes vk-in-right{from{opacity:0;transform:translateY(12px) translateX(8px);}to{opacity:1;transform:none;}}
+@keyframes vk-rot{to{transform:rotate(360deg);}}
+@media (prefers-reduced-motion:reduce){
+  .vk-pillc,.vk-toast{animation:none;}
+  .vk-pillbar > i{transition:none;}
+  .vk-spin{animation:none;}
+}
+
+/* ── Modali in-app (confirm / prompt) — redesign 2026-06-17 ────────────────────
+   Scocca crema, icona di stato (danger rosso / neutral verde), hint tastiera, textarea
+   auto-grow nel prompt. Backdrop = annulla; Esc = annulla; Invio = conferma (solo confirm). */
+.vk-modal{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:rgba(20,17,8,.42);animation:vk-modal-fade 160ms ease;}
+.vk-modal .card{width:400px;max-width:calc(100% - 40px);background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-2,0 18px 50px -12px rgba(20,17,8,.45));padding:20px;animation:vk-modal-pop 200ms cubic-bezier(.22,.61,.36,1);}
+.vk-modal .mi{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;margin-bottom:12px;}
+.vk-modal .mi svg{width:20px;height:20px;}
+.vk-modal .mi.danger{background:var(--red-soft,#fbe7e3);} .vk-modal .mi.danger svg{fill:var(--red-d,#b23a2a);}
+.vk-modal .mi.neutral{background:var(--green-soft);} .vk-modal .mi.neutral svg{fill:var(--green-d);}
+.vk-modal h3{font-family:var(--disp);font-weight:600;font-size:18px;color:var(--ink);margin:0 0 12px;}
+.vk-modal p{font-size:12px;color:var(--mut);line-height:1.55;margin:0 0 16px;}
+.vk-modal textarea{width:100%;font-family:var(--sans);font-size:13.5px;color:var(--ink);background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:11px 12px;margin-bottom:18px;resize:none;line-height:1.55;min-height:64px;max-height:200px;display:block;scrollbar-width:none;-ms-overflow-style:none;}
+.vk-modal textarea::-webkit-scrollbar{width:0;height:0;display:none;}
+.vk-modal textarea::placeholder{color:var(--faint);}
+.vk-modal textarea:focus-visible{outline:none;box-shadow:0 0 0 3px var(--green-ring);border-color:var(--green);}
+/* MDL1: anteprima elenco sessioni nel dialog (multi-eliminazione). */
+.vk-mlist{max-height:188px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;margin:-4px 0 16px;padding-right:2px;}
+.vk-mli{display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:7px 10px;}
+.vk-mli .mode{flex:0 0 auto;font-family:var(--mono);font-size:9px;border-radius:5px;padding:1px 6px;color:var(--green-d);background:var(--green-soft);border:1px solid #c7e0cf;}
+.vk-mli .mode.solo{color:var(--amber-d,#8a5a16);background:var(--amber-soft,#f3e6cf);border-color:#e7d3ad;}
+.vk-mli .t{flex:1 1 auto;min-width:0;font-size:12px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.vk-mli .m{flex:0 0 auto;font-family:var(--mono);font-size:10px;color:var(--mut);}
+.vk-mli .out{flex:0 0 auto;display:inline-flex;gap:3px;}
+.vk-mli .out i{width:6px;height:6px;border-radius:50%;}
+.vk-mli .out .brief{background:var(--green);}.vk-mli .out .recap{background:var(--amber);}.vk-mli .out .vault{background:var(--violet);}
+/* MDL2: import arricchito — riga meta file + selettore tipo (solo/riunione). */
+.vk-mfile{display:flex;align-items:baseline;gap:10px;background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:9px 12px;margin:-4px 0 12px;}
+.vk-mfile .fn{flex:1 1 auto;min-width:0;font-size:12.5px;font-weight:600;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.vk-mfile .fm{flex:0 0 auto;font-family:var(--mono);font-size:10px;color:var(--mut);}
+.vk-mseg{display:inline-flex;background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:2px;gap:2px;margin-bottom:14px;}
+.vk-mseg button{font-family:var(--sans);font-size:12px;font-weight:600;color:var(--mut);background:transparent;border:0;border-radius:6px;padding:7px 16px;cursor:pointer;}
+.vk-mseg button.on{background:var(--surface);color:var(--ink);box-shadow:var(--shadow-1,0 1px 2px rgba(40,33,20,.06));}
+.vk-mfoot{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.vk-mkbd{font-family:var(--mono);font-size:9px;color:var(--faint);}
+.vk-mkbd kbd{background:var(--surface2);border:1px solid var(--line);border-radius:3px;padding:0 4px;color:var(--ink2);}
+.vk-actions{display:flex;justify-content:flex-end;gap:8px;}
+.vk-modal .vk-ghost{font-family:var(--sans);font-size:12px;color:var(--ink2);background:transparent;border:1px solid var(--line2);border-radius:8px;padding:9px 16px;cursor:pointer;}
+.vk-modal .vk-ghost:hover{background:var(--surface2);}
+.vk-modal .vk-primary{font-family:var(--sans);font-weight:600;font-size:12px;color:#fff;background:var(--green);border:0;border-radius:8px;padding:9px 18px;cursor:pointer;}
+.vk-modal .vk-primary:hover{background:var(--green-d);}
+.vk-modal .vk-danger{font-family:var(--sans);font-weight:600;font-size:12px;color:#fff;background:var(--red);border:0;border-radius:8px;padding:9px 18px;cursor:pointer;}
+.vk-modal .vk-danger:hover{background:var(--red-d,#b23a2a);}
+.vk-modal .vk-ghost:focus-visible,.vk-modal .vk-primary:focus-visible,.vk-modal .vk-danger:focus-visible{outline:none;box-shadow:0 0 0 3px var(--green-ring);}
+@keyframes vk-modal-fade{from{opacity:0;}to{opacity:1;}}
+@keyframes vk-modal-pop{from{opacity:0;transform:translateY(8px) scale(.97);}to{opacity:1;transform:none;}}
+@media (prefers-reduced-motion:reduce){.vk-modal,.vk-modal .card{animation:none;}}
+
+/* ── Navigabilità (round 2 onda 1) ──────────────────────────────────────
+   Uscita/Annulla terziaria con un trattamento UNICO nel flusso (A3/UX1): prima
+   Processing usava un bottone secondario, Interview un text-link inline → divergenti. */
+.vk-exit{background:none;border:none;color:var(--mut);cursor:pointer;font:inherit;font-weight:600;
+  padding:0 4px;display:inline-flex;align-items:center;gap:6px;}
+.vk-exit:hover{color:var(--ink2);text-decoration:underline;}
+/* Stato vuoto azionabile (A4/UX6): dice "cosa fare adesso", non solo "cosa manca". */
+.vk-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+  padding:40px 20px;text-align:center;}
+.vk-empty .ei{width:42px;height:42px;border-radius:11px;background:var(--green-soft);color:var(--green-d);
+  display:flex;align-items:center;justify-content:center;}
+.vk-empty .ei svg{width:20px;height:20px;}
+.vk-empty .et{font-size:14px;font-weight:600;color:var(--ink2);}
+.vk-empty .es{font-size:12.5px;color:var(--mut);max-width:44ch;line-height:1.5;}
+/* Intestazione "Recenti" del sidebar con link "Tutte le sessioni →" (A6). */
+.vk-side-sec{display:flex;align-items:center;justify-content:space-between;}
+.vk-side-sec a{font-family:var(--sans);font-size:11px;font-weight:600;letter-spacing:0;
+  text-transform:none;color:var(--green-d);cursor:pointer;}
+.vk-side-sec a:hover{text-decoration:underline;}
+
+/* ── Titlebar contestuale + wayfinding (round 2 A1/FD3) ──────────────────
+   Prima la sinistra della titlebar era un <div aria-hidden> vuoto (56px × tutta la
+   larghezza di spazio morto). Ora porta il titolo della schermata e, nel flusso,
+   un breadcrumb a step così l'utente sa dov'è nel viaggio. */
+.vk-tbar-title{font-family:var(--disp);font-size:15px;font-weight:600;letter-spacing:-.01em;color:var(--ink);}
+.vk-tbar-crumbs{display:flex;align-items:center;gap:7px;min-width:0;overflow:hidden;font-family:var(--mono);font-size:11.5px;}
+.vk-tbar-crumbs .c{white-space:nowrap;color:var(--faint);}
+.vk-tbar-crumbs .c.done{color:var(--mut);}
+.vk-tbar-crumbs .c.cur{color:var(--green-d);font-weight:700;}
+.vk-tbar-crumbs .sep{color:var(--line2);flex:0 0 auto;}
+
+/* ════════ ONDA 3 — MOTION & SISTEMA (round 2) ══════════════════════════ */
+
+/* Raggio dei controlli piccoli unificato (C1): prima 7/8/9px misti. I bottoni
+   d'azione grandi (.vk-btn-g/.vk-btn-gh=9, .vk-cbtn=12) restano tier a parte. */
+.vk-tabs button,.vk-flt button,.vk-seg2 button,.vk-mini,.vk-mrow .act .get,.vk-del-sel{border-radius:var(--r-ctl);}
+
+/* Transizioni di schermata direzionali (E1/UX9): nel single-window il movimento È
+   wayfinding — avanzare nel flusso entra da destra, tornare da sinistra, le primarie
+   crossfade. Il wrapper è il flex-child di .vk-main: deve lasciar respirare i figli flex. */
+.vk-screen-anim{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;}
+@media (prefers-reduced-motion:no-preference){
+  .vk-screen-anim.fwd{animation:vk-in-r .26s cubic-bezier(.2,.7,.2,1) both;}
+  .vk-screen-anim.back{animation:vk-in-l .26s cubic-bezier(.2,.7,.2,1) both;}
+  .vk-screen-anim.fade{animation:vk-in-fade .2s ease both;}
+  /* Page-load orchestrato (FD10): l'header di schermata "sale" a cascata leggera. */
+  .vk-greet .vk-kick{animation:vk-rise .34s ease both;}
+  .vk-greet h1{animation:vk-rise .34s ease .05s both;}
+  .vk-greet p{animation:vk-rise .34s ease .1s both;}
+}
+@keyframes vk-in-r{from{opacity:0;transform:translateX(16px);}to{opacity:1;transform:none;}}
+@keyframes vk-in-l{from{opacity:0;transform:translateX(-16px);}to{opacity:1;transform:none;}}
+@keyframes vk-in-fade{from{opacity:0;}to{opacity:1;}}
+@keyframes vk-rise{from{opacity:0;transform:translateY(7px);}to{opacity:1;transform:none;}}
+
+/* Micro-celebrazione del completamento (E3/UX8): all'arrivo del briefing il CTA
+   primario di Artifacts "respira" una volta, portando l'occhio sull'azione chiave. */
+@media (prefers-reduced-motion:no-preference){
+  .vk-cta-pop{animation:vk-cta-pop .7s cubic-bezier(.2,.7,.2,1) .12s both;}
+}
+@keyframes vk-cta-pop{
+  0%{transform:scale(.96);box-shadow:0 0 0 0 var(--green-ring);}
+  45%{transform:scale(1.015);box-shadow:0 0 0 7px var(--green-ring);}
+  100%{transform:scale(1);box-shadow:0 2px 6px rgba(31,143,91,.3);}
+}
+
+/* ════════ RESPONSIVE — finestra ridimensionabile (min 980×680, review 2026-06-15 A1) ════════
+   L'app non aveva breakpoint: a finestra stretta le griglie 2-col si schiacciavano e i
+   selettori/tab traboccavano. Qui collassano in modo ordinato. */
+
+/* Le barre di tab non troncano mai l'ultima voce: vanno a capo se manca spazio. */
+.vk-tabs{flex-wrap:wrap;row-gap:6px;}
+/* Header console Home: i gruppi tipo/sorgente vanno a capo invece di traboccare. */
+.vk-con-head{flex-wrap:wrap;row-gap:10px;}
+/* Etichetta dei gruppi di selettori (distingue "tipo sessione" da "sorgente"). */
+.vk-src-lbl{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--con-dim);flex:0 0 auto;}
+
+@media (max-width:1080px){
+  /* Schermate-documento: 2 colonne → 1; il main scrolla verticalmente. */
+  .vk-main{overflow:auto;}
+  .vk-art-grid{grid-template-columns:1fr;min-height:0;}
+  .vk-art-doc{min-height:56vh;}
+  /* 1 colonna: NON stirare le card a tutta larghezza, cappa e centra (come home/artefatti). */
+  .vk-set-grid{grid-template-columns:1fr;max-width:600px;margin-left:auto;margin-right:auto;}
+}
+
+/* Soglia 1000 (non 960): la finestra minima è 980px, quindi un breakpoint a 960 non
+   scatterebbe MAI nell'app reale. A 1000 collassa già al minimo. */
+@media (max-width:1000px){
+  /* Home: console sopra, anteprima sotto. La griglia prende altezza NATURALE (flex:0 0 auto)
+     e il main scrolla: altrimenti, restando vincolata all'altezza del main, la console viene
+     compressa e lo .vk-stage (flex:1, REC centrato) si sovrappone al campo contesto. */
+  .vk-grid{grid-template-columns:1fr;flex:0 0 auto;}
+  .vk-console{min-height:340px;}
+  .vk-output{min-height:260px;}
+  /* Live: lane più compatte, sublabel nascosta. */
+  .vk-lane-lbl{flex-basis:104px;}
+  .vk-lane-lbl .lt small{display:none;}
+}

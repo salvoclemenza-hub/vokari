@@ -1,0 +1,47 @@
+name: CI
+
+# PR-gate VOKARI (ADR-031). Due job paralleli: motore Python (uv) e frontend (pnpm).
+# I benchmark di performance NON girano qui (runner senza GPU + download modelli whisper):
+# saranno un workflow schedulato a parte (ADR-031 Onda 3).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  engine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # ffmpeg serve a audio/convert; libportaudio2 nel caso un test tocchi sounddevice
+      # (di norma è dietro import lazy _sd() e mockato — PyAudioWPatch è win-only via env marker).
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg libportaudio2
+      - uses: astral-sh/setup-uv@v3
+        with:
+          python-version: "3.12"
+      - run: uv sync --dev
+      - run: uv run ruff check
+      - run: uv run ruff format --check
+      - run: uv run pytest --cov -q   # coverage gate: fail_under in pyproject.toml
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsc -b
+      - run: pnpm run lint        # eslint: 0 errori richiesti (i warning non bloccano)
+      - run: pnpm run test:cov    # vitest + soglie coverage in vitest.config.ts
+      - run: pnpm build

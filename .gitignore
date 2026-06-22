@@ -1,0 +1,46 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+dist/
+build/
+*.egg-info/
+# segreti e dati locali
+config.json
+settings.json
+.env
+# modelli Whisper (scaricati on-demand, mai committati)
+models/
+*.bin
+# build frontend
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+# coverage backend (pytest-cov)
+.coverage
+htmlcov/
+# dati utente / output
+data/
+# trascrizioni e artefatti generati accanto all'audio (possono contenere contenuti sensibili)
+*.transcript.txt
+*.briefing.md
+*.recap.md
+*.recap.pdf
+vokari-rec-*.wav
+
+# audio di test personali al root (restano locali, mai committati)
+/*.m4a
+/*.mp3
+/*.flac
+/*.wav
+# file usa-e-getta di debug/harness al root (_smoke_*, _probe_*, ...)
+/_*
+
+# --- runtime tooling (non parte del repo vokari) ---
+.superpowers/
+.claude/
+
+# screenshot di riferimento/debug (catture finestra reale + mockup) — locali, non versionati
+/screen/
+# baseline eval (output rigenerabile, non versionato)
+evals/interview/baseline.jsonl

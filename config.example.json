@@ -1,0 +1,12 @@
+{
+  "brain": "claude",
+  "anthropic_api_key": "sk-ant-INSERISCI-LA-TUA-CHIAVE",
+  "ollama_endpoint": "http://localhost:11434",
+  "ollama_model": "gemma2:9b",
+  "whisper_model": "large-v3-turbo",
+  "claude_model": "claude-opus-4-8",
+  "briefing_dir": "",
+  "obsidian_vault": "",
+  "default_mode": "solo",
+  "transcription_language": "auto"
+}
