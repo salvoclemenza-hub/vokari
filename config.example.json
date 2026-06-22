@@ -2,11 +2,13 @@
   "brain": "claude",
   "anthropic_api_key": "sk-ant-INSERISCI-LA-TUA-CHIAVE",
   "ollama_endpoint": "http://localhost:11434",
-  "ollama_model": "gemma2:9b",
+  "ollama_model": "qwen2.5:7b",
   "whisper_model": "large-v3-turbo",
-  "claude_model": "claude-opus-4-8",
+  "claude_model": "claude-sonnet-4-6",
   "briefing_dir": "",
   "obsidian_vault": "",
   "default_mode": "solo",
-  "transcription_language": "auto"
+  "transcription_language": "it",
+  "live_preview": true,
+  "live_model": "base"
 }

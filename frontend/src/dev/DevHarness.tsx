@@ -3,8 +3,7 @@
 // Routing via query string: ?screen=<id>&state=<id>. Senza screen → indice DEV.
 //
 // Guardia: importato solo dietro `import.meta.env.DEV` in main.tsx → il bundle di
-// produzione non lo include (verificare con un grep su dist/). Vedi il piano
-// docs/superpowers/plans/2026-06-15-vokari-visual-refinement.md.
+// produzione non lo include (verificare con un grep su dist/).
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AppFrame } from "../chrome/AppFrame";

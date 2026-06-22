@@ -42,5 +42,3 @@ vokari-rec-*.wav
 
 # screenshot di riferimento/debug (catture finestra reale + mockup) — locali, non versionati
 /screen/
-# baseline eval (output rigenerabile, non versionato)
-evals/interview/baseline.jsonl

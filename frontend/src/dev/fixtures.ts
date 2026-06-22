@@ -1,7 +1,6 @@
 // Dati finti realistici per l'harness di rifinitura visiva (DEV-only).
 // NON usati in produzione: il modulo `dev/` è importato solo dietro la guardia
-// `import.meta.env.DEV` in main.tsx → tree-shaken dal build (vedi piano
-// docs/superpowers/plans/2026-06-15-vokari-visual-refinement.md, Phase 0.1).
+// `import.meta.env.DEV` in main.tsx → tree-shaken dal build.
 //
 // Scopo: mostrare ogni schermata/stato senza eseguire whisper + LLM (lenti e,
 // con Ollama su iGPU AMD, rischiosi). Le schermate prop-driven ricevono queste
