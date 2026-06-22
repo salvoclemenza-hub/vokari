@@ -173,6 +173,7 @@ def test_ollama_chat_text_also_sets_num_ctx(monkeypatch):
 def _ollama_post_with_api_show(chat_content="{}", max_ctx=32768, posted=None):
     """Mock httpx.post che distingue /api/show (model_info) da /api/chat (message). Se `posted`
     è passato, registra il payload delle chiamate /api/chat (non quelle /api/show)."""
+
     def _fake_post(url, *, json, timeout):
         if url.endswith("/api/show"):
             body = {"model_info": {"qwen2.context_length": max_ctx}}
@@ -230,9 +231,7 @@ def test_ollama_model_max_ctx_does_not_cache_fallback_then_retries(monkeypatch):
         if state["calls"] == 1:
             raise httpx.ConnectError("Ollama in avvio")
         body = {"model_info": {"qwen2.context_length": 32768}}
-        return type(
-            "R", (), {"status_code": 200, "raise_for_status": lambda self: None, "json": lambda self: body}
-        )()
+        return type("R", (), {"status_code": 200, "raise_for_status": lambda self: None, "json": lambda self: body})()
 
     monkeypatch.setattr(httpx, "post", _post)
     p = OllamaProvider("http://localhost:11434", "qwen2.5:7b")

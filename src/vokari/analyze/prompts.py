@@ -34,8 +34,8 @@ _GUIDANCE = (
     "action item con responsabile e scadenza, domande aperte e numeri. Per le decisioni e i next step "
     "importanti àncora brevemente al contenuto della trascrizione (parafrasi breve, non citazione "
     "obbligatoria); non gonfiare un dettaglio secondario a scopo principale. "
-    "Le key_ideas devono essere FRASI COMPLETE e informative (es. \"Aggiungere una galleria foto "
-    "dei prodotti per la clientela multilingua\"), non etichette di 1-2 parole (es. \"Galleria\")."
+    'Le key_ideas devono essere FRASI COMPLETE e informative (es. "Aggiungere una galleria foto '
+    'dei prodotti per la clientela multilingua"), non etichette di 1-2 parole (es. "Galleria").'
 )
 
 _SHAPE = """Produci ESATTAMENTE questo JSON (chiavi in inglese, valori in italiano):

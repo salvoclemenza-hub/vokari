@@ -33,6 +33,7 @@ def _stub_api_show(monkeypatch):
 
     monkeypatch.setattr(httpx, "post", _fake_post)
 
+
 # ── Ollama: httpx.stream mockato con NDJSON ──────────────────────────────────
 
 

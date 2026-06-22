@@ -127,9 +127,7 @@ def test_run_processing_detect_questions_failure_still_generates_briefing(store,
 
     events: list[tuple[str, dict]] = []
     s = Settings(briefing_dir=str(tmp_path / "out"))
-    out = P.run_processing(
-        job, store, settings=s, provider=StubProvider(), emit=lambda ev, p: events.append((ev, p))
-    )
+    out = P.run_processing(job, store, settings=s, provider=StubProvider(), emit=lambda ev, p: events.append((ev, p)))
 
     assert out.status == "ready", "il fallimento delle domande NON deve dare status=error"
     assert out.briefing_md and out.briefing_path  # briefing generato malgrado il timeout domande

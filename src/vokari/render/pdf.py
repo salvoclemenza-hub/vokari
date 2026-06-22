@@ -36,6 +36,7 @@ def _try_unicode_font(pdf: FPDF) -> str | None:
                 continue
     return None
 
+
 # Mappa caratteri non-latin1 verso equivalenti ASCII/latin1 sicuri.
 _TRANS = str.maketrans(
     {

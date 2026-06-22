@@ -729,8 +729,16 @@ def test_list_sessions_camelcase_shape(sessions_api, tmp_path, monkeypatch, sync
     assert sessions  # almeno uno
     s = sessions[0]
     for key in (
-        "id", "title", "createdAt", "mode", "model", "durationMs",
-        "hasBriefing", "hasRecap", "hasObsidian", "clarCount",
+        "id",
+        "title",
+        "createdAt",
+        "mode",
+        "model",
+        "durationMs",
+        "hasBriefing",
+        "hasRecap",
+        "hasObsidian",
+        "clarCount",
     ):
         assert key in s, f"chiave mancante: {key}"
 
@@ -746,16 +754,34 @@ def test_session_list_item_clar_count_counts_markers():
         "testo\n[DA CHIARIRE: Scadenza turni? (domanda saltata in rifinitura)]\n"
     )
     s = Session(
-        id="s1", title="T", created_at="2026-06-10T00:00:00", mode="solo", source="mic",
-        model="small", language="it", duration_ms=1000, transcript="x", word_count=1,
-        status="ready", artifacts={"briefing_md": briefing},
+        id="s1",
+        title="T",
+        created_at="2026-06-10T00:00:00",
+        mode="solo",
+        source="mic",
+        model="small",
+        language="it",
+        duration_ms=1000,
+        transcript="x",
+        word_count=1,
+        status="ready",
+        artifacts={"briefing_md": briefing},
     )
     assert _session_list_item(s)["clarCount"] == 2
     # nessun marcatore → 0 (briefing completo)
     s2 = Session(
-        id="s2", title="T2", created_at="2026-06-10T00:00:00", mode="solo", source="mic",
-        model="small", language="it", duration_ms=1000, transcript="x", word_count=1,
-        status="ready", artifacts={"briefing_md": "# Briefing pulito"},
+        id="s2",
+        title="T2",
+        created_at="2026-06-10T00:00:00",
+        mode="solo",
+        source="mic",
+        model="small",
+        language="it",
+        duration_ms=1000,
+        transcript="x",
+        word_count=1,
+        status="ready",
+        artifacts={"briefing_md": "# Briefing pulito"},
     )
     assert _session_list_item(s2)["clarCount"] == 0
 
@@ -770,9 +796,17 @@ def test_session_list_item_has_audio_only_if_file_exists(tmp_path):
     wav = tmp_path / "a.wav"
     wav.write_bytes(b"RIFF")
     base = {
-        "title": "T", "created_at": "2026-06-10T00:00:00", "mode": "solo", "source": "mic",
-        "model": "small", "language": "it", "duration_ms": 1000, "transcript": "x", "word_count": 1,
-        "status": "ready", "artifacts": {},
+        "title": "T",
+        "created_at": "2026-06-10T00:00:00",
+        "mode": "solo",
+        "source": "mic",
+        "model": "small",
+        "language": "it",
+        "duration_ms": 1000,
+        "transcript": "x",
+        "word_count": 1,
+        "status": "ready",
+        "artifacts": {},
     }
     assert _session_list_item(Session(id="s1", audio_path=str(wav), **base))["hasAudio"] is True
     assert _session_list_item(Session(id="s2", audio_path=str(tmp_path / "manca.wav"), **base))["hasAudio"] is False
@@ -858,8 +892,18 @@ def test_play_session_audio_handles_missing(tmp_path, monkeypatch):
     wav = tmp_path / "ok.wav"
     wav.write_bytes(b"RIFF")
     sess = Session(
-        id="sA", title="T", created_at="2026-06-10T00:00:00", mode="solo", source="mic", model="small",
-        language="it", duration_ms=1000, transcript="x", word_count=1, status="ready", artifacts={},
+        id="sA",
+        title="T",
+        created_at="2026-06-10T00:00:00",
+        mode="solo",
+        source="mic",
+        model="small",
+        language="it",
+        duration_ms=1000,
+        transcript="x",
+        word_count=1,
+        status="ready",
+        artifacts={},
         audio_path=str(wav),
     )
     api._sessions.save(sess)

@@ -57,8 +57,13 @@ def test_detect_questions_parses_why_and_from_audio():
     """I1+I2: why e fromAudio vengono letti dal JSON dell'LLM (alias fromAudio→from_audio)."""
     payload = {
         "questions": [
-            {"id": "q1", "text": "Budget 700 o 730?", "priority": "high",
-             "why": "valori in contraddizione", "fromAudio": True},
+            {
+                "id": "q1",
+                "text": "Budget 700 o 730?",
+                "priority": "high",
+                "why": "valori in contraddizione",
+                "fromAudio": True,
+            },
         ]
     }
     qs = IV.detect_questions(_analysis(), "t", provider=FakeProvider(payload), mode="solo")

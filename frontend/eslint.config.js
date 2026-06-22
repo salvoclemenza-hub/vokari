@@ -80,6 +80,12 @@ export default tseslint.config(
       // la regola è troppo conservativa qui. Warn per documentare, non error.
       "react-hooks/immutability": "warn",
 
+      // react-hooks/refs: pattern "usePrevious" — leggere ref.current in render per la
+      // schermata precedente e calcolare la direzione della transizione (App.tsx prevScreenRef,
+      // DevHarness prevRef). È idiomatico e corretto a runtime (il ref si aggiorna in useEffect
+      // post-render); react-compiler è conservativo. Warn come le altre react-compiler rules.
+      "react-hooks/refs": "warn",
+
       // Deprecate: alcuni hook di react-hooks v7 segnalano deprecation warnings.
       "@typescript-eslint/no-require-imports": "warn",
     },

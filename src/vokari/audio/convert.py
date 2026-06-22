@@ -35,8 +35,7 @@ def probe_duration_s(path: str) -> float | None:
         return None
     try:
         out = subprocess.run(  # noqa: S603 — exe validato da shutil.which, args fissi
-            [exe, "-v", "error", "-show_entries", "format=duration",
-             "-of", "default=noprint_wrappers=1:nokey=1", path],
+            [exe, "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path],
             capture_output=True,
             text=True,
             timeout=10,

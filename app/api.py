@@ -696,8 +696,13 @@ class Api:
                     # MOD3: bytesDone/bytesTotal (stimati per Whisper) → ETA calcolato lato frontend.
                     self._emit(
                         "model_download",
-                        {"name": name, "status": "progress", "pct": round(pct, 3),
-                         "bytesDone": grown, "bytesTotal": expected},
+                        {
+                            "name": name,
+                            "status": "progress",
+                            "pct": round(pct, 3),
+                            "bytesDone": grown,
+                            "bytesTotal": expected,
+                        },
                     )
 
             mon = threading.Thread(target=_monitor, daemon=True)
@@ -846,8 +851,13 @@ class Api:
                             # MOD3: bytesDone/bytesTotal reali (Ollama li espone) → ETA lato frontend.
                             self._emit(
                                 "ollama_pull",
-                                {"name": name, "status": "progress", "pct": round(pct, 3),
-                                 "bytesDone": completed, "bytesTotal": total},
+                                {
+                                    "name": name,
+                                    "status": "progress",
+                                    "pct": round(pct, 3),
+                                    "bytesDone": completed,
+                                    "bytesTotal": total,
+                                },
                             )
                         elif data.get("status") == "success":
                             break
