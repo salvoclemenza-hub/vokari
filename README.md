@@ -19,7 +19,7 @@
 - 📝 **On-device transcription** — faster-whisper, no cloud
 - 🧠 **Analysis** — Claude API or local Ollama
 - 📦 **Output** — `briefing.md` + recap + PDF + Obsidian notes
-- 🔐 **Privacy-first** — audio stays on your device; secrets live in the OS keyring
+- 🔐 **Privacy-first** — audio stays on your device; secrets live in the OS keyring ([Privacy policy](PRIVACY.md))
 
 **Status:** v1 — the full flow works and is CI-gated (500+ automated tests: ~380 backend with pytest, ~140 frontend with vitest).
 
