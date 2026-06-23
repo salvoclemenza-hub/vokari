@@ -27,11 +27,21 @@
 
 ## 📥 Installation
 
-### 📦 Packaged build (easiest) — *coming on the Releases page*
+### 📦 Packaged build (easiest)
 
-A ready-to-run Windows package will be published on the **[Releases](https://github.com/salvoclemenza-hub/vokari/releases)** page: download, run the included setup script, and launch from the desktop shortcut — no toolchain required.
+Grab the latest **`VOKARI-vX.Y.Z.zip`** from the **[Releases](https://github.com/salvoclemenza-hub/vokari/releases)** page — it bundles an embedded Python runtime, ffmpeg, and the built UI, so **no toolchain is required**.
 
-> ℹ️ It ships as a **ZIP + PowerShell setup script** (installed to your user folder, no admin) rather than a classic `.exe` installer, because Windows 11 Smart App Control blocks unsigned `.exe` files. A code-signed build (via [SignPath Foundation](https://signpath.org/) for open source) is planned to make installation one-click.
+1. **Download** the ZIP from Releases.
+2. **Unblock it first** — right-click the downloaded ZIP → **Properties** → tick **Unblock** → **OK**. *(One click, and it prevents the Windows 11 block described below.)*
+3. **Extract** the ZIP anywhere.
+4. Run **`INSTALLA.bat`** — installs to your user folder (`%LOCALAPPDATA%`, no admin needed) and creates a desktop shortcut.
+5. Launch **VOKARI** from the desktop.
+
+AI models (faster-whisper — and Ollama, if you pick it) download automatically on first use.
+
+> ⚠️ **Windows 11 Smart App Control (SAC).** On a *minority* of PCs (clean installs of Windows 11) SAC is ON and blocks files downloaded from the internet — **including scripts** — with no "Run anyway" button. If you hit that block, either **unblock the ZIP before extracting** (step 2) or temporarily turn SAC off: *Windows Security → App & browser control → Smart App Control → Off*, install, then turn it back on. Most PCs (upgrades from Windows 10) have SAC **off** and just work.
+>
+> 🎯 **Coming next — one-click install via the Microsoft Store.** A signed MSIX that installs with **zero warnings** (Microsoft re-signs Store packages and SAC trusts them by design). The Store developer account is now free, so this is the planned frictionless path — no unblocking needed.
 
 ### 🛠 Developer setup (works today)
 
