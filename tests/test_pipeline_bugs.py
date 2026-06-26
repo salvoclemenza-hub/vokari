@@ -49,6 +49,7 @@ def test_m1_is_up_called_once_when_ollama_already_up(tmp_path, monkeypatch):
         "transcribe_stream",
         lambda *a, **kw: (_ for _ in ()).throw(_StopEarly()),
     )
+    monkeypatch.setattr(pipeline.models_mod, "is_downloaded", lambda name: True)
     s = sm.load()
     s.brain = "ollama"
     monkeypatch.setattr(sm, "load", lambda: s)
@@ -111,6 +112,7 @@ def test_m3_run_processing_generate_briefing_failure_returns_error_job(tmp_path,
         lambda *a, **kw: Analysis(meta=Meta()),
     )
     monkeypatch.setattr(imod, "detect_questions", lambda *a, **kw: [])
+    monkeypatch.setattr(pipeline.models_mod, "is_downloaded", lambda name: True)
 
     def _fail_render(*a, **kw):
         raise RuntimeError("render fallito nel test M3")
@@ -158,6 +160,7 @@ def test_m3b_run_processing_generate_briefing_failure_does_not_reraise(tmp_path,
         lambda *a, **kw: Analysis(meta=Meta()),
     )
     monkeypatch.setattr(imod, "detect_questions", lambda *a, **kw: [])
+    monkeypatch.setattr(pipeline.models_mod, "is_downloaded", lambda name: True)
 
     def _fail_render(*a, **kw):
         raise RuntimeError("render fallito M3-b")

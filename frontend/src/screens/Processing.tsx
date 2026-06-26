@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { VkIcon } from "../icons";
 import type { JobStatus, AnalysisFit } from "../bridge";
 
@@ -7,17 +8,11 @@ const STEP_INDEX: Record<string, number> = {
   awaiting_interview: 2, ready: 2, queued: 0, error: 0, cancelled: 0,
 };
 
-// Messaggi informativi a rotazione durante l'elaborazione: una registrazione lunga
-// può richiedere minuti, questi rassicurano e spiegano cosa sta succedendo (sostituiscono
-// la vecchia frase statica "su CPU … diversi minuti").
-const ROT_MESSAGES = [
-  "L'audio non lascia mai il tuo PC — esce solo il testo trascritto.",
-  "La trascrizione gira in locale con faster-whisper, sulla tua CPU.",
-  "L'analisi estrae decisioni, domande aperte e trascrizione integrale.",
-  "Con Ollama nemmeno il testo esce dal dispositivo — tutto in locale.",
-  "Il briefing finale è ottimizzato per darlo in pasto a un altro LLM.",
-  "Una registrazione lunga può richiedere qualche minuto: è normale.",
-];
+// Chiavi i18n dei messaggi informativi a rotazione durante l'elaborazione: una registrazione
+// lunga può richiedere minuti, questi rassicurano e spiegano cosa sta succedendo (sostituiscono
+// la vecchia frase statica "su CPU … diversi minuti"). Le chiavi sono costanti (lingua-agnostiche),
+// il testo si traduce al render via t(ROT_KEYS[rotIdx]).
+const ROT_KEYS = ["proc.rot0", "proc.rot1", "proc.rot2", "proc.rot3", "proc.rot4", "proc.rot5"];
 
 export function ScreenProcessing({
   status = "transcribing", pct = 0, partialText = "", model,
@@ -31,8 +26,10 @@ export function ScreenProcessing({
   analysisPreview?: string;
   analysisFit?: AnalysisFit | null;
 }) {
+  const { t, i18n } = useTranslation();
+  const numLocale = i18n.language === "en" ? "en-US" : "it-IT";
   const active = STEP_INDEX[status] ?? 0;
-  const labels = ["Trascrizione", "Analisi AI", "Briefing"];
+  const labels = [t("proc.stepTranscribe"), t("proc.stepAnalyze"), t("proc.stepBriefing")];
   const pctInt = Math.round(Math.min(1, Math.max(0, pct)) * 100);
   // Analisi/rendering LLM non hanno una percentuale reale: barra indeterminata animata
   // invece di restare ferma al 100% (che sembra "bloccato").
@@ -46,30 +43,30 @@ export function ScreenProcessing({
   // Testo "fisso" mostrato nella console quando NON stiamo trascrivendo testo reale
   // (load modello / analisi / rendering): non va animato carattere per carattere.
   const fixedMessage =
-    status === "queued" ? "Finalizzo la registrazione… (normalizzo e preparo l'audio)"
-    : loadingModel ? "Carico il modello Whisper sul dispositivo… al primo avvio può richiedere ~20 secondi"
-    : status === "analyzing" ? "L'AI sta organizzando la trascrizione nel briefing… su modello locale può richiedere 1–2 minuti"
-    : status === "rendering" ? "Compongo il briefing…"
+    status === "queued" ? t("proc.fixedQueued")
+    : loadingModel ? t("proc.fixedLoading")
+    : status === "analyzing" ? t("proc.fixedAnalyzing")
+    : status === "rendering" ? t("proc.fixedRendering")
     : null;
 
   // Quando c'è testo trascritto reale lo riveliamo con un effetto "scrittura" (typewriter).
   const streaming = fixedMessage === null;
 
   const hint =
-    status === "queued" ? "Preparo l'audio…"
-    : loadingModel ? "Preparo la trascrizione locale…"
-    : status === "analyzing" ? "Analisi AI…"
-    : status === "rendering" ? "Genero il briefing…"
-    : "Trascrizione locale…";
+    status === "queued" ? t("proc.hintQueued")
+    : loadingModel ? t("proc.hintLoading")
+    : status === "analyzing" ? t("proc.hintAnalyzing")
+    : status === "rendering" ? t("proc.hintRendering")
+    : t("proc.hintTranscribe");
 
   // Sotto-fase descrittiva sotto il titolo (header): cosa sta succedendo, in chiaro.
   const phaseLabel =
-    status === "queued" ? "Preparo l'audio — normalizzo e converto la registrazione"
-    : loadingModel ? "Carico il modello Whisper sul tuo dispositivo…"
-    : status === "transcribing" ? "Trascrizione in corso — il modello Whisper gira sulla tua CPU"
-    : status === "analyzing" ? "Analisi AI — organizzo la trascrizione in un briefing"
-    : status === "rendering" ? "Compongo il briefing finale"
-    : "Elaborazione in corso";
+    status === "queued" ? t("proc.phaseQueued")
+    : loadingModel ? t("proc.phaseLoading")
+    : status === "transcribing" ? t("proc.phaseTranscribe")
+    : status === "analyzing" ? t("proc.phaseAnalyze")
+    : status === "rendering" ? t("proc.phaseRendering")
+    : t("proc.phaseDefault");
 
   // --- effetto "scrittura" + auto-scroll ---------------------------------
   const [displayed, setDisplayed] = useState("");
@@ -117,7 +114,7 @@ export function ScreenProcessing({
   // --- messaggi informativi a rotazione ----------------------------------
   const [rotIdx, setRotIdx] = useState(0);
   useEffect(() => {
-    const id = window.setInterval(() => setRotIdx((i) => (i + 1) % ROT_MESSAGES.length), 4500);
+    const id = window.setInterval(() => setRotIdx((i) => (i + 1) % ROT_KEYS.length), 4500);
     return () => window.clearInterval(id);
   }, []);
 
@@ -177,7 +174,7 @@ export function ScreenProcessing({
     <div className="vk-proc">
       <div className="vk-proc-card">
         <div className="vk-proc-head">
-          <div className="vk-proc-kick">Elaborazione</div>
+          <div className="vk-proc-kick">{t("proc.kicker")}</div>
           {title !== undefined ? (
             onRenameTitle ? (
               <input
@@ -186,13 +183,13 @@ export function ScreenProcessing({
                 defaultValue={title}
                 onBlur={(e) => { const v = e.currentTarget.value.trim(); if (v) onRenameTitle(v); }}
                 onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
-                placeholder="Titolo sessione…"
+                placeholder={t("proc.titlePlaceholder")}
               />
             ) : (
-              <h2 className="vk-proc-title">{title || "Elaborazione in corso"}</h2>
+              <h2 className="vk-proc-title">{title || t("proc.titleFallback")}</h2>
             )
           ) : (
-            <h2 className="vk-proc-title">Elaborazione in corso</h2>
+            <h2 className="vk-proc-title">{t("proc.titleFallback")}</h2>
           )}
           <div className="vk-proc-sub">{phaseLabel}</div>
         </div>
@@ -218,13 +215,13 @@ export function ScreenProcessing({
             <div className="vk-fit-body">
               <div className="vk-fit-title">
                 {analysisFit.level === "over_even_summarized"
-                  ? "Trascrizione oltre il contesto del modello"
-                  : "Trascrizione ampia per il modello scelto"}
+                  ? t("proc.fitTitleOver")
+                  : t("proc.fitTitleWide")}
               </div>
               <div className="vk-fit-meta">
-                ~{analysisFit.tokensEst.toLocaleString("it-IT")} token · contesto{" "}
-                {analysisFit.ctxMax.toLocaleString("it-IT")}
-                {analysisFit.nChunks > 1 && ` · riassunta in ${analysisFit.nChunks} parti`}
+                ~{analysisFit.tokensEst.toLocaleString(numLocale)}{t("proc.fitMetaMid")}
+                {analysisFit.ctxMax.toLocaleString(numLocale)}
+                {analysisFit.nChunks > 1 && t("proc.fitChunks", { n: analysisFit.nChunks })}
               </div>
               {analysisFit.recommendation && (
                 <div className="vk-fit-rec">{analysisFit.recommendation}</div>
@@ -237,21 +234,21 @@ export function ScreenProcessing({
           <div style={{ fontSize: 12, color: "var(--mut, #6b6358)", marginBottom: 8,
                         display: "flex", alignItems: "center", gap: 6 }}>
             <span className="dot" style={{ background: "var(--amber, #d8a24c)" }}></span>
-            Trascrizione da cache
+            {t("proc.fromCache")}
             {onRielabora && (
               <button onClick={onRielabora} style={{ background: "none", border: "none",
                 color: "var(--green-d)", cursor: "pointer", font: "inherit",
-                fontSize: 12, padding: 0, textDecoration: "underline" }}>· Rielabora</button>
+                fontSize: 12, padding: 0, textDecoration: "underline" }}>{t("proc.reprocess")}</button>
             )}
           </div>
         )}
         <div className="vk-proc-meta">
           <span>
             {status === "analyzing"
-              ? `Analisi AI · ${formatTime(elapsedS)}`
+              ? t("proc.metaAnalyzing", { time: formatTime(elapsedS) })
               : status === "rendering"
-              ? `Briefing · ${formatTime(elapsedS)}`
-              : `faster-whisper · ${model || "large-v3-turbo"} · ${status === "transcribing" || status === "queued" ? "in corso" : "completata"}`}
+              ? t("proc.metaRendering", { time: formatTime(elapsedS) })
+              : `faster-whisper · ${model || "large-v3-turbo"} · ${status === "transcribing" || status === "queued" ? t("proc.inProgress") : t("proc.completed")}`}
           </span>
           <span className="pct">{indeterminate ? "…" : pctInt + "%"}</span>
         </div>
@@ -263,8 +260,8 @@ export function ScreenProcessing({
           {/* Mini-header con chip-etichetta dei due flussi (orientamento, non filtri):
               "trascrizione" si accende in trascrizione, "ragionamento" in analisi. */}
           <div className="vk-con-head">
-            <span className="vk-chip trans">trascrizione</span>
-            <span className="vk-chip reason">ragionamento</span>
+            <span className="vk-chip trans">{t("proc.chipTranscription")}</span>
+            <span className="vk-chip reason">{t("proc.chipReasoning")}</span>
           </div>
           <div className="vk-proc-stream" ref={logRef}>
             <div className="vk-con-line"><span className="vk-con-prompt">vokari@local ~ %</span></div>
@@ -283,7 +280,7 @@ export function ScreenProcessing({
                 ∴ viola → "la macchina ragiona", distinto dal testo trascritto. */}
             {status === "analyzing" && displayedPreview && (
               <div className="vk-con-reason">
-                <span className="pre">∴ ragiono</span>
+                <span className="pre">{t("proc.reasoning")}</span>
                 <span className="txt">{displayedPreview}<span className="cur"></span></span>
               </div>
             )}
@@ -293,8 +290,8 @@ export function ScreenProcessing({
         <div className="vk-wait">
           <div className="vk-wait-ico" aria-hidden="true">i</div>
           <div className="vk-wait-body">
-            <div className="vk-wait-kick">Mentre aspetti</div>
-            <div className="vk-wait-msg" key={rotIdx}>{ROT_MESSAGES[rotIdx]}</div>
+            <div className="vk-wait-kick">{t("proc.waitKick")}</div>
+            <div className="vk-wait-msg" key={rotIdx}>{t(ROT_KEYS[rotIdx])}</div>
           </div>
         </div>
 
@@ -303,7 +300,7 @@ export function ScreenProcessing({
             <span className="dot"></span>
             {analyzeStep ? analyzeStep.label : hint}
           </span>
-          <button className="vk-exit" onClick={onCancel}>Annulla elaborazione</button>
+          <button className="vk-exit" onClick={onCancel}>{t("proc.cancelBtn")}</button>
         </div>
       </div>
     </div>

@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type MutableRefObject } from "react";
+import { useTranslation } from "react-i18next";
 import { bridge, onVokariEvent, DEFAULT_SETTINGS, type DiskUsage, type ModelEntry, type OllamaModelEntry, type OllamaStatus, type VokariSettings } from "../bridge";
 import { toast } from "../toast";
 import { VkIcon } from "../icons";
+import { whisperRowState } from "../modelStatus";
 
 // ────────────────────────────────────────────────────────────
 // MOD3 — ETA download dai bytesDone/bytesTotal degli eventi di progresso. Campiona la
@@ -46,14 +48,15 @@ function Meter({ label, n, kind }: { label: string; n: number; kind?: "q" }) {
 // Tag-to-icon mapping (stile Lemonade): etichetta → icona + tooltip + categoria di colore
 // (ml = multilingue/blu · json = json/reasoning/viola · tool = ambra · ctx = velocità/leggero/verde).
 // ────────────────────────────────────────────────────────────
-const TAG_META: Record<string, { icon: () => JSX.Element; title: string; cat: string }> = {
-  italiano: { icon: () => <VkIcon.globe />, title: "Ottimo in italiano", cat: "ml" },
-  multilingue: { icon: () => <VkIcon.globe />, title: "Multilingue", cat: "ml" },
-  json: { icon: () => <VkIcon.braces />, title: "JSON affidabile", cat: "json" },
-  "tool-calling": { icon: () => <VkIcon.wrench />, title: "Tool calling", cat: "tool" },
-  reasoning: { icon: () => <VkIcon.brain />, title: "Reasoning avanzato", cat: "json" },
-  veloce: { icon: () => <VkIcon.zap />, title: "Veloce su CPU", cat: "ctx" },
-  leggero: { icon: () => <VkIcon.feather />, title: "Leggero / poca RAM", cat: "ctx" },
+// I titoli sono chiavi i18n (lingua-agnostiche), tradotte al render via t(meta.titleKey).
+const TAG_META: Record<string, { icon: () => JSX.Element; titleKey: string; cat: string }> = {
+  italiano: { icon: () => <VkIcon.globe />, titleKey: "models.tagItaliano", cat: "ml" },
+  multilingue: { icon: () => <VkIcon.globe />, titleKey: "models.tagMultilingue", cat: "ml" },
+  json: { icon: () => <VkIcon.braces />, titleKey: "models.tagJson", cat: "json" },
+  "tool-calling": { icon: () => <VkIcon.wrench />, titleKey: "models.tagTool", cat: "tool" },
+  reasoning: { icon: () => <VkIcon.brain />, titleKey: "models.tagReasoning", cat: "json" },
+  veloce: { icon: () => <VkIcon.zap />, titleKey: "models.tagVeloce", cat: "ctx" },
+  leggero: { icon: () => <VkIcon.feather />, titleKey: "models.tagLeggero", cat: "ctx" },
 };
 
 /** Estrae i GB (approssimati) dalla sizeLabel ("4.7 GB", "466 MB") per l'ordinamento. */
@@ -71,6 +74,7 @@ function sizeGb(s: string): number {
 // gli elementi per valutare quale modello usare e per quale scopo.
 // ────────────────────────────────────────────────────────────
 function LocalModelMeta({ m, ramTotalGb }: { m: OllamaModelEntry; ramTotalGb: number }) {
+  const { t } = useTranslation();
   // MOD2: avviso solo se conosciamo davvero RAM totale e requisito (margine 90%).
   const ramHeavy = ramTotalGb > 0 && m.minRamGb > 0 && m.minRamGb > ramTotalGb * 0.9;
   return (
@@ -78,30 +82,30 @@ function LocalModelMeta({ m, ramTotalGb }: { m: OllamaModelEntry; ramTotalGb: nu
       <span className="badges" style={{ flexWrap: "wrap", rowGap: 6 }}>
         <span className="vk-badge">{m.sizeLabel}</span>
         {ramHeavy && (
-          <span className="vk-ramwarn" title={`Richiede ~${m.minRamGb} GB di RAM · ne hai ${ramTotalGb} GB`}>
-            pesante per la tua RAM ({ramTotalGb} GB)
+          <span className="vk-ramwarn" title={t("models.ramWarnTitle", { min: m.minRamGb, total: ramTotalGb })}>
+            {t("models.ramHeavy", { total: ramTotalGb })}
           </span>
         )}
         {m.params && <span className="vk-badge">{m.params}</span>}
         {/* meter solo se abbiamo metadati reali: i modelli fuori catalogo hanno speed/quality 0 */}
         {(m.speed > 0 || m.quality > 0) && (
           <>
-            <Meter label="velocità" n={m.speed} />
-            <Meter label="qualità" n={m.quality} kind="q" />
+            <Meter label={t("models.speed")} n={m.speed} />
+            <Meter label={t("models.quality")} n={m.quality} kind="q" />
           </>
         )}
-        {m.context && <span className="vk-badge">contesto {m.context}</span>}
+        {m.context && <span className="vk-badge">{t("models.contextBadge", { ctx: m.context })}</span>}
         {m.tags.length > 0 && (
           <span className="vk-tagico">
-            {m.tags.map((t) => {
-              const meta = TAG_META[t];
+            {m.tags.map((tag) => {
+              const meta = TAG_META[tag];
               return meta ? (
-                <span key={t} className={"ti " + meta.cat} title={meta.title} role="img" aria-label={meta.title}>
+                <span key={tag} className={"ti " + meta.cat} title={t(meta.titleKey)} role="img" aria-label={t(meta.titleKey)}>
                   <meta.icon />
                 </span>
               ) : (
-                <span className="vk-badge" key={t}>
-                  {t}
+                <span className="vk-badge" key={tag}>
+                  {tag}
                 </span>
               );
             })}
@@ -129,13 +133,14 @@ function LocalModelMeta({ m, ramTotalGb }: { m: OllamaModelEntry; ramTotalGb: nu
           }
         }}
       >
-        ⓘ dettagli del modello
+        {t("models.modelDetails")}
       </span>
     </>
   );
 }
 
 export function ScreenModels() {
+  const { t } = useTranslation();
   const [models, setModels] = useState<ModelEntry[]>([]);
   const [settings, setSettings] = useState<VokariSettings>(DEFAULT_SETTINGS);
   const [downloading, setDownloading] = useState<string | null>(null);
@@ -179,7 +184,7 @@ export function ScreenModels() {
       await bridge.ollamaInstall();
     } catch (e) {
       setOllamaSetup(null);
-      toast(`Installazione Ollama non riuscita: ${String(e)}`, "error");
+      toast(t("models.ollamaInstallFail", { error: String(e) }), "error");
     }
   }
 
@@ -189,15 +194,15 @@ export function ScreenModels() {
       const res = await bridge.ollamaStart();
       setOllamaSetup(null);
       if (res.running) {
-        toast("Ollama avviato ✓", "success");
+        toast(t("models.ollamaStarted"), "success");
         bridge.ollamaStatus().then(setOllamaState);
         bridge.listOllamaModels().then(setOllamaModels);
       } else {
-        toast("Ollama non si è avviato. Controlla l'installazione.", "error");
+        toast(t("models.ollamaStartFailCheck"), "error");
       }
     } catch (e) {
       setOllamaSetup(null);
-      toast(`Avvio Ollama non riuscito: ${String(e)}`, "error");
+      toast(t("models.ollamaStartFail", { error: String(e) }), "error");
     }
   }
 
@@ -218,7 +223,7 @@ export function ScreenModels() {
         setProgress(null);
         setWhisperEta(null);
         whisperEtaRef.current = null;
-        toast(`Modello ${payload.name as string} scaricato ✓`, "success");
+        toast(t("models.modelDownloaded", { name: payload.name as string }), "success");
         bridge.listModels().then(setModels);
         bridge.diskUsage().then(setDisk);
       } else if (payload.status === "error") {
@@ -226,11 +231,12 @@ export function ScreenModels() {
         setProgress(null);
         setWhisperEta(null);
         whisperEtaRef.current = null;
-        toast(`Download di ${payload.name as string} non riuscito: ${(payload.error as string) ?? "errore sconosciuto"}`, "error");
+        toast(t("models.modelDownloadFail", { name: payload.name as string, error: (payload.error as string) ?? t("models.unknownError") }), "error");
         bridge.listModels().then(setModels);
       }
     });
     return off;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // eventi ollama_pull
@@ -248,7 +254,7 @@ export function ScreenModels() {
       } else if (payload.status === "done") {
         setOllamaEta(null);
         ollamaEtaRef.current = null;
-        toast(`Modello Ollama ${payload.name as string} scaricato ✓`, "success");
+        toast(t("models.ollamaModelDownloaded", { name: payload.name as string }), "success");
         bridge.listOllamaModels().then((models) => {
           setOllamaModels(models);
           setOllamaPulling(null);
@@ -260,16 +266,17 @@ export function ScreenModels() {
         setOllamaPullProgress(null);
         setOllamaEta(null);
         ollamaEtaRef.current = null;
-        toast(`Download di ${payload.name as string} annullato`, "info");
+        toast(t("models.downloadCancelled", { name: payload.name as string }), "info");
       } else if (payload.status === "error") {
         setOllamaPulling(null);
         setOllamaPullProgress(null);
         setOllamaEta(null);
         ollamaEtaRef.current = null;
-        toast(`Pull di ${payload.name as string} non riuscito: ${(payload.error as string) ?? "errore sconosciuto"}`, "error");
+        toast(t("models.pullFail", { name: payload.name as string, error: (payload.error as string) ?? t("models.unknownError") }), "error");
       }
     });
     return off;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // eventi ollama_setup (installazione/avvio di Ollama gestiti da VOKARI).
@@ -281,18 +288,19 @@ export function ScreenModels() {
       const pct = typeof payload.pct === "number" ? payload.pct : 0;
       if (status === "done") {
         setOllamaSetup(null);
-        toast("Ollama pronto ✓", "success");
+        toast(t("models.ollamaReady"), "success");
         bridge.ollamaStatus().then(setOllamaState);
         bridge.listOllamaModels().then(setOllamaModels);
       } else if (status === "error") {
         setOllamaSetup(null);
-        toast(`Ollama: ${(payload.error as string) ?? "avvio non riuscito"}`, "error");
+        toast(t("models.ollamaSetupError", { error: (payload.error as string) ?? t("models.startFailShort") }), "error");
         bridge.ollamaStatus().then(setOllamaState);
       } else {
         setOllamaSetup({ status, pct });
       }
     });
     return off;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function handleDownload(name: string) {
@@ -300,7 +308,7 @@ export function ScreenModels() {
       await bridge.downloadModel(name);
       bridge.listModels().then(setModels);
     } catch (e) {
-      toast(`Avvio download non riuscito: ${String(e)}`, "error");
+      toast(t("models.downloadStartFail", { error: String(e) }), "error");
     }
   }
 
@@ -310,7 +318,7 @@ export function ScreenModels() {
       setSettings(updated);
       bridge.listModels().then(setModels);
     } catch (e) {
-      toast(`Attivazione modello non riuscita: ${String(e)}`, "error");
+      toast(t("models.activateFail", { error: String(e) }), "error");
     }
   }
 
@@ -319,7 +327,7 @@ export function ScreenModels() {
       const updated = await bridge.setBrain(brain);
       setSettings(updated);
     } catch (e) {
-      toast(`Cambio cervello AI non riuscito: ${String(e)}`, "error");
+      toast(t("models.brainChangeFail", { error: String(e) }), "error");
     }
   }
 
@@ -327,7 +335,7 @@ export function ScreenModels() {
     try {
       await bridge.pullOllamaModel(name);
     } catch (e) {
-      toast(`Avvio pull non riuscito: ${String(e)}`, "error");
+      toast(t("models.pullStartFail", { error: String(e) }), "error");
     }
   }
 
@@ -337,7 +345,7 @@ export function ScreenModels() {
     try {
       await bridge.cancelOllamaPull(name);
     } catch (e) {
-      toast(`Annullamento non riuscito: ${String(e)}`, "error");
+      toast(t("models.cancelFail", { error: String(e) }), "error");
     }
   }
 
@@ -347,7 +355,7 @@ export function ScreenModels() {
       setSettings(updated);
       bridge.listOllamaModels().then(setOllamaModels);
     } catch (e) {
-      toast(`Attivazione non riuscita: ${String(e)}`, "error");
+      toast(t("models.ollamaActivateFail", { error: String(e) }), "error");
     }
   }
 
@@ -355,14 +363,14 @@ export function ScreenModels() {
     try {
       const res = await bridge.deleteOllamaModel(name);
       if (res.ok) {
-        toast(`Modello ${name} rimosso ✓`, "success");
+        toast(t("models.modelRemoved", { name }), "success");
         bridge.listOllamaModels().then(setOllamaModels);
         bridge.diskUsage().then(setDisk);
       } else {
-        toast(`Rimozione di ${name} non riuscita`, "error");
+        toast(t("models.removeFailName", { name }), "error");
       }
     } catch (e) {
-      toast(`Rimozione non riuscita: ${String(e)}`, "error");
+      toast(t("models.removeFail", { error: String(e) }), "error");
     }
   }
 
@@ -392,11 +400,10 @@ export function ScreenModels() {
     <>
       <div className="vk-greet">
         <div>
-          <div className="vk-kick">~/modelli</div>
-          <h1>Modelli AI</h1>
+          <div className="vk-kick">{t("models.kick")}</div>
+          <h1>{t("models.heading")}</h1>
           <p>
-            Organizzazione con <b>Claude</b> o un modello <b>locale</b> · trascrizione locale con{" "}
-            <b>Whisper</b>.
+            {t("models.introA")}<b>Claude</b>{t("models.introB")}<b>{t("models.introLocal")}</b>{t("models.introC")}<b>Whisper</b>{t("models.introD")}
           </p>
         </div>
       </div>
@@ -404,12 +411,12 @@ export function ScreenModels() {
       {downloadedCount > 0 && (
         <div className="vk-disk">
           <span className="d"></span>
-          <b>{downloadedCount}</b> {downloadedCount === 1 ? "modello scaricato" : "modelli scaricati"}
+          <b>{downloadedCount}</b> {downloadedCount === 1 ? t("models.modelDownloadedSing") : t("models.modelsDownloadedPlur")}
           {/* MOD3: GB usati dai modelli / liberi (se il dato è disponibile). */}
           {disk && (disk.usedByModelsGb > 0 || disk.freeGb > 0) ? (
-            <span className="vk-disk-x"> · <b>{disk.usedByModelsGb} GB</b> usati · <b>{disk.freeGb} GB</b> liberi</span>
+            <span className="vk-disk-x"> · <b>{disk.usedByModelsGb} GB</b> {t("models.diskUsed")} · <b>{disk.freeGb} GB</b> {t("models.diskFree")}</span>
           ) : (
-            <> sul dispositivo</>
+            <>{t("models.onDeviceSuffix")}</>
           )}
         </div>
       )}
@@ -422,10 +429,10 @@ export function ScreenModels() {
             <span className="ico">
               <VkIcon.brain />
             </span>
-            Organizzazione
+            {t("models.orgTitle")}
           </div>
           <div className="vk-sc-sub">
-            Chi trasforma la trascrizione in briefing. Solo il testo viene inviato.
+            {t("models.orgSub")}
           </div>
 
           <div
@@ -438,14 +445,13 @@ export function ScreenModels() {
                 <VkIcon.brain />
               </span>
               <div>
-                <div className="bt">Claude API</div>
-                <div className="bs">Qualità migliore · richiede chiave</div>
+                <div className="bt">{t("models.claudeApi")}</div>
+                <div className="bs">{t("models.claudeSub")}</div>
               </div>
               <span className="rd"></span>
             </div>
             <div className="bd">
-              Modello <span className="mono">{settings.claudeModel}</span> · veloce e accurato sui
-              briefing.
+              {t("models.claudeBdPre")}<span className="mono">{settings.claudeModel}</span>{t("models.claudeBdPost")}
             </div>
           </div>
 
@@ -459,13 +465,13 @@ export function ScreenModels() {
                 <VkIcon.cpu />
               </span>
               <div>
-                <div className="bt">Locale (Ollama)</div>
-                <div className="bs">Offline · nessuna chiave</div>
+                <div className="bt">{t("models.localOllama")}</div>
+                <div className="bs">{t("models.localSub")}</div>
               </div>
               <span className="rd"></span>
             </div>
             <div className="bd">
-              Endpoint <span className="mono">{settings.ollamaEndpoint}</span> ·{" "}
+              {t("models.endpointPre")}<span className="mono">{settings.ollamaEndpoint}</span> ·{" "}
               <span className="mono">{settings.ollamaModel}</span>
             </div>
           </div>
@@ -477,34 +483,37 @@ export function ScreenModels() {
             <span className="ico">
               <VkIcon.cpu />
             </span>
-            Trascrizione · Whisper (locale)
+            {t("models.whisperTitle")}
           </div>
           <div className="vk-sc-sub">
-            Gira al 100% sul tuo dispositivo. Scarica i modelli on-demand; il default bilancia
-            velocità e qualità.
+            {t("models.whisperSub")}
           </div>
 
           {models.map((m) => {
-            const isActive = m.name === settings.whisperModel;
+            const isSelected = m.name === settings.whisperModel;
+            const rowState = whisperRowState(m.state, isSelected);
+            const isActive = rowState === "active";
+            const needsGet = rowState === "available" || rowState === "selected-undownloaded";
             const isDownloading = downloading === m.name;
             return (
               <div
                 className={"vk-mrow" + (isActive ? " on" : "")}
                 key={m.name}
                 onClick={() => {
-                  if (m.state !== "available" && !isActive) void handleActivate(m.name);
+                  // cliccare una riga già scaricata (ma non attiva) la rende il modello attivo
+                  if (rowState === "downloaded") void handleActivate(m.name);
                 }}
-                style={{ cursor: m.state !== "available" && !isActive ? "pointer" : "default" }}
+                style={{ cursor: rowState === "downloaded" ? "pointer" : "default" }}
               >
                 <span className="nm">
                   <span className="t">
                     {m.name}
-                    {isActive && <span className="df">DEFAULT</span>}
+                    {isSelected && <span className="df">DEFAULT</span>}
                   </span>
                   <span className="badges">
                     <span className="vk-badge">{m.sizeLabel}</span>
-                    <Meter label="velocità" n={m.speed} />
-                    <Meter label="qualità" n={m.quality} kind="q" />
+                    <Meter label={t("models.speed")} n={m.speed} />
+                    <Meter label={t("models.quality")} n={m.quality} kind="q" />
                     <span className="vk-badge">{m.languages}</span>
                   </span>
                   {m.description && (
@@ -516,21 +525,27 @@ export function ScreenModels() {
                 <span className="act">
                   {isActive && (
                     <span className="active">
-                      <span className="d"></span>Attivo
+                      <span className="d"></span>{t("models.active")}
                     </span>
                   )}
-                  {!isActive && m.state === "downloaded" && (
+                  {rowState === "downloaded" && (
                     <span className="saved">
                       <VkIcon.check />
-                      Scaricato
+                      {t("models.downloaded")}
                     </span>
                   )}
-                  {m.state === "available" && (
+                  {needsGet && (
                     <span className="vk-getwrap">
+                      {/* B1: il modello selezionato come default ma non ancora scaricato non è "Attivo" */}
+                      {rowState === "selected-undownloaded" && !isDownloading && (
+                        <span style={{ fontSize: 11, color: "var(--mut, #6b6358)", marginRight: 8, whiteSpace: "nowrap" }}>
+                          {t("models.selectedToDownload")}
+                        </span>
+                      )}
                       <button
                         className="get"
                         disabled={isDownloading}
-                        title={isDownloading ? `${m.sizeLabel} · può richiedere alcuni minuti` : undefined}
+                        title={isDownloading ? t("models.dlTitle", { size: m.sizeLabel }) : undefined}
                         onClick={(e) => {
                           e.stopPropagation();
                           void handleDownload(m.name);
@@ -539,15 +554,21 @@ export function ScreenModels() {
                         <VkIcon.down />
                         {isDownloading
                           ? progress !== null
-                            ? `Scaricando ${Math.round(progress * 100)}%`
-                            : "Scaricando…"
-                          : "Download"}
+                            ? t("models.downloadingPct", { pct: Math.round(progress * 100) })
+                            : t("models.downloadingShort")
+                          : t("models.download")}
                       </button>
                       {isDownloading && progress !== null && (
                         <span className="vk-dlbar"><i style={{ width: Math.round(progress * 100) + "%" }}></i></span>
                       )}
                       {isDownloading && whisperEta !== null && (
-                        <span className="vk-eta">{formatEta(whisperEta)} rimanenti</span>
+                        <span className="vk-eta">{formatEta(whisperEta)} {t("models.remaining")}</span>
+                      )}
+                      {/* B3: il modello è grande — chiarisci che è lento ma una sola volta */}
+                      {isDownloading && (
+                        <span style={{ fontSize: 11, color: "var(--mut, #6b6358)", marginTop: 4, display: "block", lineHeight: 1.3 }}>
+                          {t("models.bigFileNote")}
+                        </span>
                       )}
                     </span>
                   )}
@@ -559,8 +580,7 @@ export function ScreenModels() {
           <div className="vk-note">
             <span className="ni">!</span>
             <span>
-              I modelli <b>distil-*</b> sono solo inglese e quindi esclusi: Vokari è{" "}
-              <b>multilingue</b> (IT + EN e oltre).
+              {t("models.noteA")}<b>distil-*</b>{t("models.noteB")}<b>{t("models.noteBold")}</b>{t("models.noteC")}
             </span>
           </div>
         </div>
@@ -571,12 +591,10 @@ export function ScreenModels() {
             <span className="ico">
               <VkIcon.cpu />
             </span>
-            Modelli locali · Ollama
+            {t("models.ollamaTitle")}
           </div>
           <div className="vk-sc-sub">
-            Per l'organizzazione offline. <b>Velocità</b> e <b>qualità</b> sono indicative su CPU;
-            usale (con dimensione, parametri e contesto) per scegliere il modello giusto. Sfoglia
-            l'intero catalogo su{" "}
+            {t("models.ollamaSubA")}<b>{t("models.ollamaSubSpeed")}</b>{t("models.ollamaSubMid")}<b>{t("models.ollamaSubQuality")}</b>{t("models.ollamaSubB")}
             <span
               className="mono"
               style={{ cursor: "pointer", textDecoration: "underline" }}
@@ -584,7 +602,7 @@ export function ScreenModels() {
             >
               ollama.com/library
             </span>
-            .
+            {t("models.ollamaSubC")}
           </div>
 
           {/* Stato runtime Ollama come chip `.vk-runtime` (mock): VOKARI lo avvia/installa da sé. */}
@@ -593,51 +611,50 @@ export function ScreenModels() {
               <span className="dot spin"></span>
               <span className="tx">
                 {ollamaSetup.status === "downloading"
-                  ? `Scaricamento di Ollama in corso… ${Math.round(ollamaSetup.pct * 100)}% (file grande, una sola volta)`
-                  : "Avvio di Ollama in corso…"}
+                  ? t("models.ollamaDownloading", { pct: Math.round(ollamaSetup.pct * 100) })
+                  : t("models.ollamaStarting")}
               </span>
             </div>
           ) : ollamaState && ollamaState.running ? (
             <div className="vk-runtime">
               <span className="dot"></span>
               <span className="tx">
-                <b>Ollama in esecuzione</b> — VOKARI lo avvia da solo a ogni apertura.
+                <b>{t("models.ollamaRunningBold")}</b>{t("models.ollamaRunningRest")}
               </span>
             </div>
           ) : ollamaState && ollamaState.installed ? (
             <div className="vk-runtime">
               <span className="dot warn"></span>
               <span className="tx">
-                <b>Ollama installato</b> ma non in esecuzione.
+                <b>{t("models.ollamaInstalledBold")}</b>{t("models.ollamaInstalledRest")}
               </span>
               <button className="vk-mini" onClick={() => void handleOllamaStartServer()}>
-                Avvia Ollama
+                {t("models.startOllama")}
               </button>
             </div>
           ) : ollamaState && ollamaState.canInstall ? (
             <div className="vk-runtime">
               <span className="dot off"></span>
               <span className="tx">
-                Ollama non è installato. VOKARI può <b>scaricarlo e configurarlo da sé</b> — nessun
-                amministratore, tutto nella cartella dati dell'app.
+                {t("models.ollamaNotInstA")}<b>{t("models.ollamaCanInstBold")}</b>{t("models.ollamaCanInstRest")}
               </span>
               <button className="vk-mini" onClick={() => void handleOllamaInstall()}>
-                Installa Ollama
+                {t("models.installOllama")}
               </button>
             </div>
           ) : ollamaState && !ollamaState.installed ? (
             <div className="vk-runtime">
               <span className="dot off"></span>
               <span className="tx">
-                Ollama non è installato. Scaricalo da{" "}
+                {t("models.ollamaManualA")}
                 <span
                   className="mono"
                   style={{ cursor: "pointer", textDecoration: "underline" }}
                   onClick={() => void bridge.openUrl("https://ollama.com/download")}
                 >
                   ollama.com/download
-                </span>{" "}
-                e riavvia VOKARI.
+                </span>
+                {t("models.ollamaManualB")}<span className="mono">winget install Ollama.Ollama</span>{t("models.ollamaManualC")}
               </span>
             </div>
           ) : null}
@@ -646,16 +663,16 @@ export function ScreenModels() {
           {ollamaModels.length > 0 && (
             <div className="vk-otoolbar">
               <div className="vk-ofilters">
-                <button className={oFilter === "all" ? "on" : ""} onClick={() => setOFilter("all")}>Tutti</button>
-                <button className={oFilter === "down" ? "on" : ""} onClick={() => setOFilter("down")}>Scaricati</button>
+                <button className={oFilter === "all" ? "on" : ""} onClick={() => setOFilter("all")}>{t("models.filterAll")}</button>
+                <button className={oFilter === "down" ? "on" : ""} onClick={() => setOFilter("down")}>{t("models.filterDownloaded")}</button>
                 {/* MOD2: "Compatibili" solo se conosciamo la RAM (altrimenti non avrebbe un criterio reale). */}
                 {ramTotalGb > 0 && (
-                  <button className={oFilter === "fit" ? "on" : ""} onClick={() => setOFilter("fit")}>Compatibili</button>
+                  <button className={oFilter === "fit" ? "on" : ""} onClick={() => setOFilter("fit")}>{t("models.filterFit")}</button>
                 )}
               </div>
               <select className="vk-osort" value={oSort} onChange={(e) => setOSort(e.target.value as "size" | "qual")}>
-                <option value="size">Ordina: dimensione</option>
-                <option value="qual">Ordina: qualità</option>
+                <option value="size">{t("models.sortSize")}</option>
+                <option value="qual">{t("models.sortQuality")}</option>
               </select>
             </div>
           )}
@@ -669,7 +686,7 @@ export function ScreenModels() {
                 <span className="nm">
                   <span className="t">
                     {m.name}
-                    {isActive && <span className="df">ATTIVO</span>}
+                    {isActive && <span className="df">{t("models.activeBadge")}</span>}
                   </span>
                   <LocalModelMeta m={m} ramTotalGb={ramTotalGb} />
                 </span>
@@ -678,19 +695,19 @@ export function ScreenModels() {
                     <>
                       {isActive ? (
                         <span className="active">
-                          <span className="d"></span>Attivo
+                          <span className="d"></span>{t("models.active")}
                         </span>
                       ) : (
                         <button className="get" onClick={() => void handleOllamaActivate(m.name)}>
-                          Attiva
+                          {t("models.activate")}
                         </button>
                       )}
                       <button
                         className="get ghost"
                         onClick={() => void handleOllamaDelete(m.name)}
-                        title="Rimuovi modello dal disco"
+                        title={t("models.removeTitle")}
                       >
-                        Rimuovi
+                        {t("models.remove")}
                       </button>
                     </>
                   ) : (
@@ -699,22 +716,22 @@ export function ScreenModels() {
                         <button
                           className="get"
                           disabled={isPulling || ollamaPulling !== null}
-                          title={isPulling ? `${m.sizeLabel} · può richiedere alcuni minuti` : undefined}
+                          title={isPulling ? t("models.dlTitle", { size: m.sizeLabel }) : undefined}
                           onClick={() => void handleOllamaPull(m.name)}
                         >
                           <VkIcon.down />
                           {isPulling
                             ? ollamaPullProgress !== null
-                              ? `Scaricando ${Math.round(ollamaPullProgress * 100)}%`
-                              : "Scaricando…"
-                            : "Download"}
+                              ? t("models.downloadingPct", { pct: Math.round(ollamaPullProgress * 100) })
+                              : t("models.downloadingShort")
+                            : t("models.download")}
                         </button>
                         {/* MOD1: ✕ Annulla — solo durante il pull di QUESTO modello. */}
                         {isPulling && (
                           <button
                             className="vk-dlcancel"
-                            title="Annulla download"
-                            aria-label="Annulla download"
+                            title={t("models.cancelDownload")}
+                            aria-label={t("models.cancelDownload")}
                             onClick={() => void handleCancelOllamaPull(m.name)}
                           >
                             <VkIcon.x />
@@ -725,7 +742,7 @@ export function ScreenModels() {
                         <span className="vk-dlbar"><i style={{ width: Math.round(ollamaPullProgress * 100) + "%" }}></i></span>
                       )}
                       {isPulling && ollamaEta !== null && (
-                        <span className="vk-eta">{formatEta(ollamaEta)} rimanenti</span>
+                        <span className="vk-eta">{formatEta(ollamaEta)} {t("models.remaining")}</span>
                       )}
                     </span>
                   )}
@@ -736,14 +753,14 @@ export function ScreenModels() {
 
           {/* Input modello personalizzato */}
           <div className="vk-field" style={{ marginTop: 12 }}>
-            <label>Altro modello Ollama</label>
+            <label>{t("models.customLabel")}</label>
             <div className="vk-path">
               <input
                 ref={customRef}
                 className="vk-input"
                 type="text"
                 value={customModel}
-                placeholder="es. phi4:14b"
+                placeholder={t("models.customPlaceholder")}
                 onChange={(e) => setCustomModel(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") void handleCustomPull();
@@ -754,19 +771,19 @@ export function ScreenModels() {
                 disabled={!customModel.trim() || ollamaPulling !== null}
                 onClick={() => void handleCustomPull()}
               >
-                {ollamaPulling && ollamaPulling === customModel.trim() ? "Scaricando…" : "Scarica"}
+                {ollamaPulling && ollamaPulling === customModel.trim() ? t("models.downloadingShort") : t("models.downloadBtn")}
               </button>
             </div>
             <div className="vk-hlp">
-              Qualsiasi nome da{" "}
+              {t("models.customHelpA")}
               <span
                 className="mono"
                 style={{ cursor: "pointer", textDecoration: "underline" }}
                 onClick={() => void bridge.openUrl("https://ollama.com/library")}
               >
                 ollama.com/library
-              </span>{" "}
-              compatibile con la tua RAM.
+              </span>
+              {t("models.customHelpB")}
             </div>
           </div>
         </div>

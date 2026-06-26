@@ -60,8 +60,13 @@ def is_running(endpoint: str) -> bool:
 
 
 def can_auto_install() -> bool:
-    """True dove sappiamo scaricare uno ZIP portabile (oggi: Windows x64)."""
-    return sys.platform.startswith("win")
+    """True dove possiamo scaricare lo ZIP portabile di Ollama: Windows x64 E **non** in un
+    pacchetto MSIX (build Store). Le policy Store vietano di scaricare+eseguire un binario di
+    terze parti dall'app → in MSIX l'utente installa Ollama da sé (la UI lo guida); avviare un
+    Ollama già installato resta consentito. Vedi runtime_env.is_packaged e ADR-046."""
+    from app import runtime_env
+
+    return sys.platform.startswith("win") and not runtime_env.is_packaged()
 
 
 def add_bundled_to_path(data_dir: Path) -> None:
@@ -122,6 +127,14 @@ def download(data_dir: Path, on_progress=None) -> None:
     on_progress(pct 0..1) opzionale. Solleva RuntimeError dove l'auto-installazione non è
     supportata (il chiamante mostra il link al download manuale)."""
     if not can_auto_install():
+        from app import runtime_env
+
+        if runtime_env.is_packaged():
+            raise RuntimeError(
+                "Nella versione Microsoft Store, Ollama va installato manualmente: scaricalo da "
+                "https://ollama.com/download (o `winget install Ollama.Ollama`) e riavvia VOKARI — "
+                "poi VOKARI lo userà in locale."
+            )
         raise RuntimeError(
             "Installazione automatica di Ollama disponibile solo su Windows. "
             "Su questa piattaforma installalo da https://ollama.com/download e riavvia VOKARI."

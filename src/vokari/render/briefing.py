@@ -1,21 +1,19 @@
-"""Renderer JSON Analysis -> briefing.md (spec §8.1). Consumatore = LLM (tag XML ok)."""
+"""Renderer JSON Analysis -> briefing.md (spec §8.1). Consumatore = LLM (tag XML ok).
+
+`app_lang` (it|en) localizza intestazioni/istruzioni dell'artefatto. È SEPARATO da `language`
+(lingua dell'audio, va solo nel frontmatter). Default "it" → output verbatim alle versioni
+storiche (anti-regressione)."""
 
 import json
 
+from vokari import i18n
+from vokari import markers as markers_mod
 from vokari.analyze.schema import Analysis
 
-_INSTRUCTIONS: dict[str, str] = {
-    "meeting": (
-        "Briefing di una riunione aziendale. Parti dalle decisioni prese e dalle open_questions; "
-        "usa context e next_steps per coordinare i follow-up. "
-        "Dominio: magazzino alimentare B2B (tracciabilità lotti, HACCP, DDT, VMM, lavorazioni MAC)."
-    ),
-    "solo": (
-        "Briefing di un brainstorm individuale. Parti dalle key_ideas e dalle open_questions; "
-        "usa next_steps come lista d'azione personale. "
-        "Dominio: magazzino alimentare B2B (tracciabilità lotti, HACCP, DDT, VMM, lavorazioni MAC)."
-    ),
-}
+
+def _instruction(meta_type: str, app_lang: str) -> str:
+    key = "briefing.instr_meeting" if meta_type == "meeting" else "briefing.instr_solo"
+    return i18n.t(key, app_lang)
 
 
 def _yaml_list(items: list[str]) -> str:
@@ -59,9 +57,10 @@ def _frontmatter(
     return "\n".join(lines)
 
 
-def _open_questions_block(a: Analysis) -> str:
-    lines = [f"{i + 1}. {q}" for i, q in enumerate(a.open_questions)] or ["(nessuna)"]
-    return "<open_questions>\n## Domande aperte\n" + "\n".join(lines) + "\n</open_questions>"
+def _open_questions_block(a: Analysis, app_lang: str) -> str:
+    lines = [f"{i + 1}. {q}" for i, q in enumerate(a.open_questions)] or [i18n.t("briefing.none", app_lang)]
+    h = i18n.t("briefing.open_questions_h", app_lang)
+    return f"<open_questions>\n## {h}\n" + "\n".join(lines) + "\n</open_questions>"
 
 
 def render_briefing(
@@ -75,41 +74,52 @@ def render_briefing(
     da_chiarire: list[str] | None = None,
     language: str = "",
     word_count: int = 0,
+    markers: list[dict] | None = None,
+    app_lang: str = "it",
 ) -> str:
     a = analysis
+    na = i18n.t("common.na", app_lang)
+    why = i18n.t("common.why_inline", app_lang)
+    by = i18n.t("common.by_inline", app_lang)
     out: list[str] = [
         _frontmatter(a, source, transcription_model, llm_model, session_id, language=language, word_count=word_count),
         "",
     ]
 
-    instruction = _INSTRUCTIONS.get(a.meta.type, _INSTRUCTIONS["solo"])
+    instruction = _instruction(a.meta.type, app_lang)
     out.append(f"<session_instruction>\n{instruction}\n</session_instruction>\n")
 
     # purpose (comprensione-prima): lo SCOPO in cima, così il consumatore LLM lo vede subito.
     # Omesso se vuoto (analisi pre-purpose) per non mostrare un blocco vuoto.
     if a.purpose:
-        out.append(f"<purpose>\n## Scopo della sessione\n{a.purpose}\n</purpose>\n")
+        out.append(f"<purpose>\n## {i18n.t('briefing.purpose_h', app_lang)}\n{a.purpose}\n</purpose>\n")
 
-    out.append("<context>\n## Contesto\n" + (a.context or "(non disponibile)") + "\n</context>\n")
+    out.append(f"<context>\n## {i18n.t('briefing.context_h', app_lang)}\n" + (a.context or na) + "\n</context>\n")
 
     dec_lines = [
         ("- **" + d.title + "** — " if d.title else "- ")
         + d.decision
-        + (f" _(perché: {d.rationale})_" if d.rationale else "")
+        + (f" _({why}: {d.rationale})_" if d.rationale else "")
         for d in a.decisions
-    ] or ["(nessuna decisione registrata)"]
-    out.append("<decisions>\n## Decisioni prese\n" + "\n".join(dec_lines) + "\n</decisions>\n")
+    ] or [i18n.t("briefing.decisions_empty", app_lang)]
+    out.append(
+        f"<decisions>\n## {i18n.t('briefing.decisions_h', app_lang)}\n" + "\n".join(dec_lines) + "\n</decisions>\n"
+    )
 
-    summary = ["## Sintesi"]
-    summary += [f"- {i}" for i in a.key_ideas] or ["- (nessuna idea chiave)"]
+    summary = [f"## {i18n.t('briefing.summary_h', app_lang)}"]
+    summary += [f"- {i}" for i in a.key_ideas] or [f"- {i18n.t('briefing.no_key_ideas', app_lang)}"]
     if a.entities:
-        summary.append("\n**Entità citate:** " + ", ".join(f"{e.name} ({e.type})" for e in a.entities))
+        label = i18n.t("briefing.entities_label", app_lang)
+        summary.append(
+            f"\n**{label}** " + ", ".join(f"{e.name} ({i18n.entity_type_label(e.type, app_lang)})" for e in a.entities)
+        )
     out.append("<session_summary>\n" + "\n".join(summary) + "\n</session_summary>\n")
 
-    out.append(_open_questions_block(a) + "\n")
+    out.append(_open_questions_block(a, app_lang) + "\n")
 
+    dc_label = i18n.t("briefing.to_clarify", app_lang)
     for marker in da_chiarire or []:
-        out.append(f"> [DA CHIARIRE: {marker}]")
+        out.append(f"> [{dc_label}: {marker}]")
     if da_chiarire:
         out.append("")
 
@@ -118,13 +128,22 @@ def render_briefing(
         if not s.task.strip():
             continue
         owner = f" — {s.owner}" if s.owner else ""
-        deadline = f" (entro {s.deadline})" if s.deadline else ""
+        deadline = f" ({by} {s.deadline})" if s.deadline else ""
         steps.append(f"- [ ] {s.task}{owner}{deadline}")
-    out.append("## Prossimi passi\n" + ("\n".join(steps) or "- [ ] (nessun prossimo passo)") + "\n")
+    placeholder = f"- [ ] {i18n.t('briefing.no_next_steps', app_lang)}"
+    out.append(f"## {i18n.t('briefing.next_steps_h', app_lang)}\n" + ("\n".join(steps) or placeholder) + "\n")
+
+    mk_lines = markers_mod.marker_lines(markers)
+    if mk_lines:
+        out.append(
+            f"<user_markers>\n## {i18n.t('briefing.markers_h', app_lang)}\n"
+            + "\n".join(mk_lines)
+            + "\n</user_markers>\n"
+        )
 
     out.append(
-        "<raw_transcript>\n## Trascrizione integrale (ground truth)\n"
-        + (transcript or "(non disponibile)")
+        f"<raw_transcript>\n## {i18n.t('briefing.transcript_h', app_lang)}\n"
+        + (transcript or na)
         + "\n</raw_transcript>"
     )
     return "\n".join(out) + "\n"

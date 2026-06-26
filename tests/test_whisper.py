@@ -122,6 +122,45 @@ def test_load_model_is_cached(monkeypatch):
         whisper._load_model.cache_clear()
 
 
+def test_transcribe_captures_detected_language(tmp_path, monkeypatch):
+    """L09: transcribe espone la lingua RILEVATA (detect_language) nel result, distinta dalla
+    lingua richiesta. Tollerante: _transcribe_audio è mockato, detect_language pure."""
+    from vokari.transcribe import whisper as W
+
+    wav = tmp_path / "a.wav"
+    _make_wav(wav, 1)  # helper ESISTENTE in test_whisper.py: _make_wav(path, seconds, framerate=16000)
+    monkeypatch.setattr(
+        W, "_transcribe_audio", lambda audio, model, language: [{"start": 0.0, "end": 1.0, "text": "ciao"}]
+    )
+    monkeypatch.setattr(W, "detect_language", lambda wav_path, model_name: ("en", 0.97))
+
+    res = W.transcribe(str(wav), model="small", language="it")
+    assert res["language"] == "it"  # richiesta (invariata)
+    assert res["detected_language"] == "en"  # rilevata
+    assert res["language_probability"] == 0.97
+
+
+def test_transcribe_tolerates_detect_language_failure(tmp_path, monkeypatch):
+    """Se detect_language solleva (modello assente), il result ha detected_language='' e
+    la trascrizione procede normalmente (mai fatale)."""
+    from vokari.transcribe import whisper as W
+
+    wav = tmp_path / "b.wav"
+    _make_wav(wav, 1)
+    monkeypatch.setattr(
+        W, "_transcribe_audio", lambda audio, model, language: [{"start": 0.0, "end": 1.0, "text": "x"}]
+    )
+
+    def _boom(wav_path, model_name):
+        raise RuntimeError("modello non scaricato")
+
+    monkeypatch.setattr(W, "detect_language", _boom)
+    res = W.transcribe(str(wav), model="small", language="it")
+    assert res["detected_language"] == ""
+    assert res["language_probability"] == 0.0
+    assert res["text"] == "x"
+
+
 @pytest.mark.slow
 def test_transcribe_real_clip(tmp_path):
     pytest.skip("richiede modello Whisper scaricato + ffmpeg: verifica manuale")

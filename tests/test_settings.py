@@ -80,3 +80,38 @@ def test_live_preview_roundtrip():
     s2 = st.load()
     assert s2.live_preview is False
     assert s2.live_model == "small"
+
+
+def test_onboarded_defaults_false():
+    # primo avvio: il wizard di onboarding non è ancora stato completato
+    assert st.load().onboarded is False
+
+
+def test_onboarded_roundtrip():
+    s = st.load()
+    s.onboarded = True
+    st.save(s)
+    assert st.load().onboarded is True
+
+
+def test_last_seen_version_defaults_empty():
+    # prima volta: nessuna versione di novità ancora vista → il popup mostrerà tutte le voci
+    assert st.load().last_seen_version == ""
+
+
+def test_last_seen_version_roundtrip():
+    s = st.load()
+    s.last_seen_version = "0.1.2"
+    st.save(s)
+    assert st.load().last_seen_version == "0.1.2"
+
+
+def test_app_language_defaults_it():
+    assert st.load().app_language == "it"
+
+
+def test_app_language_roundtrip():
+    s = st.load()
+    s.app_language = "en"
+    st.save(s)
+    assert st.load().app_language == "en"

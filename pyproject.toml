@@ -1,6 +1,6 @@
 [project]
 name = "vokari"
-version = "0.1.1"
+version = "0.1.2"
 description = "Voce -> conoscenza strutturata, 100% in locale."
 requires-python = ">=3.12"
 license = { text = "MIT" }
@@ -55,6 +55,12 @@ select = ["E", "F", "I", "UP", "B", "S", "C4", "RUF"]
 "src/vokari/render/pdf.py" = ["RUF001"]
 # E701/E702: stile compatto nella funzione _bump (if/elif su una riga, leggibilità voluta)
 "scripts/bump_version.py" = ["E701", "E702"]
+# build-tool del packaging: lancia DI PROPOSITO uv/powershell/python-embedded con path risolti
+# dal PATH di sviluppo (trusted, non input utente) → S603/S607 falsi positivi; E501 perché
+# embedda setup.ps1/INSTALLA.bat/LEGGIMI come stringhe (dati, non codice — come prompts.py)
+"packaging/build_release.py" = ["S603", "S607", "E501"]
+# stesso motivo: lancia csc/makeappx/powershell con path risolti dal SDK/sistema (trusted)
+"packaging/build_msix.py" = ["S603", "S607", "E501"]
 
 [build-system]
 requires = ["hatchling"]

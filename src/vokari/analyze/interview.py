@@ -5,11 +5,14 @@ skippabili. Le risposte arricchiscono l'analisi; le saltate/vuote diventano marc
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from vokari import i18n
 from vokari.analyze.schema import Analysis
 
 MAX_QUESTIONS = 5
 _PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 
+# Base SENZA la direttiva di lingua (appesa da build_system in base a `language` = app_language).
+# Le domande seguono la lingua dell'APP (come tutto l'output AI), non quella dell'audio.
 _SYSTEM = (
     "Sei un intervistatore che migliora un briefing generato da una registrazione. "
     "Rileva SOLO le lacune REALI, in questo ORDINE DI PRIORITÀ (chiedi prima le più importanti): "
@@ -23,9 +26,13 @@ _SYSTEM = (
     "Genera al massimo 5 domande, dalla più importante alla meno. "
     "Regole: ogni domanda <= 12 parole, dai del 'tu', niente domande già rispondibili dal testo, "
     "niente domande ovvie o di pura curiosità. Rispondi ESCLUSIVAMENTE con JSON valido, nessun "
-    "code fence, nessuna spiegazione. "
-    "IMPORTANTE: usa la stessa lingua della trascrizione (es. italiano se il testo è in italiano)."
+    "code fence, nessuna spiegazione."
 )
+
+
+def build_system(language: str = "it") -> str:
+    return _SYSTEM + " " + i18n.t("interview.lang_directive", language)
+
 
 _SHAPE = """Produci ESATTAMENTE questo JSON:
 {"questions": [
@@ -92,18 +99,19 @@ def _norm_q(text: str) -> str:
 
 
 def detect_questions(
-    analysis: Analysis, transcript: str, *, provider, mode: str = "solo", should_cancel=None
+    analysis: Analysis, transcript: str, *, provider, mode: str = "solo", should_cancel=None, language: str = "it"
 ) -> list[Question]:
     user = _build_user(analysis, transcript, mode)
+    system = build_system(language)
     # P4 (anti-timeout): usa lo streaming se il provider lo espone (come l'analyzer) — il
     # read-timeout si resetta a ogni token, quindi non scatta mentre il modello genera. Fallback
     # a chat_json per i provider che non lo implementano (fake nei test): stesso cardine
     # hasattr(provider, "chat_json_stream") dell'analyzer (lezione ADR-010/036). should_cancel
     # interrompe la generazione a metà (la chiamata è leggera grazie a P2, ma resta onorata).
     if hasattr(provider, "chat_json_stream"):
-        raw = provider.chat_json_stream(_SYSTEM, user, should_cancel=should_cancel)
+        raw = provider.chat_json_stream(system, user, should_cancel=should_cancel)
     else:
-        raw = provider.chat_json(_SYSTEM, user)
+        raw = provider.chat_json(system, user)
     items = raw.get("questions", []) if isinstance(raw, dict) else []
     qs = [Question.model_validate(q) for q in items]
     qs.sort(key=lambda q: _PRIORITY_ORDER.get(q.priority, 1))
@@ -131,11 +139,14 @@ def build_refinement(questions: list[Question], answers: dict[str, str], skipped
     return out
 
 
-def da_chiarire_markers(questions: list[Question], answers: dict[str, str], skipped: list[str]) -> list[str]:
+def da_chiarire_markers(
+    questions: list[Question], answers: dict[str, str], skipped: list[str], language: str = "it"
+) -> list[str]:
     """Domande saltate o vuote -> marcatori [DA CHIARIRE] (passati a render_briefing)."""
+    suffix = i18n.t("interview.skipped_marker", language)
     out: list[str] = []
     for q in questions:
         a = (answers.get(q.id) or "").strip()
         if q.id in skipped or not a:
-            out.append(f"{q.text} (domanda saltata in rifinitura)")
+            out.append(f"{q.text} ({suffix})")
     return out

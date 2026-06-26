@@ -258,6 +258,8 @@ class Recorder:
         self._native: dict[str, Path] = {}
         self._errors: dict[str, Exception] = {}
         self._markers: list[dict] = []
+        self._paused_total = 0.0  # secondi totali trascorsi in pausa (i frame in pausa sono scartati)
+        self._paused_at: float | None = None  # monotonic di inizio pausa corrente, o None
         self._start_monotonic = None
         self._tmpdir: Path | None = None
 
@@ -284,6 +286,8 @@ class Recorder:
 
     def start(self) -> None:
         self._start_monotonic = time.monotonic()
+        self._paused_total = 0.0
+        self._paused_at = None
         self._tmpdir = Path(tempfile.mkdtemp(prefix="vokari-rec-"))
         funcs = {"mic": _capture_mic_native, "system": _capture_system_native}
         active = ["mic", "system"] if self.source == "both" else [self.source]
@@ -296,18 +300,35 @@ class Recorder:
             t.start()
 
     def add_marker(self, label: str) -> dict:
-        """Aggiunge un marcatore al tempo trascorso da start(). Ritorna {t_ms, label}.
-        Se chiamato prima di start(), t_ms vale 0."""
+        """Aggiunge un marcatore al tempo di AUDIO trascorso da start() (esclude le pause:
+        i frame in pausa sono scartati, quindi il wall-clock disallineerebbe il t_ms dalla
+        posizione reale nell'audio finale). Se chiamato prima di start(), t_ms vale 0.
+        Chiamato dal thread js-api (serializzato con pause/resume): nessun lock necessario."""
         base = self._start_monotonic if self._start_monotonic is not None else time.monotonic()
-        m = {"t_ms": int((time.monotonic() - base) * 1000), "label": label}
+        now = time.monotonic()
+        paused = self._paused_total + ((now - self._paused_at) if self._paused_at is not None else 0.0)
+        t_ms = max(0, int((now - base - paused) * 1000))
+        m = {"t_ms": t_ms, "label": label}
         self._markers.append(m)
         return m
 
+    def update_marker(self, index: int, label: str) -> dict | None:
+        """Aggiorna l'etichetta del marker `index` (editing inline lato UI). None se fuori range."""
+        if 0 <= index < len(self._markers):
+            self._markers[index]["label"] = label
+            return self._markers[index]
+        return None
+
     def pause(self) -> None:
         """Sospende l'accumulo dei frame (i thread continuano a leggere e scartano)."""
+        if self._paused_at is None:
+            self._paused_at = time.monotonic()
         self._pause.set()
 
     def resume(self) -> None:
+        if self._paused_at is not None:
+            self._paused_total += time.monotonic() - self._paused_at
+            self._paused_at = None
         self._pause.clear()
 
     def is_paused(self) -> bool:

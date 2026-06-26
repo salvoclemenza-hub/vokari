@@ -53,6 +53,9 @@ SETTINGS_KEYS = {
     "livePreview",
     "liveModel",
     "hasApiKey",
+    "onboarded",
+    "lastSeenVersion",
+    "appLanguage",
 }
 ARTIFACTS_KEYS = {
     "title",
@@ -202,8 +205,9 @@ def test_job_status_event_payloads_use_declared_statuses():
     """Gli stati emessi nell'evento `status` (_emit("status", {"status": "X"})) in pipeline.py
     devono essere nel contratto JOB_STATUSES (== type JobStatus in bridge.ts)."""
     src = (_ROOT / "app" / "pipeline.py").read_text(encoding="utf-8")
-    # cattura solo i payload dell'evento status: '"status": "X"'
-    used = set(re.findall(r'"status":\s*"([a-z_]+)"', src))
+    # cattura SOLO gli status dell'evento `status` (_emit("status", {..., "status": "X"})),
+    # non quelli di altri eventi come model_download (start/progress/done).
+    used = set(re.findall(r'emit\(\s*"status"\s*,\s*\{[^}]*?"status":\s*"([a-z_]+)"', src))
     unknown = used - JOB_STATUSES
     assert not unknown, f"stati job non dichiarati nel contratto (drift): {unknown}"
 

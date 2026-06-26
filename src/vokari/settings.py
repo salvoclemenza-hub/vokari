@@ -26,6 +26,9 @@ class Settings:
     transcription_language: str = "it"  # IT fisso evita latenza language-detection
     live_preview: bool = True  # anteprima trascrizione durante la registrazione
     live_model: str = "base"  # modello piccolo per l'anteprima live
+    onboarded: bool = False  # primo avvio completato (wizard di benvenuto visto)
+    last_seen_version: str = ""  # ultima versione di cui l'utente ha visto le novità (popup changelog)
+    app_language: str = "it"  # lingua dell'app: UI + output AI + template (it|en). Audio = transcription_language
 
 
 def _settings_path() -> Path:

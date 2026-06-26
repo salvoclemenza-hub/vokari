@@ -57,6 +57,7 @@ export function installMockApi(): void {
     // H — Export
     export_pdf: async () => ({ ok: true, path: "C:\\dev\\recap.pdf" }),
     export_obsidian: async () => ({ ok: true, count: 1 }),
+    reexport_session: async () => ({ ok: true, path: "C:\\dev\\out.briefing.md", count: 3, paths: [] }),
     save_text_file: async (_c: string, name: string) => ({ ok: true, path: `C:\\dev\\${name}` }),
     // E — Settings
     get_settings: async () => fx.sampleSettings,
@@ -81,7 +82,7 @@ export function installMockApi(): void {
     ollama_stop: async () => ok,
     ollama_install: async () => ok,
     // I — LibreHardwareMonitor
-    lhm_status: async () => ({ installed: true, running: true }),
+    lhm_status: async () => ({ installed: true, running: true, canInstall: true }),
     lhm_install: async () => ok,
     lhm_start: async () => ok,
     lhm_stop: async () => ok,

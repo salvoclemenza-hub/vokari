@@ -9,6 +9,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AppFrame } from "../chrome/AppFrame";
 import { Toaster } from "../chrome/Toaster";
 import { ConfirmHost } from "../chrome/ConfirmHost";
+import { WhatsNew } from "../chrome/WhatsNew";
+import type { ChangelogEntry } from "../bridge";
 import type { NavItem } from "../chrome/Sidebar";
 import { toast } from "../toast";
 import { confirmDialog, promptDialog } from "../confirm";
@@ -21,6 +23,7 @@ import { ScreenSettings } from "../screens/Settings";
 import { ScreenSessions } from "../screens/Sessions";
 import { ScreenModels } from "../screens/Models";
 import { ScreenError } from "../screens/ErrorScreen";
+import { ScreenOnboarding } from "../screens/Onboarding";
 import { installMockApi, setDevFlags } from "./mockApi";
 import * as fx from "./fixtures";
 
@@ -28,16 +31,37 @@ installMockApi();
 
 const noop = () => {};
 
+// Voci finte per rifinire il popup "Novità della versione" (Tema 2).
+const DEV_CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.1.2", date: "2026-06-25", title: "Benvenuto guidato e modelli più chiari",
+    highlights: [
+      { kind: "feature", text: "Wizard di benvenuto al primo avvio: configuri cervello AI e modello passo dopo passo." },
+      { kind: "feature", text: "Questa finestra: dopo ogni aggiornamento vedi cosa è cambiato." },
+      { kind: "fix", text: "La schermata Modelli AI non mostra più \"Attivo\" un modello solo selezionato ma non scaricato." },
+      { kind: "fix", text: "Lo stato di Ollama distingue \"installato ma fermo\" da \"non installato\"." },
+    ],
+  },
+  {
+    version: "0.1.1", date: "2026-06-20", title: "Primo pacchetto distribuibile",
+    highlights: [
+      { kind: "feature", text: "Pacchetto di installazione per Windows, nessuna configurazione manuale." },
+      { kind: "improvement", text: "Avvisi più onesti sulla lingua rilevata nell'audio." },
+    ],
+  },
+];
+
 // Schermate "reali" (renderizzabili come corpo) vs voci solo-harness (pills/feedback) che
 // sono overlay/eventi da mostrare SOPRA una schermata reale (dove avvengono davvero).
 type RealScreen =
   | "home" | "live" | "processing" | "interview" | "artifacts"
-  | "settings" | "sessions" | "models" | "error";
-type Screen = RealScreen | "pills" | "feedback";
+  | "settings" | "sessions" | "models" | "error" | "onboarding";
+type Screen = RealScreen | "pills" | "feedback" | "whatsnew";
 
 const NAV_FOR: Record<Screen, NavItem> = {
   home: "Registra", live: "Registra", processing: "Registra", interview: "Registra",
-  error: "Registra", pills: "Registra", feedback: "Registra",
+  error: "Registra", pills: "Registra", feedback: "Registra", onboarding: "Registra",
+  whatsnew: "Registra",
   artifacts: "Sessioni", sessions: "Sessioni",
   models: "Modelli AI", settings: "Impostazioni",
 };
@@ -65,6 +89,8 @@ const FEEDBACK: Record<string, { screen: RealScreen; state: string; fire: () => 
 
 /** Catalogo schermate → stati, per l'indice e la documentazione. */
 const CATALOG: { screen: Screen; states: string[]; note?: string }[] = [
+  { screen: "onboarding", states: ["welcome", "brain", "model", "ready"],
+    note: "wizard primo avvio (4 passi)" },
   { screen: "processing", states: ["queued", "transcribing", "analyzing", "rendering"],
     note: "priorità #1 — punto di partenza della richiesta" },
   { screen: "home", states: ["with-briefing", "empty"] },
@@ -79,6 +105,8 @@ const CATALOG: { screen: Screen; states: string[]; note?: string }[] = [
     note: "overlay sopra la schermata reale dove compaiono" },
   { screen: "feedback", states: ["toast-success", "toast-info", "toast-error", "confirm", "prompt"],
     note: "toast/modali sopra la schermata reale dove avvengono" },
+  { screen: "whatsnew", states: ["default"],
+    note: "popup 'Novità della versione' dopo un aggiornamento" },
 ];
 
 type GoFn = (screen: Screen, state: string) => void;
@@ -157,6 +185,9 @@ function renderBody(screen: RealScreen, state: string): ReactNode {
       return <ScreenSessions onOpen={noop} onImport={noop} />;
     case "models":
       return <ScreenModels />;
+    case "onboarding":
+      // initialStep dal `state` per rifinire ogni passo isolatamente (welcome/brain/model/ready)
+      return <ScreenOnboarding onDone={noop} initialStep={{ welcome: 0, brain: 1, model: 2, ready: 3 }[state] ?? 0} />;
     case "error":
       return <ScreenError
         message="Impossibile contattare il modello Ollama (connessione rifiutata su http://localhost:11434). Verifica che Ollama sia avviato."
@@ -264,6 +295,11 @@ export function DevHarness() {
     frameScreen = fb.screen;
     body = <DevFeedback fire={fb.fire}>{renderBody(fb.screen, fb.state)}</DevFeedback>;
     active = NAV_FOR[fb.screen];
+  } else if (screen === "whatsnew") {
+    // popup novità: overlay sopra la Home (come avviene davvero dopo un aggiornamento)
+    frameScreen = "home";
+    body = renderBody("home", "with-briefing");
+    active = "Registra";
   } else {
     frameScreen = screen;
     body = renderBody(screen, state);
@@ -273,12 +309,16 @@ export function DevHarness() {
   return (
     <>
       <AppFrame active={active} screen={frameScreen} onNavigate={(n) => { const t = Object.entries(NAV_FOR).find(([, v]) => v === n)?.[0] as Screen; if (t) go(t, "default"); }}
-        onOpenSession={() => go("artifacts", "default")} appInfo={fx.sampleAppInfo} resources={fx.sampleResources}>
+        onOpenSession={() => go("artifacts", "default")} appInfo={fx.sampleAppInfo} resources={fx.sampleResources}
+        bare={frameScreen === "onboarding"}>
         <div key={(screen ?? "index") + state} className={"vk-screen-anim " + dir}>
           {body}
         </div>
       </AppFrame>
       {screen === "pills" && <DevPills state={state} />}
+      {screen === "whatsnew" && (
+        <WhatsNew entries={DEV_CHANGELOG} currentVersion="0.1.2" onClose={() => go("home", "with-briefing")} />
+      )}
       {showNav && (
         <button onClick={() => { history.pushState(null, "", "?nav=1"); setRoute({ screen: null, state: "default" }); }} title="Torna all'indice DEV"
           style={{ position: "fixed", top: 6, left: "50%", transform: "translateX(-50%)", zIndex: 9999,

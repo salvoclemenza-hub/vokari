@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { VkIcon } from "../icons";
 import type { Question } from "../bridge";
 
@@ -11,6 +12,7 @@ export function ScreenInterview({
   onGenerate?: (answers: Record<string, string>, skipped: string[]) => void;
   onCancel?: () => void;
 }) {
+  const { t } = useTranslation();
   const [answers, setAnswers] = useState<Record<string, string>>({});
   // Stato di skip esplicito (solo visivo): "Salta" su una domanda la marca saltata.
   // Il contratto verso generate resta "risposta presente → risposta, altrimenti saltata":
@@ -87,9 +89,9 @@ export function ScreenInterview({
     <div className="vk-iv">
       <div className="vk-iv-inner">
         <div className="vk-iv-head">
-          <div className="vk-kick">~/rifinitura · opzionale</div>
-          <h1>Un paio di domande per un briefing migliore.</h1>
-          <p>Usa i suggerimenti rapidi <b>oppure rispondi a parole</b> — e puoi sempre saltare.</p>
+          <div className="vk-kick">{t("interview.kicker")}</div>
+          <h1>{t("interview.title")}</h1>
+          <p>{t("interview.leadPre")}<b>{t("interview.leadBold")}</b>{t("interview.leadPost")}</p>
         </div>
 
         <div className="vk-iv-prog">
@@ -99,13 +101,13 @@ export function ScreenInterview({
             ))}
           </div>
           <span className="lab">
-            {doneCount} di {questions.length}
-            {skippedCount ? ` · ${skippedCount} saltate` : " · rispondi quante vuoi"}
+            {t("interview.progress", { done: doneCount, total: questions.length })}
+            {skippedCount ? t("interview.progSkipped", { count: skippedCount }) : t("interview.progAnswerAny")}
           </span>
-          <div className="vk-iv-toggle" role="group" aria-label="Vista domande">
-            <button className={view === "list" ? "on" : ""} onClick={() => setView("list")}>Lista</button>
+          <div className="vk-iv-toggle" role="group" aria-label={t("interview.viewAria")}>
+            <button className={view === "list" ? "on" : ""} onClick={() => setView("list")}>{t("interview.viewList")}</button>
             <button className={view === "focus" ? "on" : ""} onClick={() => { setCur(0); setView("focus"); }}>
-              Una alla volta
+              {t("interview.viewOneByOne")}
             </button>
           </div>
         </div>
@@ -123,24 +125,24 @@ export function ScreenInterview({
                 </span>
                 <span className="vk-q-title">{q.text}</span>
                 {q.fromAudio && (
-                  <span className="vk-q-src" title="domanda nata da un dettaglio della registrazione">dal tuo audio</span>
+                  <span className="vk-q-src" title={t("interview.fromAudioTitle")}>{t("interview.fromAudio")}</span>
                 )}
               </div>
-              {q.why && <div className="vk-q-why"><b>Perché:</b> {q.why}</div>}
+              {q.why && <div className="vk-q-why"><b>{t("interview.why")}</b> {q.why}</div>}
               {q.suggestions.length > 0 && (
-                <div className="vk-chips-lbl">Suggerimenti rapidi</div>
+                <div className="vk-chips-lbl">{t("interview.quickSuggestions")}</div>
               )}
               <div className="vk-chips">
                 {q.suggestions.map((c) => (
                   <button key={c} className={"vk-chip" + (answers[q.id] === c ? " on" : "")}
                           onClick={() => answerChip(q.id, c)}>{c}</button>
                 ))}
-                <button className={"vk-chip skip" + (skip ? " on" : "")} onClick={() => toggleSkip(q.id)}>Salta</button>
+                <button className={"vk-chip skip" + (skip ? " on" : "")} onClick={() => toggleSkip(q.id)}>{t("interview.skip")}</button>
               </div>
               <input className="vk-qi one" type="text"
                      value={answers[q.id] && !q.suggestions.includes(answers[q.id]) ? answers[q.id] : ""}
                      onChange={(e) => answerText(q.id, e.target.value)}
-                     placeholder="Oppure rispondi a parole…" />
+                     placeholder={t("interview.answerPlaceholder")} />
             </div>
           );
         })}
@@ -149,24 +151,24 @@ export function ScreenInterview({
         {view === "focus" && questions.length > 0 && (
           <div className="vk-iv-focusnav">
             <button className="vk-btn-gh" onClick={() => setCur((c) => Math.max(0, c - 1))}
-                    style={{ visibility: cur > 0 ? "visible" : "hidden" }}>← Indietro</button>
+                    style={{ visibility: cur > 0 ? "visible" : "hidden" }}>{t("interview.navBack")}</button>
             <span className="pos">{cur + 1} / {questions.length}</span>
             <div className="grow" />
-            <span className="vk-iv-kbd"><kbd>1</kbd>–<kbd>9</kbd> scegli · <kbd>Invio</kbd> avanti · <kbd>S</kbd> salta</span>
+            <span className="vk-iv-kbd"><kbd>1</kbd>–<kbd>9</kbd> {t("interview.kbdChoose")} · <kbd>{t("interview.kbdEnter")}</kbd> {t("interview.kbdNext")} · <kbd>S</kbd> {t("interview.kbdSkip")}</span>
             <button className="vk-btn-g" onClick={() => setCur((c) => Math.min(c + 1, questions.length - 1))}
-                    disabled={last}>{last ? "Fine" : "Avanti →"}</button>
+                    disabled={last}>{last ? t("interview.navDone") : t("interview.navNext")}</button>
           </div>
         )}
 
         <div className="vk-iv-act">
-          <span className="vk-iv-note"><span className="dot"></span>Mai bloccante — puoi sempre rigenerare dopo.</span>
+          <span className="vk-iv-note"><span className="dot"></span>{t("interview.note")}</span>
           <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
             {onCancel && (
-              <button className="vk-exit" onClick={onCancel}>Annulla</button>
+              <button className="vk-exit" onClick={onCancel}>{t("interview.cancel")}</button>
             )}
-            <button className="vk-btn-gh" onClick={() => buildAndGenerate(true)}>Salta tutto e genera</button>
+            <button className="vk-btn-gh" onClick={() => buildAndGenerate(true)}>{t("interview.skipAllGenerate")}</button>
             <button className="vk-btn-g" onClick={() => buildAndGenerate(false)}>
-              Genera briefing<span className="ct"> · {answeredCount} {answeredCount === 1 ? "risposta" : "risposte"}</span><VkIcon.arrow />
+              {t("interview.generate")}<span className="ct"> · {answeredCount} {answeredCount === 1 ? t("interview.answerSingular") : t("interview.answerPlural")}</span><VkIcon.arrow />
             </button>
           </div>
         </div>

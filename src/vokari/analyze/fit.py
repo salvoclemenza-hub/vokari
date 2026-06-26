@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from math import ceil
 from typing import Literal
 
+from vokari import i18n
+
 # Stima token: ~3 char/token (sovrastima per l'italiano → prudente). Coerente con
 # ollama_provider._CHARS_PER_TOKEN; l'analyzer importa queste costanti da qui (fonte unica).
 CHARS_PER_TOKEN = 3
@@ -24,15 +26,6 @@ _AVG_CHARS_PER_WORD = 6  # media italiano incl. spazio (per la stima da durata a
 _UNBOUNDED = 10_000_000  # budget "infinito" se il provider non espone i limiti (es. fake nei test)
 
 FitLevel = Literal["ideal", "summarize", "over_even_summarized"]
-
-_REC_SUMMARIZE = (
-    "Per la massima fedeltà usa Claude (200k token di contesto) o un modello Ollama con più "
-    "contesto, oppure dividi la registrazione in parti più brevi."
-)
-_REC_OVER = (
-    "Dividi la registrazione in parti più brevi o usa Claude (200k token): anche riassunta, "
-    "questa trascrizione supererebbe il contesto del modello."
-)
 
 
 @dataclass
@@ -63,8 +56,10 @@ def _provider_limits(provider) -> tuple[int, int, bool]:
     return budget, ctx_max, is_fallback
 
 
-def _classify(tokens_est: int, words: int, budget: int, ctx_max: int, ctx_is_fallback: bool) -> FitReport:
-    fb = " (contesto del modello non leggibile ora: stima prudente)" if ctx_is_fallback else ""
+def _classify(
+    tokens_est: int, words: int, budget: int, ctx_max: int, ctx_is_fallback: bool, lang: str = "it"
+) -> FitReport:
+    fb = i18n.t("fit.ctx_fallback", lang) if ctx_is_fallback else ""
     if tokens_est <= budget:
         return FitReport(
             tokens_est=tokens_est,
@@ -73,7 +68,7 @@ def _classify(tokens_est: int, words: int, budget: int, ctx_max: int, ctx_is_fal
             level="ideal",
             n_chunks=0,
             ctx_is_fallback=ctx_is_fallback,
-            reason="La trascrizione entra nel contesto del modello: analisi in una passata, fedeltà massima." + fb,
+            reason=i18n.t("fit.reason_ideal", lang) + fb,
             recommendation="",
         )
     n_chunks = max(1, ceil(words / SUMMARY_CHUNK_WORDS))
@@ -86,11 +81,8 @@ def _classify(tokens_est: int, words: int, budget: int, ctx_max: int, ctx_is_fal
             level="summarize",
             n_chunks=n_chunks,
             ctx_is_fallback=ctx_is_fallback,
-            reason=(
-                f"La trascrizione (~{tokens_est} token) supera il budget del modello (~{budget} token): "
-                f"verrà riassunta in {n_chunks} parti prima dell'analisi, con possibile perdita di dettaglio." + fb
-            ),
-            recommendation=_REC_SUMMARIZE,
+            reason=i18n.t("fit.reason_summarize", lang, tokens=tokens_est, budget=budget, n=n_chunks) + fb,
+            recommendation=i18n.t("fit.rec_summarize", lang),
         )
     return FitReport(
         tokens_est=tokens_est,
@@ -99,25 +91,22 @@ def _classify(tokens_est: int, words: int, budget: int, ctx_max: int, ctx_is_fal
         level="over_even_summarized",
         n_chunks=n_chunks,
         ctx_is_fallback=ctx_is_fallback,
-        reason=(
-            f"La trascrizione (~{tokens_est} token) supera di molto il budget del modello (~{budget} token): "
-            f"neanche un riassunto in {n_chunks} parti rientrerebbe." + fb
-        ),
-        recommendation=_REC_OVER,
+        reason=i18n.t("fit.reason_over", lang, tokens=tokens_est, budget=budget, n=n_chunks) + fb,
+        recommendation=i18n.t("fit.rec_over", lang),
     )
 
 
-def assess_fit(transcript: str, provider) -> FitReport:
+def assess_fit(transcript: str, provider, lang: str = "it") -> FitReport:
     """Idoneità ESATTA dalla trascrizione reale (post-trascrizione)."""
     budget, ctx_max, is_fallback = _provider_limits(provider)
     tokens_est = len(transcript) // CHARS_PER_TOKEN + PROMPT_OVERHEAD_TOKENS
-    return _classify(tokens_est, len(transcript.split()), budget, ctx_max, is_fallback)
+    return _classify(tokens_est, len(transcript.split()), budget, ctx_max, is_fallback, lang)
 
 
-def estimate_from_duration(duration_s: float, provider, *, words_per_min: int = 140) -> FitReport:
+def estimate_from_duration(duration_s: float, provider, *, words_per_min: int = 140, lang: str = "it") -> FitReport:
     """Idoneità STIMATA dalla sola durata audio (preflight, prima di trascrivere) — per avvisare
     subito quando una registrazione lunga finirà riassunta/oltre il contesto del modello scelto."""
     budget, ctx_max, is_fallback = _provider_limits(provider)
     words = max(0, int(duration_s / 60 * words_per_min))
     tokens_est = (words * _AVG_CHARS_PER_WORD) // CHARS_PER_TOKEN + PROMPT_OVERHEAD_TOKENS
-    return _classify(tokens_est, words, budget, ctx_max, is_fallback)
+    return _classify(tokens_est, words, budget, ctx_max, is_fallback, lang)

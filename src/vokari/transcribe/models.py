@@ -6,7 +6,10 @@ NOTA: faster-whisper accetta 'large-v3-turbo' (alias 'turbo') da v1.0.3+. Se una
 versione esponesse solo 'turbo', cambiare il `name` nel CATALOG o aggiungere un alias.
 """
 
+import re
+import threading
 from dataclasses import dataclass
+from pathlib import Path
 
 from faster_whisper.utils import download_model as _download_model
 
@@ -102,6 +105,59 @@ def download(name: str) -> str:
     """Scarica (se mancante) il modello nella cache di VOKARI. Ritorna il path locale."""
     ensure_dirs()  # crea la dir dei modelli una volta, solo quando serve davvero
     return _download_model(name, local_files_only=False, cache_dir=_cache_dir())
+
+
+_DL_POLL_S = 1.0  # intervallo di polling per la stima del progresso download
+
+
+def expected_bytes(name: str) -> int:
+    """Byte attesi stimati dal size_label del CATALOG ('~1.6 GB' -> 1_600_000_000). 0 se ignoto."""
+    for m in CATALOG:
+        if m.name == name:
+            mt = re.search(r"([\d.]+)\s*GB", m.size_label)
+            if mt:
+                return int(float(mt.group(1)) * 1_000_000_000)
+    return 0
+
+
+def _dir_size(path: Path) -> int:
+    """Byte totali dei file sotto `path` (best-effort, ignora errori transitori)."""
+    total = 0
+    try:
+        for p in path.rglob("*"):
+            if p.is_file():
+                try:
+                    total += p.stat().st_size
+                except OSError:
+                    pass
+    except OSError:
+        pass
+    return total
+
+
+def download_with_progress(name: str, on_progress=None) -> str:
+    """Scarica `name` (bloccante, via download()) mentre un thread monitor stima il progresso
+    dalla crescita della dir modelli e invoca on_progress(bytes_done, bytes_total) ~ogni
+    _DL_POLL_S. faster-whisper non espone un callback di progresso reale → la stima evita di
+    reimplementarne il download. Rilancia l'eccezione di download() dopo aver fermato il monitor."""
+    total = expected_bytes(name)
+    models_dir = Path(_cache_dir())
+    baseline = _dir_size(models_dir)
+    stop = threading.Event()
+
+    def _monitor() -> None:
+        while not stop.wait(_DL_POLL_S):
+            grown = max(0, _dir_size(models_dir) - baseline)
+            if on_progress:
+                on_progress(grown, total)
+
+    mon = threading.Thread(target=_monitor, daemon=True)
+    if on_progress and total:
+        mon.start()
+    try:
+        return download(name)
+    finally:
+        stop.set()
 
 
 def state(name: str, settings: Settings) -> str:

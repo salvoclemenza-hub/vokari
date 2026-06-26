@@ -165,3 +165,22 @@ def test_session_instruction_differs_by_meta_type():
         return m.group(1).strip() if m else ""
 
     assert _extract_instruction(md_meeting) != _extract_instruction(md_solo)
+
+
+def test_briefing_renders_user_markers_section():
+    md = briefing.render_briefing(
+        _sample(),
+        transcript="t",
+        markers=[{"t_ms": 90_000, "label": "Decisione lotto"}, {"t_ms": 5_000, "label": "Intro"}],
+    )
+    assert "<user_markers>" in md and "</user_markers>" in md
+    assert "Segnalibri" in md
+    assert "- 00:05 — Intro" in md  # ordinati per tempo
+    assert "- 01:30 — Decisione lotto" in md
+    # i segnalibri precedono la trascrizione integrale (sono puntatori nell'audio)
+    assert md.index("<user_markers>") < md.index("<raw_transcript>")
+
+
+def test_briefing_no_markers_section_when_none():
+    md = briefing.render_briefing(_sample(), transcript="t")
+    assert "<user_markers>" not in md

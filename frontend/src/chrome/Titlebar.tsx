@@ -1,33 +1,30 @@
 import { Fragment } from "react";
+import { useTranslation } from "react-i18next";
 import { VkIcon } from "../icons";
 import type { AppInfo } from "../bridge";
 import type { NavItem } from "./Sidebar";
 
-// Passi del flusso lineare: usati per il breadcrumb di wayfinding nella titlebar.
-const FLOW: { screen: string; label: string }[] = [
-  { screen: "home", label: "Registra" },
-  { screen: "live", label: "Live" },
-  { screen: "processing", label: "Elaborazione" },
-  { screen: "interview", label: "Rifinitura" },
-  { screen: "artifacts", label: "Artefatti" },
-];
+// Passi del flusso lineare (id schermata): il breadcrumb di wayfinding traduce le etichette
+// via chiave `titlebar.flow.<screen>`.
+const FLOW_SCREENS = ["home", "live", "processing", "interview", "artifacts"] as const;
 
-// Titolo mostrato a sinistra fuori dal flusso (schermate primarie + errore/artefatti).
-const TITLES: Record<string, string> = {
-  home: "Registra", sessions: "Sessioni", models: "Modelli AI",
-  settings: "Impostazioni", artifacts: "Artefatti", error: "Errore",
-  live: "Registrazione", processing: "Elaborazione", interview: "Rifinitura",
-};
+// Schermate con un titolo proprio (fuori dal flusso): etichetta via `titlebar.titles.<screen>`.
+const TITLE_SCREENS = new Set([
+  "home", "sessions", "models", "settings", "artifacts", "error", "live", "processing", "interview",
+]);
 
 export function Titlebar({
   appInfo,
   screen = "home",
   onNavigate,
+  bare = false,
 }: {
   appInfo: AppInfo;
   screen?: string;
   onNavigate?: (n: NavItem) => void;
+  bare?: boolean;
 }) {
+  const { t } = useTranslation();
   const stars =
     appInfo.githubStars >= 1000
       ? (appInfo.githubStars / 1000).toFixed(1) + "k"
@@ -36,23 +33,23 @@ export function Titlebar({
   // anche aprendo una sessione dalla libreria) un breadcrumb implicherebbe un flusso che
   // non è sempre vero → lì titolo semplice.
   const inFlow = screen === "live" || screen === "processing" || screen === "interview";
-  const activeIdx = FLOW.findIndex((f) => f.screen === screen);
+  const activeIdx = FLOW_SCREENS.indexOf(screen as (typeof FLOW_SCREENS)[number]);
 
   return (
     <div className="vk-tbar">
       {inFlow ? (
-        <div className="vk-tbar-crumbs" aria-label="Avanzamento del flusso">
-          {FLOW.map((f, i) => (
-            <Fragment key={f.screen}>
+        <div className="vk-tbar-crumbs" aria-label={t("titlebar.flowProgress")}>
+          {FLOW_SCREENS.map((s, i) => (
+            <Fragment key={s}>
               {i > 0 && <span className="sep">›</span>}
               <span className={"c" + (i === activeIdx ? " cur" : i < activeIdx ? " done" : "")}>
-                {f.label}
+                {t("titlebar.flow." + s)}
               </span>
             </Fragment>
           ))}
         </div>
       ) : (
-        <div className="vk-tbar-title">{TITLES[screen] ?? "VOKARI"}</div>
+        <div className="vk-tbar-title">{TITLE_SCREENS.has(screen) ? t("titlebar.titles." + screen) : t("titlebar.fallback")}</div>
       )}
       <div className="vk-tbar-r">
         {appInfo.githubStars > 0 && (
@@ -64,14 +61,16 @@ export function Titlebar({
         <div className="vk-ver">
           v{appInfo.version}
         </div>
-        <button
-          className="vk-icbtn"
-          aria-label="Impostazioni"
-          title="Impostazioni"
-          onClick={() => onNavigate?.("Impostazioni")}
-        >
-          <VkIcon.sliders />
-        </button>
+        {!bare && (
+          <button
+            className="vk-icbtn"
+            aria-label={t("titlebar.settings")}
+            title={t("titlebar.settings")}
+            onClick={() => onNavigate?.("Impostazioni")}
+          >
+            <VkIcon.sliders />
+          </button>
+        )}
       </div>
     </div>
   );

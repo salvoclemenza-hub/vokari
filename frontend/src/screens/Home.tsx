@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type React from "react";
+import { useTranslation } from "react-i18next";
 import { VkIcon } from "../icons";
 import { type Artifacts } from "../bridge";
 import { Banner } from "../chrome/Banner";
@@ -8,20 +9,13 @@ import { MarkdownDoc } from "./MarkdownDoc";
 type Source = "mic" | "system" | "both";
 type Mode = "solo" | "riunione";
 
+// I valori restano costanti (sono identità/dati: mode "solo"/"riunione" guida la pipeline);
+// le ETICHETTE si traducono via t(`home.mode.<m>`) / t(`home.source.<s>`).
 const SRC: Source[] = ["mic", "system", "both"];
-const SRC_LABEL: Record<Source, string> = { mic: "mic", system: "system", both: "entrambi" };
 const MODES: Mode[] = ["solo", "riunione"];
 
 const HOME_BARS = Array.from({ length: 56 }, (_, i) =>
   14 + Math.round(16 * Math.abs(Math.sin(i * 0.55)) + 10 * Math.abs(Math.sin(i * 0.19 + 1.3))));
-
-// Stato primo avvio: onboarding in 3 passi (redesign 2026-06-17). Le warning di
-// configurazione (modello/chiave) restano nel Banner in alto, qui solo accoglienza.
-const ONB_STEPS: { tt: string; dd: React.ReactNode }[] = [
-  { tt: "Scegli tipo e sorgente", dd: "Da solo o riunione; microfono, audio di sistema o entrambi. Il tipo guida cosa cerca l'analisi." },
-  { tt: "Premi Registra e parla", dd: <>Pulsante verde o <b>Ctrl R</b>. Puoi anche importare un file audio già esistente.</> },
-  { tt: "Ottieni il tuo briefing", dd: "VOKARI trascrive in locale e struttura decisioni, domande aperte e trascrizione integrale." },
-];
 
 export function ScreenHome({
   onStart,
@@ -50,6 +44,7 @@ export function ScreenHome({
   onOpenSettings?: () => void;
   onOpenModels?: () => void;
 }) {
+  const { t } = useTranslation();
   const [source, setSource] = useState<Source>("both");
   const [tab, setTab] = useState<"briefing.md" | "recap.md" | "obsidian/">("briefing.md");
   // ⌘ è il tasto modificatore su macOS; su Windows/Linux (VOKARI è desktop Windows) è Ctrl.
@@ -71,25 +66,32 @@ export function ScreenHome({
 
   const hasBriefing = Boolean(lastArtifacts?.briefingMd);
 
+  // Passi onboarding (no briefing): il passo 2 ha testo in grassetto (Ctrl R) → composto in JSX.
+  const onbSteps: { tt: string; dd: React.ReactNode }[] = [
+    { tt: t("home.onb.step1tt"), dd: t("home.onb.step1dd") },
+    { tt: t("home.onb.step2tt"), dd: <>{t("home.onb.step2ddPre")} <b>{t("home.onb.step2ddBold")}</b>{t("home.onb.step2ddPost")}</> },
+    { tt: t("home.onb.step3tt"), dd: t("home.onb.step3dd") },
+  ];
+
   return (
     <>
       {(needsModel || needsApiKey) && (
         <Banner kind="warn" actions={
           <>
-            {needsModel && <button className="vk-mini" onClick={onOpenModels}>Scarica un modello</button>}
-            {needsApiKey && <button className="vk-mini" onClick={onOpenSettings}>Apri Impostazioni</button>}
+            {needsModel && <button className="vk-mini" onClick={onOpenModels}>{t("home.banner.downloadModel")}</button>}
+            {needsApiKey && <button className="vk-mini" onClick={onOpenSettings}>{t("home.banner.openSettings")}</button>}
           </>
         }>
-          ⚙ <b>Configura VOKARI per iniziare.</b>{" "}
-          {needsModel && "Scarica un modello Whisper per trascrivere. "}
-          {needsApiKey && "Imposta la chiave Claude API (o passa a Ollama nelle Impostazioni)."}
+          ⚙ <b>{t("home.banner.configure")}</b>{" "}
+          {needsModel && t("home.banner.needModel") + " "}
+          {needsApiKey && t("home.banner.needKey")}
         </Banner>
       )}
       <div className="vk-greet">
         <div>
-          <div className="vk-kick">~/nuova-sessione</div>
-          <h1>Registra. Trascrivi. Pensa meglio.</h1>
-          <p>La tua voce diventa un <b>briefing pronto per l&apos;AI</b> — trascritta al 100% sul tuo dispositivo, senza cloud.</p>
+          <div className="vk-kick">{t("home.kicker")}</div>
+          <h1>{t("home.title")}</h1>
+          <p>{t("home.subtitlePre")} <b>{t("home.subtitleBold")}</b> {t("home.subtitlePost")}</p>
         </div>
       </div>
 
@@ -102,21 +104,21 @@ export function ScreenHome({
 
           <div className="vk-cap-rows">
             <div className="vk-seg-row">
-              <span className="vk-src-lbl">tipo</span>
-              <div className="vk-src" role="group" aria-label="Tipo sessione">
+              <span className="vk-src-lbl">{t("home.typeLabel")}</span>
+              <div className="vk-src" role="group" aria-label={t("home.typeGroup")}>
                 {MODES.map((m) => (
                   <button key={m} className={mode === m ? "on" : ""} onClick={() => onModeChange?.(m)}>
-                    {m}
+                    {t("home.mode." + m)}
                   </button>
                 ))}
               </div>
             </div>
             <div className="vk-seg-row">
-              <span className="vk-src-lbl">sorgente</span>
-              <div className="vk-src" role="group" aria-label="Sorgente audio">
+              <span className="vk-src-lbl">{t("home.sourceLabel")}</span>
+              <div className="vk-src" role="group" aria-label={t("home.sourceGroup")}>
                 {SRC.map((s) => (
                   <button key={s} className={source === s ? "on" : ""} onClick={() => setSource(s)}>
-                    {SRC_LABEL[s]}
+                    {t("home.source." + s)}
                   </button>
                 ))}
               </div>
@@ -125,17 +127,17 @@ export function ScreenHome({
 
           {/* B2: riga d'aiuto sul tipo sessione (solo UX, nessuna logica) */}
           <div style={{ padding: "6px 12px 0", fontSize: 11, color: "rgba(255,255,255,0.5)", lineHeight: 1.4 }}>
-            <b>riunione</b> = più persone: l&apos;analisi cerca decisioni e responsabili
+            <b>{t("home.meetingHintBold")}</b> {t("home.meetingHintRest")}
           </div>
 
           {/* Context/Scope optional input — leggibile sulla console scura */}
           <div style={{ padding: "8px 12px 4px", borderTop: "1px solid rgba(255,255,255,0.10)" }}>
             <label style={{ display: "block", fontSize: 11, color: "rgba(255,255,255,0.55)", marginBottom: 4 }}>
-              Di cosa parla? <span style={{ opacity: 0.7 }}>(opzionale — aiuta l&apos;AI a cogliere lo scopo)</span>
+              {t("home.contextLabel")} <span style={{ opacity: 0.7 }}>{t("home.contextHint")}</span>
             </label>
             <input
               type="text"
-              placeholder="es. Decidere se fare la landing page"
+              placeholder={t("home.contextPlaceholder")}
               value={context}
               onChange={(e) => onContextChange?.(e.currentTarget.value)}
               style={{
@@ -151,13 +153,13 @@ export function ScreenHome({
             <button
               className="vk-rec"
               onClick={() => onStart(source, context || undefined)}
-              aria-label="Avvia registrazione"
+              aria-label={t("home.startRecording")}
             >
               <VkIcon.mic />
             </button>
-            <div className="vk-rec-label">Avvia registrazione</div>
+            <div className="vk-rec-label">{t("home.startRecording")}</div>
             <div className="vk-rec-sub">
-              premi <kbd>{modKey}</kbd><kbd>R</kbd> o clicca il pulsante
+              {t("home.recHintPre")} <kbd>{modKey}</kbd><kbd>R</kbd> {t("home.recHintPost")}
             </div>
             <div className="vk-wave" aria-hidden="true">
               {HOME_BARS.map((h, i) => (
@@ -174,13 +176,13 @@ export function ScreenHome({
             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onImport(); }}
           >
             <span className="ar">↧</span>
-            <span><b>Trascina o clicca per importare un file audio</b></span>
+            <span><b>{t("home.dropTitle")}</b></span>
             <span className="ext">.mp3 .wav .m4a .flac</span>
           </div>
 
           <div className="vk-con-foot">
-            <span className="ok"><span className="dot"></span>locale · offline · privato</span>
-            <span className="model">{whisperModel || "large-v3-turbo"} · on-device</span>
+            <span className="ok"><span className="dot"></span>{t("home.footLocal")}</span>
+            <span className="model">{whisperModel || "large-v3-turbo"} · {t("home.onDevice")}</span>
           </div>
         </div>
 
@@ -189,17 +191,17 @@ export function ScreenHome({
           {hasBriefing ? (
             <>
               <div className="vk-tabs">
-                {(["briefing.md", "recap.md", "obsidian/"] as const).map((t) => {
-                  const disabled = t !== "briefing.md";
+                {(["briefing.md", "recap.md", "obsidian/"] as const).map((tabId) => {
+                  const disabled = tabId !== "briefing.md";
                   return (
                     <button
-                      key={t}
-                      className={tab === t ? "on" : ""}
+                      key={tabId}
+                      className={tab === tabId ? "on" : ""}
                       disabled={disabled}
-                      title={disabled ? "In arrivo" : undefined}
-                      onClick={() => !disabled && setTab(t)}
+                      title={disabled ? t("home.comingSoon") : undefined}
+                      onClick={() => !disabled && setTab(tabId)}
                     >
-                      {t}
+                      {tabId}
                     </button>
                   );
                 })}
@@ -212,23 +214,23 @@ export function ScreenHome({
               <div className="vk-out-act">
                 <button
                   className="vk-btn-g"
-                  title="Copia il briefing negli appunti: incollalo in ChatGPT, Claude o un'altra AI"
+                  title={t("home.copyBriefingTitle")}
                   onClick={() => void navigator.clipboard?.writeText(lastArtifacts!.briefingMd)}
                 >
                   <VkIcon.arrow />
-                  Copia il briefing per la tua AI
+                  {t("home.copyBriefing")}
                 </button>
               </div>
             </>
           ) : (
             <div className="vk-onb">
-              <div className="vk-onb-kick">La tua configurazione</div>
-              <h2>Pronto al primo briefing</h2>
+              <div className="vk-onb-kick">{t("home.onb.kick")}</div>
+              <h2>{t("home.onb.title")}</h2>
               <p className="vk-onb-lead">
-                Non hai ancora registrato nulla. Tre passi e avrai il tuo primo documento pronto per l&apos;AI.
+                {t("home.onb.lead")}
               </p>
               <div className="vk-onb-steps">
-                {ONB_STEPS.map((s, i) => (
+                {onbSteps.map((s, i) => (
                   <div className="vk-onb-step" key={i}>
                     <span className="n">{i + 1}</span>
                     <div>
@@ -240,7 +242,7 @@ export function ScreenHome({
               </div>
               <div className="vk-onb-assure">
                 <span className="dot"></span>
-                Tutto resta sul tuo PC — l&apos;audio non lascia mai il dispositivo.
+                {t("home.onb.assure")}
               </div>
             </div>
           )}

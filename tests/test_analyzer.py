@@ -148,6 +148,23 @@ def test_verify_runs_second_pass_for_riunione_even_with_purpose():
     assert a.purpose == "scopo raffinato"
 
 
+def test_analyze_passes_markers_to_prompt():
+    """analyze inoltra i markers a build_user: il prompt utente li contiene."""
+    from vokari.analyze import analyzer as az
+    from vokari.analyze.schema import Analysis
+
+    captured = {}
+
+    class FakeProvider:
+        def chat_json(self, system, user, *, json_schema):
+            captured["user"] = user
+            return Analysis(purpose="ok").model_dump()
+
+    az.analyze("testo", mode="solo", provider=FakeProvider(), markers=[{"t_ms": 5_000, "label": "Punto A"}])
+    assert "Punto A" in captured["user"]
+    assert "00:05" in captured["user"]
+
+
 def test_analyze_long_text_warns_and_honors_cancel(monkeypatch):
     """Fallback testi enormi: emette un warning informativo e si ferma se should_cancel()."""
     monkeypatch.setattr(analyzer, "FALLBACK_WORD_THRESHOLD", 3)
@@ -163,3 +180,38 @@ def test_analyze_long_text_warns_and_honors_cancel(monkeypatch):
     )  # annullato subito → nessun chunk riassunto
     assert any(ev == "warning" for ev, _ in events)
     assert p.text_calls == 0  # should_cancel ferma prima di chiamare l'LLM
+
+
+def test_is_sparse_true_when_all_lists_empty():
+    from vokari.analyze.analyzer import is_sparse_analysis
+    from vokari.analyze.schema import Analysis, Meta
+
+    a = Analysis(meta=Meta(type="solo", title="T"))
+    a.purpose = "uno scopo pieno"  # stringhe piene...
+    a.context = "del contesto"
+    # ...ma TUTTE le liste vuote → sparse
+    assert is_sparse_analysis(a) is True
+
+
+def test_is_sparse_false_when_any_list_has_content():
+    from vokari.analyze.analyzer import is_sparse_analysis
+    from vokari.analyze.schema import Analysis
+
+    assert is_sparse_analysis(Analysis(key_ideas=["un'idea"])) is False
+    from vokari.analyze.schema import Decision
+
+    assert is_sparse_analysis(Analysis(decisions=[Decision(decision="fare X")])) is False
+    assert is_sparse_analysis(Analysis(open_questions=["e i costi?"])) is False
+    from vokari.analyze.schema import NextStep
+
+    assert is_sparse_analysis(Analysis(next_steps=[NextStep(task="chiamare Y")])) is False
+    from vokari.analyze.schema import Entity
+
+    assert is_sparse_analysis(Analysis(entities=[Entity(name="VMM")])) is False
+
+
+def test_is_sparse_true_on_default_analysis():
+    from vokari.analyze.analyzer import is_sparse_analysis
+    from vokari.analyze.schema import Analysis
+
+    assert is_sparse_analysis(Analysis()) is True

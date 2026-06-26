@@ -11,6 +11,7 @@ import "@fontsource/jetbrains-mono/latin-500.css";
 import "@fontsource/jetbrains-mono/latin-700.css";
 import "./styles/vokari.css";
 import "./styles/base.css";
+import "./i18n"; // init i18next (Tema 3) prima del render di App/DevHarness
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";

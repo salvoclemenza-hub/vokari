@@ -111,4 +111,17 @@ describe("ScreenArtifacts", () => {
     render(<ScreenArtifacts artifacts={ART} />);
     expect(screen.queryByRole("button", { name: /← Sessioni/i })).not.toBeInTheDocument();
   });
+
+  it("il bottone Rigenera artefatti chiama onReexport quando presente", async () => {
+    const onReexport = vi.fn().mockResolvedValue({ ok: true, path: "/out/x.briefing.md", count: 2, paths: [] });
+    render(<ScreenArtifacts artifacts={ART} onReexport={onReexport} />);
+    const btn = screen.getByRole("button", { name: /Rigenera artefatti/i });
+    fireEvent.click(btn);
+    await waitFor(() => expect(onReexport).toHaveBeenCalled());
+  });
+
+  it("senza onReexport il bottone Rigenera artefatti non compare", () => {
+    render(<ScreenArtifacts artifacts={ART} />);
+    expect(screen.queryByRole("button", { name: /Rigenera artefatti/i })).not.toBeInTheDocument();
+  });
 });

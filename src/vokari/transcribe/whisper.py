@@ -66,6 +66,27 @@ def _load_model(model_name: str):
     )
 
 
+def detect_language(wav_path: str, model_name: str) -> tuple[str, float]:
+    """Rileva la lingua dominante dell'audio (1° segmento ≈30s) via faster-whisper.
+    Modulo-level per essere mockata nei test. Ritorna (codice_lingua, probabilità 0..1).
+    NON solleva mai al chiamante in produzione: il chiamante la avvolge in try/except
+    (un fallimento di detection non deve far perdere la trascrizione)."""
+    from faster_whisper.audio import decode_audio
+
+    model = _load_model(model_name)
+    audio = decode_audio(wav_path, sampling_rate=16000)
+    lang, prob, _all = model.detect_language(audio)
+    return lang, round(float(prob), 3)
+
+
+def _safe_detect_language(wav_path: str, model_name: str) -> tuple[str, float]:
+    """Wrapper tollerante: errore/modello assente → ('', 0.0). Non blocca mai la trascrizione."""
+    try:
+        return detect_language(wav_path, model_name)
+    except Exception:
+        return "", 0.0
+
+
 def _transcribe_audio(audio, model_name: str, language: str) -> list[dict]:
     """Inferenza reale su un audio (path o file-like). Ritorna [{start,end,text}]."""
     model = _load_model(model_name)
@@ -129,6 +150,8 @@ def transcribe_stream(source_path: str, *, model: str, language: str, on_segment
         result["from_cache"] = True
         return result
 
+    detected_language: str = ""
+    language_probability: float = 0.0
     with tempfile.TemporaryDirectory() as td:
         if _is_wav_16k_mono(source_path):
             wav = source_path  # già 16k mono (registrazione): no ri-conversione ffmpeg (R4)
@@ -136,6 +159,7 @@ def transcribe_stream(source_path: str, *, model: str, language: str, on_segment
             wav = str(Path(td) / "norm.wav")
             convert.to_wav_16k_mono(source_path, wav)
         duration = chunking.wav_duration(wav)
+        detected_language, language_probability = _safe_detect_language(wav, model)
         segments: list[dict] = []
 
         def _emit(seg: dict) -> None:
@@ -161,6 +185,8 @@ def transcribe_stream(source_path: str, *, model: str, language: str, on_segment
             "source": source_path,
             "model": model,
             "language": language,
+            "detected_language": detected_language,
+            "language_probability": language_probability,
             "duration_s": round(duration, 2),
             "segments": segments,
             "text": build_text(segments),
@@ -171,6 +197,8 @@ def transcribe_stream(source_path: str, *, model: str, language: str, on_segment
         "source": source_path,
         "model": model,
         "language": language,
+        "detected_language": detected_language,
+        "language_probability": language_probability,
         "duration_s": round(duration, 2),
         "segments": segments,
         "text": build_text(segments),
@@ -187,6 +215,8 @@ def transcribe(source_path: str, *, model: str, language: str) -> dict:
         return json.loads(cache.read_text(encoding="utf-8"))
 
     # Normalizza a WAV 16k mono in un file temporaneo (salta se già 16k mono, R4)
+    detected_language: str = ""
+    language_probability: float = 0.0
     with tempfile.TemporaryDirectory() as td:
         if _is_wav_16k_mono(source_path):
             wav = source_path
@@ -194,6 +224,7 @@ def transcribe(source_path: str, *, model: str, language: str) -> dict:
             wav = str(Path(td) / "norm.wav")
             convert.to_wav_16k_mono(source_path, wav)
         duration = chunking.wav_duration(wav)
+        detected_language, language_probability = _safe_detect_language(wav, model)
 
         segments: list[dict] = []
         if duration <= chunking.CHUNK_DURATION_S:
@@ -207,6 +238,8 @@ def transcribe(source_path: str, *, model: str, language: str) -> dict:
         "source": source_path,
         "model": model,
         "language": language,
+        "detected_language": detected_language,
+        "language_probability": language_probability,
         "duration_s": round(duration, 2),
         "segments": segments,
         "text": build_text(segments),

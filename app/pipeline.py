@@ -8,6 +8,7 @@ from pathlib import Path
 
 from app import debuglog
 from app.jobs import Job, JobStore
+from vokari import i18n
 from vokari import settings as settings_mod
 from vokari.analyze import analyzer as analyzer_mod
 from vokari.analyze import fit as fit_mod
@@ -19,6 +20,7 @@ from vokari.llm.factory import make_provider
 from vokari.render import briefing as briefing_mod
 from vokari.render import obsidian as obsidian_mod
 from vokari.render import recap as recap_mod
+from vokari.transcribe import models as models_mod
 from vokari.transcribe import whisper as whisper_mod
 
 # Throttle per gli emit di anteprima: ~120ms per ridurre flood evaluate_js
@@ -27,6 +29,33 @@ _PREVIEW_THROTTLE_S = 0.12
 # P5: oltre ~30 min, large-v3 (non turbo) su CPU diventa molto lento (~3x turbo) → si suggerisce
 # large-v3-turbo. Metà del tempo perso nel caso ECO 5.0 era proprio large-v3 su 2h11m.
 _LONG_AUDIO_S = 1800
+
+_LANG_MISMATCH_MIN_PROB = 0.66  # sotto: rilevazione troppo incerta per gridare al mismatch
+_LANG_UNCERTAIN_MAX_PROB = 0.5  # sotto: lingua incerta → possibile audio multilingua
+
+
+def _language_warning(configured: str, detected: str, prob: float, lang: str = "it") -> str | None:
+    """Messaggio di avviso (o None) confrontando la lingua configurata con quella rilevata.
+    `lang` = lingua dell'app (app_language) in cui scrivere il messaggio.
+    - configured specifica (non 'auto') e detected diversa con confidenza >= soglia → mismatch.
+    - confidenza molto bassa con lingua rilevata e nessuna lingua specifica configurata →
+      incertezza/multilingua. Se la lingua è specifica ma la confidenza è bassa, la rilevazione
+      è inaffidabile: niente allarme (non sappiamo se è davvero un mismatch).
+    Niente lingua rilevata ('') → None (detection fallita, già tollerata a monte)."""
+    detected = (detected or "").lower()
+    if not detected:
+        return None
+    conf = round(prob * 100)
+    cfg = (configured or "auto").lower()
+    detected_name = i18n.lang_name(detected, lang)
+    if cfg not in ("", "auto") and detected != cfg and prob >= _LANG_MISMATCH_MIN_PROB:
+        return i18n.t("pipeline.lang_mismatch", lang, configured=configured, detected=detected_name, conf=conf)
+    # Incertezza/multilingua solo se NON c'è una lingua specifica configurata diversa da quella
+    # rilevata (in quel caso la confidenza bassa significa solo che non possiamo allarmare, non che
+    # l'audio sia multilingua).
+    if prob < _LANG_UNCERTAIN_MAX_PROB and cfg in ("", "auto"):
+        return i18n.t("pipeline.lang_uncertain", lang, detected=detected_name, conf=conf)
+    return None
 
 
 def _is_slow_large_model(model: str) -> bool:
@@ -56,7 +85,7 @@ def _slug(text: str) -> str:
     return ("-".join(keep.split()) or "sessione").lower()[:60]
 
 
-def _llm_label(s) -> str:
+def llm_label(s) -> str:
     return ("ollama:" + s.ollama_model) if s.brain == "ollama" else s.claude_model
 
 
@@ -76,8 +105,63 @@ def _briefing_out_path(s, job: Job) -> Path:
     return d / name
 
 
+def render_all_artifacts(
+    analysis: Analysis,
+    *,
+    title: str,
+    source_name: str = "",
+    transcription_model: str = "",
+    llm_model: str = "",
+    session_id: str = "",
+    transcript: str = "",
+    da_chiarire: list[str] | None = None,
+    markers: list[dict] | None = None,
+    language: str = "",
+    word_count: int = 0,
+    app_lang: str = "it",
+) -> dict:
+    """Render-only (NESSUNA chiamata LLM): da un Analysis già pronto produce briefing.md,
+    recap.md e le note Obsidian. Fonte unica del rendering riusata da generate_briefing e dal
+    re-export render-only (L02). `markers` = segnalibri utente, `da_chiarire` = marcatori
+    [DA CHIARIRE]. `app_lang` (it|en) localizza intestazioni/etichette degli artefatti; `language`
+    è invece la lingua dell'AUDIO (solo frontmatter)."""
+    da_chiarire = da_chiarire or []
+    markers = markers or []
+    md = briefing_mod.render_briefing(
+        analysis,
+        source=source_name,
+        transcription_model=transcription_model,
+        llm_model=llm_model,
+        session_id=session_id,
+        transcript=transcript,
+        da_chiarire=da_chiarire,
+        language=language,
+        word_count=word_count,
+        markers=markers,
+        app_lang=app_lang,
+    )
+    recap_md = recap_mod.render_recap(
+        analysis, title=title, da_chiarire=da_chiarire, markers=markers, app_lang=app_lang
+    )
+    notes = obsidian_mod.render_obsidian_notes(
+        analysis,
+        session_title=title,
+        session_date=analysis.meta.date,
+        da_chiarire=da_chiarire,
+        markers=markers,
+        app_lang=app_lang,
+    )
+    return {
+        "briefing_md": md,
+        "recap_md": recap_md,
+        "obsidian_notes": notes,
+        "obsidian_note": notes[0].content if notes else "",
+    }
+
+
 def run_processing(job: Job, store: JobStore, *, settings=None, provider=None, emit=None) -> Job:
     s = settings or settings_mod.load()
+    lang = i18n.normalize_lang(s.app_language)  # lingua di TUTTO l'output AI (prompt, artefatti, messaggi)
 
     def _emit(ev: str, payload: dict) -> None:
         if emit:
@@ -96,12 +180,9 @@ def run_processing(job: Job, store: JobStore, *, settings=None, provider=None, e
 
             _already_up = ollama_mod.is_up(s.ollama_endpoint)
             if not _already_up:
-                _emit("warning", {"messages": ["Ollama non era attivo: avvio automatico in corso…"]})
+                _emit("warning", {"messages": [i18n.t("pipeline.ollama_starting", lang)]})
                 if not ollama_mod.ensure_available(s.ollama_endpoint):
-                    msg = (
-                        "Ollama non è raggiungibile e non è stato possibile avviarlo "
-                        "automaticamente. Avvialo manualmente o passa a Claude nelle Impostazioni."
-                    )
+                    msg = i18n.t("pipeline.ollama_unreachable", lang)
                     store.update(job.id, status="error", error=msg)
                     _emit("status", {"jobId": job.id, "status": "error", "error": msg})
                     return store.get(job.id)
@@ -111,6 +192,38 @@ def run_processing(job: Job, store: JobStore, *, settings=None, provider=None, e
         # fallire subito su key Claude mancante che dopo un'ora di trascrizione). Riusato da A1/A2.
         prov = provider or make_provider(s)
 
+        # Preflight modello (audit lacuna #3): se il modello Whisper del job non è in cache,
+        # scaricalo ORA emettendo model_download (la pill globale lo mostra) invece di lasciarlo
+        # scaricare in SILENZIO dentro transcribe_stream con la UI ferma su "transcribing 0%".
+        # È dopo il provider preflight: meglio fallire su key/Ollama che dopo un download di GB.
+        if not models_mod.is_downloaded(job.model):
+            _emit(
+                "model_download",
+                {"name": job.model, "status": "start", "totalBytes": models_mod.expected_bytes(job.model)},
+            )
+            try:
+                models_mod.download_with_progress(
+                    job.model,
+                    on_progress=lambda done, total: _emit(
+                        "model_download",
+                        {
+                            "name": job.model,
+                            "status": "progress",
+                            "pct": round(min(0.99, done / total), 3) if total else 0.0,
+                            "bytesDone": done,
+                            "bytesTotal": total,
+                        },
+                    ),
+                )
+            except Exception as e:
+                debuglog.log_exc("model_preflight_failed", e, jobId=job.id)
+                msg = i18n.t("pipeline.model_dl_failed", lang, model=job.model, err=e)
+                _emit("model_download", {"name": job.model, "status": "error", "error": str(e)})
+                store.update(job.id, status="error", error=msg)
+                _emit("status", {"jobId": job.id, "status": "error", "error": msg})
+                return store.get(job.id)
+            _emit("model_download", {"name": job.model, "status": "done"})
+
         # Preflight (piano timeout-robustezza A1 + P5): se la durata audio è nota PRIMA di
         # trascrivere, avvisa subito — il caso ECO 5.0 ha trascritto 2h18m per poi scoprire che
         # con qwen la trascrizione andava riassunta. probe_duration_s è best-effort (ffprobe).
@@ -119,17 +232,11 @@ def run_processing(job: Job, store: JobStore, *, settings=None, provider=None, e
         if dur_pre and dur_pre > _LONG_AUDIO_S and _is_slow_large_model(job.model):
             _emit(
                 "warning",
-                {
-                    "messages": [
-                        f"Registrazione lunga (~{round(dur_pre / 60)} min) con «{job.model}»: "
-                        "large-v3-turbo è circa 3x più veloce a parità di qualità pratica "
-                        "(puoi cambiarlo in Modelli AI)."
-                    ]
-                },
+                {"messages": [i18n.t("pipeline.long_audio_turbo", lang, minutes=round(dur_pre / 60), model=job.model)]},
             )
         if dur_pre:
             try:
-                pre = fit_mod.estimate_from_duration(dur_pre, prov)
+                pre = fit_mod.estimate_from_duration(dur_pre, prov, lang=lang)
                 if pre.level != "ideal":
                     _emit(
                         "analysis_fit",
@@ -175,10 +282,16 @@ def run_processing(job: Job, store: JobStore, *, settings=None, provider=None, e
         # Audio senza parlato / registrazione di 0s → trascrizione vuota: fermati con un
         # messaggio chiaro invece di generare un briefing vuoto pieno di placeholder (E1).
         if not result["text"].strip():
-            msg = "Trascrizione vuota: nessun parlato rilevato nell'audio."
+            msg = i18n.t("pipeline.empty_transcript", lang)
             store.update(job.id, transcript="", duration_s=result["duration_s"], status="error", error=msg)
             _emit("status", {"jobId": job.id, "status": "error", "error": msg})
             return store.get(job.id)
+
+        lang_msg = _language_warning(
+            job.language, result.get("detected_language", ""), result.get("language_probability", 0.0), lang
+        )
+        if lang_msg:
+            _emit("warning", {"messages": [lang_msg]})
 
         store.update(job.id, transcript=result["text"], duration_s=result["duration_s"], pct=1.0, status="analyzing")
         _emit("status", {"jobId": job.id, "status": "analyzing"})
@@ -189,7 +302,7 @@ def run_processing(job: Job, store: JobStore, *, settings=None, provider=None, e
         # passato a detect_questions. Il warning leggibile NON si ripete se A1 ha già avvisato.
         fit_report = None
         try:
-            report = fit_mod.assess_fit(result["text"], prov)
+            report = fit_mod.assess_fit(result["text"], prov, lang=lang)
             fit_report = report
             if report.level != "ideal":
                 _emit(
@@ -227,8 +340,8 @@ def run_processing(job: Job, store: JobStore, *, settings=None, provider=None, e
             # nella schermata Processing. Il backend non chiama this per ogni step opzionale
             # (es. se verify=False), ma solo quando il step davvero sta per eseguirsi.
             step_labels = {
-                "verify": "Ricontrollo di aver colto tutto",
-                "questions": "Preparo le domande di rifinitura",
+                "verify": i18n.t("pipeline.step_verify", lang),
+                "questions": i18n.t("pipeline.step_questions", lang),
             }
             label = step_labels.get(step, step)
             _emit("analyze_step", {"jobId": job.id, "step": step, "label": label})
@@ -239,12 +352,14 @@ def run_processing(job: Job, store: JobStore, *, settings=None, provider=None, e
             result["text"],
             mode=job.mode,
             context=job.context or None,
+            markers=job.markers,
             verify=True,
             provider=prov,
             emit=_emit,
             should_cancel=_cancelled,
             on_progress=_emit_analysis_preview,
             on_step=_emit_analyze_step,
+            language=lang,
         )
         # P1 (anti-perdita, piano timeout-robustezza): persisti l'analisi — il risultato COSTOSO
         # (minuti su CPU) — PRIMA di detect_questions. detect_questions è uno step OPZIONALE (0
@@ -261,7 +376,7 @@ def run_processing(job: Job, store: JobStore, *, settings=None, provider=None, e
         _emit_analyze_step("questions")
         try:
             questions = interview_mod.detect_questions(
-                analysis, q_transcript, provider=prov, mode=job.mode, should_cancel=_cancelled
+                analysis, q_transcript, provider=prov, mode=job.mode, should_cancel=_cancelled, language=lang
             )
         except Exception as e:
             # Domande non producibili (modello lento/timeout, ma anche questions malformate dall'LLM):
@@ -269,15 +384,7 @@ def run_processing(job: Job, store: JobStore, *, settings=None, provider=None, e
             # deve mai far perdere ore di analisi) ma SEMPRE loggato → un eventuale bug vero resta
             # visibile nel debug log. Salta l'intervista e genera il briefing (ramo `if not questions`).
             debuglog.log_exc("detect_questions_failed", e, jobId=job.id)
-            _emit(
-                "warning",
-                {
-                    "messages": [
-                        "Non sono riuscito a preparare le domande di rifinitura (il modello è "
-                        "lento): salto l'intervista e genero comunque il briefing."
-                    ]
-                },
-            )
+            _emit("warning", {"messages": [i18n.t("pipeline.questions_failed", lang)]})
             questions = []
         # Annulla durante analisi/intervista (chiamate LLM lunghe, sync, non interrompibili):
         # se nel frattempo lo status è diventato 'cancelled', fermati QUI. Senza questo check
@@ -313,6 +420,7 @@ def generate_briefing(
     job: Job, store: JobStore, answers: dict, skipped: list, *, settings=None, provider=None, emit=None
 ) -> Job:
     s = settings or settings_mod.load()
+    lang = i18n.normalize_lang(s.app_language)
 
     def _emit(ev: str, payload: dict) -> None:
         if emit:
@@ -324,7 +432,7 @@ def generate_briefing(
 
     questions = [interview_mod.Question.model_validate(q) for q in job.questions]
     refinement = interview_mod.build_refinement(questions, answers, skipped)
-    markers = interview_mod.da_chiarire_markers(questions, answers, skipped)
+    markers = interview_mod.da_chiarire_markers(questions, answers, skipped, language=lang)
 
     analysis = Analysis.model_validate(job.analysis) if job.analysis else Analysis(meta=Meta())
     if refinement:
@@ -343,8 +451,8 @@ def generate_briefing(
 
         def _emit_analyze_step_refinement(step: str) -> None:
             step_labels = {
-                "verify": "Ricontrollo di aver colto tutto",
-                "questions": "Preparo le domande di rifinitura",
+                "verify": i18n.t("pipeline.step_verify", lang),
+                "questions": i18n.t("pipeline.step_questions", lang),
             }
             label = step_labels.get(step, step)
             _emit("analyze_step", {"jobId": job.id, "step": step, "label": label})
@@ -353,10 +461,12 @@ def generate_briefing(
             job.transcript,
             mode=job.mode,
             context=job.context or None,
+            markers=job.markers,
             provider=prov,
             refinement=refinement,
             on_progress=_emit_analysis_preview_refinement,
             on_step=_emit_analyze_step_refinement,
+            language=lang,
         )
 
     # Annulla durante il refinement (chiamata LLM lunga): non scrivere il briefing né
@@ -374,29 +484,34 @@ def generate_briefing(
     if not analysis.meta.title:
         analysis.meta.title = job.title
 
+    # L10: analisi senza contenuto strutturato (liste vuote) → il briefing sarebbe pieno di
+    # "(nessuna…)". Avvisa (warning non bloccante) invece di consegnarlo in silenzio: la causa
+    # tipica è il modello (contesto troncato/troppo debole) o un audio senza sostanza. Il
+    # briefing si genera comunque (status resta ready) — l'utente decide se rifarlo.
+    if analyzer_mod.is_sparse_analysis(analysis):
+        _emit("warning", {"messages": [i18n.t("pipeline.sparse_analysis", lang)]})
+
     store.update(job.id, status="rendering")
     _emit("status", {"jobId": job.id, "status": "rendering"})
-    md = briefing_mod.render_briefing(
+    rendered = render_all_artifacts(
         analysis,
-        source=Path(job.audio_path).name,
+        title=job.title,
+        source_name=Path(job.audio_path).name,
         transcription_model=job.model,
-        llm_model=_llm_label(s),
+        llm_model=llm_label(s),
         session_id=job.id,
         transcript=job.transcript,
         da_chiarire=markers,
+        markers=job.markers,
         language=("" if job.language in ("", "auto") else job.language),
         word_count=len(job.transcript.split()),
+        app_lang=lang,
     )
+    md = rendered["briefing_md"]
     out_path = _briefing_out_path(s, job)
     out_path.write_text(md, encoding="utf-8")
-
-    # Artefatti aggiuntivi (stesso JSON, nessuna chiamata LLM extra). I marcatori [DA CHIARIRE]
-    # vanno a TUTTI gli output (briefing, recap, nota Obsidian), non solo al briefing.
-    recap_md = recap_mod.render_recap(analysis, title=job.title, da_chiarire=markers)
-    notes = obsidian_mod.render_obsidian_notes(
-        analysis, session_title=job.title, session_date=analysis.meta.date, da_chiarire=markers
-    )
-    obsidian_note = notes[0].content if notes else ""
+    recap_md = rendered["recap_md"]
+    obsidian_note = rendered["obsidian_note"]
 
     job = store.update(
         job.id,

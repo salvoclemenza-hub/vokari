@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { VkIcon } from "../icons";
 import { bridge, type AppInfo, type ResourceUsage } from "../bridge";
 
@@ -8,6 +9,7 @@ function fmtRam(mb: number): string {
 }
 
 export function StatusBar({ appInfo, resources }: { appInfo: AppInfo; resources?: ResourceUsage | null }) {
+  const { t } = useTranslation();
   const stars =
     appInfo.githubStars >= 1000
       ? (appInfo.githubStars / 1000).toFixed(1) + "k"
@@ -16,18 +18,18 @@ export function StatusBar({ appInfo, resources }: { appInfo: AppInfo; resources?
     <div className="vk-status">
       {/* Sinistra: segnale di fiducia (allineato ai mock). */}
       <span className="priv">
-        <span className="dot"></span>100% locale e privata
+        <span className="dot"></span>{t("status.private")}
       </span>
       {/* Destra: credito + consumi reali + stelle. */}
       <div className="vk-status-r">
         <span className="os">
-          sviluppato da Salvatore Clemenza ·{" "}
-          <button className="repo" onClick={() => void bridge.openUrl(REPO_URL)}>repository</button>
+          {t("status.developedBy")} ·{" "}
+          <button className="repo" onClick={() => void bridge.openUrl(REPO_URL)}>{t("status.repository")}</button>
         </span>
         {resources && (
           <>
             <span className="sep">·</span>
-            <span className="res" title="CPU e RAM usati da VOKARI (tutti i processi figli)">
+            <span className="res" title={t("status.resourcesTitle")}>
               CPU {Math.round(resources.cpu)}%
               {resources.tempC !== undefined && ` · ${Math.round(resources.tempC)}°C`}
               {" · "}RAM {fmtRam(resources.ramMb)}
@@ -39,7 +41,7 @@ export function StatusBar({ appInfo, resources }: { appInfo: AppInfo; resources?
             <span className="sep">·</span>
             <span className="it">
               <VkIcon.star />
-              {stars} su GitHub
+              {t("status.onGithub", { stars })}
             </span>
           </>
         )}

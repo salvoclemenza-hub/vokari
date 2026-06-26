@@ -8,6 +8,7 @@ vi.mock("../bridge", () => ({
   bridge: {
     startRecording: vi.fn(() => Promise.resolve({ ok: true })),
     addMarker: vi.fn(() => Promise.resolve({ t_ms: 1000, label: "Segnalibro 1" })),
+    updateMarker: vi.fn(() => Promise.resolve({ t_ms: 1000, label: "Lotto X" })),
     pauseRecording: vi.fn(() => Promise.resolve({ ok: true, paused: true })),
     resumeRecording: vi.fn(() => Promise.resolve({ ok: true, paused: false })),
   },
@@ -103,6 +104,17 @@ describe("ScreenLive", () => {
     fireEvent.click(screen.getByRole("button", { name: /Annulla/i }));
     await Promise.resolve();
     expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it("editando l'etichetta di un segnalibro chiama bridge.updateMarker", async () => {
+    const { bridge } = await import("../bridge");
+    (bridge.updateMarker as ReturnType<typeof vi.fn>).mockClear();
+    render(<ScreenLive source="mic" onStop={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: /^segnalibro/i }));
+    const input = (await screen.findByLabelText(/Etichetta segnalibro 1/i)) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Lotto X" } });
+    fireEvent.blur(input);
+    expect(bridge.updateMarker).toHaveBeenCalledWith(0, "Lotto X");
   });
 });
 

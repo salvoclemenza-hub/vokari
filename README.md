@@ -20,8 +20,9 @@
 - 🧠 **Analysis** — Claude API or local Ollama
 - 📦 **Output** — `briefing.md` + recap + PDF + Obsidian notes
 - 🔐 **Privacy-first** — audio stays on your device; secrets live in the OS keyring ([Privacy policy](PRIVACY.md))
+- 🌍 **Fully bilingual** — switch the whole app between **English** and **Italian**: not just the UI, but the AI-generated output too (briefing, recap, Obsidian notes, messages)
 
-**Status:** v1 — the full flow works and is CI-gated (500+ automated tests: ~380 backend with pytest, ~140 frontend with vitest).
+**Status:** v1 — the full flow works and is CI-gated (650+ automated tests: ~490 backend with pytest, ~170 frontend with vitest).
 
 ---
 
@@ -90,12 +91,14 @@ ffmpeg on Windows: `winget install ffmpeg` (or `choco install ffmpeg`).
 **Processing** — streaming transcription with faster-whisper on CPU (works on AMD too); automatic model download (`large-v3-turbo` by default — fast; switch to `large-v3` for maximum accuracy); hash-based cache, so re-processing the same audio is instant.
 
 **Analysis & artifacts**
-- **`briefing.md`** — YAML frontmatter (date, session ID, type, duration, LLM model), context · decisions · summary · open questions, the raw transcript for ground truth, `[DA CHIARIRE: ...]` markers for skipped interview questions, and a next-steps checklist.
+- **`briefing.md`** — YAML frontmatter (date, session ID, type, duration, LLM model), context · decisions · summary · open questions, the raw transcript for ground truth, `[TO CLARIFY: ...]` markers for skipped interview questions, and a next-steps checklist.
 - **`recap.md`** — human-readable summary · **PDF export** for sharing · **Obsidian export** — atomic notes for your vault.
 
 **Interview (optional)** — auto-detects 3–5 key questions from the transcript; skip or answer; responses are merged back into the briefing.
 
-**Settings** — LLM brain (Claude / Ollama), API key in OS keyring, default session type (*solo* brainstorm / *riunione* meeting), briefing folder, Obsidian vault, Whisper model + download progress, language (auto / IT / EN).
+**App language** — switch the entire app between **English** and **Italian** from Settings; it drives the UI *and* the AI-generated output (the LLM writes in the chosen language regardless of the spoken audio). Separate from the transcription language.
+
+**Settings** — app language (English / Italian), LLM brain (Claude / Ollama), API key in OS keyring, default session type (*solo* brainstorm / *riunione* meeting), briefing folder, Obsidian vault, Whisper model + download progress, transcription language (auto / IT / EN).
 
 **Sessions library** — persistent storage, full-text search, filtering by type.
 

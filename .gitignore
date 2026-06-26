@@ -42,3 +42,9 @@ vokari-rec-*.wav
 
 # screenshot di riferimento/debug (catture finestra reale + mockup) — locali, non versionati
 /screen/
+# baseline eval (output rigenerabile, non versionato)
+evals/interview/baseline.jsonl
+
+# packaging cache e temp files (downloads, build artifacts — never commit)
+packaging/.cache/
+tmp/

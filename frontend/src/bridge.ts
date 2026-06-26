@@ -4,6 +4,25 @@ export interface AppInfo {
   githubStars: number;
 }
 
+/** Una voce del changelog (Tema 2): cosa è cambiato in una versione. `kind` colora/etichetta
+ *  la riga (feature | fix | improvement). I dati arrivano già camelCase da app/changelog.json. */
+export interface ChangelogHighlight {
+  kind: string;
+  text: string;
+}
+export interface ChangelogEntry {
+  version: string;
+  date: string;
+  title: string;
+  highlights: ChangelogHighlight[];
+}
+/** Risposta di get_changelog: versione corrente + voci da mostrare nel popup "Novità"
+ *  (vuote se l'utente ha già visto la versione corrente o in dev/browser). */
+export interface ChangelogResult {
+  currentVersion: string;
+  entries: ChangelogEntry[];
+}
+
 /** Uso risorse dello stack VOKARI, spinto periodicamente dal backend via evento push
  *  `resource_usage`. cpu = % della macchina (0..100) usata da VOKARI + figli (Whisper, ffmpeg)
  *  E dai processi Ollama (serve/app/runner del modello, che girano staccati); ramMb = RAM totale
@@ -26,6 +45,9 @@ export interface VokariSettings {
   transcriptionLanguage: string;
   livePreview: boolean;
   liveModel: string;
+  onboarded: boolean;
+  lastSeenVersion: string;
+  appLanguage: string; // lingua app (it|en): UI + output AI + template
   hasApiKey: boolean;
 }
 
@@ -35,7 +57,8 @@ export const DEFAULT_SETTINGS = {
   brain: "claude", ollamaEndpoint: "http://localhost:11434", ollamaModel: "qwen2.5:7b",
   whisperModel: "large-v3-turbo", claudeModel: "claude-sonnet-4-6",
   briefingDir: "", obsidianVault: "", defaultMode: "solo",
-  transcriptionLanguage: "it", livePreview: true, liveModel: "base", hasApiKey: false,
+  transcriptionLanguage: "it", livePreview: true, liveModel: "base", onboarded: false,
+  lastSeenVersion: "", appLanguage: "it", hasApiKey: false,
 } satisfies VokariSettings;
 
 export interface ModelEntry {
@@ -120,6 +143,7 @@ export interface ExportResult {
 export interface LhmStatus {
   installed: boolean;
   running: boolean;
+  canInstall: boolean;  // l'app sa scaricarlo+avviarlo da sé (Windows non-MSIX); in MSIX guida l'install manuale
 }
 
 export interface OllamaModelEntry {
@@ -171,6 +195,8 @@ export interface OllamaStatus {
 
 interface VokariApi {
   get_app_info(): Promise<AppInfo>;
+  get_changelog(since: string): Promise<ChangelogResult>; // Tema 2: novità della versione
+
   system_specs(): Promise<SystemSpecs>; // MOD2: RAM totale per compatibilità modelli
   disk_usage(): Promise<DiskUsage>; // MOD3: GB usati dai modelli / liberi
   flash_taskbar(): Promise<{ ok: boolean }>;
@@ -178,11 +204,12 @@ interface VokariApi {
   list_sources(): Promise<{ mic: unknown[]; system: unknown[] }>;
   start_recording(source: string, device?: number | string | null): Promise<{ ok: boolean }>;
   add_marker(label: string): Promise<{ t_ms: number; label: string } | { ok: false }>;
+  update_marker(index: number, label: string): Promise<{ t_ms: number; label: string } | { ok: false }>;
   cancel_recording(): Promise<{ ok: boolean }>;
   pause_recording(): Promise<{ ok: boolean; paused?: boolean }>;
   resume_recording(): Promise<{ ok: boolean; paused?: boolean }>;
   stop_recording(mode?: string, title?: string, context?: string): Promise<{ jobId: string; error?: string }>;
-  import_file(path: string, mode?: string, title?: string, context?: string): Promise<{ jobId: string }>;
+  import_file(path: string, mode?: string, title?: string, context?: string): Promise<{ jobId?: string; error?: string }>;
   get_job(jobId: string): Promise<JobView | null>;
   rename_job(jobId: string, title: string): Promise<{ ok: boolean }>;
   get_active_job(): Promise<JobView | null>;
@@ -205,6 +232,7 @@ interface VokariApi {
   // H — Export
   export_pdf(jobId: string): Promise<ExportResult>;
   export_obsidian(jobId: string): Promise<ExportResult>;
+  reexport_session(sessionId: string): Promise<ExportResult>;
   save_text_file(content: string, suggestedName: string): Promise<ExportResult>;
   // E — Settings
   get_settings(): Promise<VokariSettings>;
@@ -338,6 +366,10 @@ export async function getAppInfo(): Promise<AppInfo> {
 
 export const bridge = {
   systemSpecs: () => withApi<SystemSpecs>((a) => a.system_specs(), { ramTotalGb: 0 }),
+  // Tema 2: novità da mostrare dopo un aggiornamento. Fuori da pywebview (browser/test) il
+  // fallback ha entries vuote → nessun popup (gate naturale, niente "dev" mostrato).
+  getChangelog: (since: string) =>
+    withApi<ChangelogResult>((a) => a.get_changelog(since), { currentVersion: "dev", entries: [] }),
   diskUsage: () => withApi<DiskUsage>((a) => a.disk_usage(), { usedByModelsGb: 0, freeGb: 0 }),
   flashTaskbar: () => withApi((a) => a.flash_taskbar(), { ok: false }),
   openUrl: (url: string) => withApi((a) => a.open_url(url), { ok: false }),
@@ -346,13 +378,15 @@ export const bridge = {
     withApi((a) => a.start_recording(source, device ?? null), { ok: false }),
   addMarker: (label: string) =>
     withApi<{ t_ms: number; label: string } | { ok: false }>((a) => a.add_marker(label), { ok: false }),
+  updateMarker: (index: number, label: string) =>
+    withApi<{ t_ms: number; label: string } | { ok: false }>((a) => a.update_marker(index, label), { ok: false }),
   cancelRecording: () => withApi((a) => a.cancel_recording(), { ok: false }),
   pauseRecording: () => withApi((a) => a.pause_recording(), { ok: false }),
   resumeRecording: () => withApi((a) => a.resume_recording(), { ok: false }),
   stopRecording: (mode?: string, title?: string, context?: string) =>
     withApi((a) => a.stop_recording(mode, title, context), { jobId: "" }),
   importFile: (path: string, mode?: string, title?: string, context?: string) =>
-    withApi((a) => a.import_file(path, mode, title, context), { jobId: "" }),
+    withApi<{ jobId?: string; error?: string }>((a) => a.import_file(path, mode, title, context), { jobId: "" }),
   getJob: (jobId: string) => withApi<JobView | null>((a) => a.get_job(jobId), null),
   renameJob: (jobId: string, title: string) => withApi((a) => a.rename_job(jobId, title), { ok: false }),
   getActiveJob: () => withApi<JobView | null>((a) => a.get_active_job(), null),
@@ -380,6 +414,8 @@ export const bridge = {
     withApi<ExportResult>((a) => a.export_pdf(jobId), { ok: false, error: "no api" }),
   exportObsidian: (jobId: string) =>
     withApi<ExportResult>((a) => a.export_obsidian(jobId), { ok: false, error: "no api" }),
+  reexportSession: (sessionId: string) =>
+    withApi<ExportResult>((a) => a.reexport_session(sessionId), { ok: false, error: "no api" }),
   saveTextFile: (content: string, suggestedName: string) =>
     withApi<ExportResult>((a) => a.save_text_file(content, suggestedName), { ok: false, error: "no api" }),
   // E — Settings
@@ -417,7 +453,7 @@ export const bridge = {
   ollamaStop: () => withApi((a) => a.ollama_stop(), { ok: false }),
   ollamaInstall: () => withApi((a) => a.ollama_install(), { ok: false }),
   // I — LibreHardwareMonitor
-  lhmStatus: () => withApi<LhmStatus>((a) => a.lhm_status(), { installed: false, running: false }),
+  lhmStatus: () => withApi<LhmStatus>((a) => a.lhm_status(), { installed: false, running: false, canInstall: false }),
   lhmInstall: () => withApi((a) => a.lhm_install(), { ok: false }),
   lhmStart: () => withApi((a) => a.lhm_start(), { ok: false }),
   lhmStop: () => withApi((a) => a.lhm_stop(), { ok: false }),

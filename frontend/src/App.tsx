@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { bridge, getAppInfo, onVokariEvent, type AppInfo, type AnalysisFit, type Artifacts, type JobView, type ResourceUsage } from "./bridge";
+import { bridge, getAppInfo, onVokariEvent, type AppInfo, type AnalysisFit, type Artifacts, type ChangelogResult, type JobView, type ResourceUsage } from "./bridge";
 import { AppFrame } from "./chrome/AppFrame";
 import { Banner } from "./chrome/Banner";
 import { Toaster } from "./chrome/Toaster";
 import { ConfirmHost } from "./chrome/ConfirmHost";
+import { WhatsNew } from "./chrome/WhatsNew";
 import { toast } from "./toast";
 import { confirmDialog, importDialog } from "./confirm";
 import { initNotifications, notifyComplete } from "./notify";
@@ -17,13 +18,16 @@ import { ScreenSettings } from "./screens/Settings";
 import { ScreenSessions } from "./screens/Sessions";
 import { ScreenModels } from "./screens/Models";
 import { ScreenError } from "./screens/ErrorScreen";
+import { ScreenOnboarding } from "./screens/Onboarding";
+import i18n from "./i18n";
 
 type Screen =
   | "home" | "live" | "processing" | "interview" | "artifacts"
-  | "settings" | "sessions" | "models" | "error";
+  | "settings" | "sessions" | "models" | "error" | "onboarding";
 
 const NAV_FOR: Record<Screen, NavItem> = {
   home: "Registra", live: "Registra", processing: "Registra", interview: "Registra", error: "Registra",
+  onboarding: "Registra",
   artifacts: "Sessioni", sessions: "Sessioni",
   models: "Modelli AI", settings: "Impostazioni",
 };
@@ -58,6 +62,8 @@ export default function App() {
   const [analyzeStep, setAnalyzeStep] = useState<{ step: string; label: string } | null>(null);
   const [analysisPreview, setAnalysisPreview] = useState<string>("");
   const [analysisFit, setAnalysisFit] = useState<AnalysisFit | null>(null);
+  // Tema 2: novità della versione da mostrare dopo un aggiornamento (null = nessun popup).
+  const [changelog, setChangelog] = useState<ChangelogResult | null>(null);
   const jobIdRef = useRef<string>("");
   // Azione di recupero per la schermata errore ("Riprova"): impostata da fail() solo dove
   // un retry è ben definito (start/import/generate). null dove non è ripetibile (es. errore
@@ -79,11 +85,23 @@ export default function App() {
   useEffect(() => {
     getAppInfo().then(setAppInfo);
     bridge.getSettings().then((s) => {
+      void i18n.changeLanguage(s.appLanguage || "it"); // Tema 3: applica la lingua salvata
       setRecMode(s.defaultMode || "solo");
       setRecWhisper(s.whisperModel || "");
       setLivePreviewActive(s.livePreview && s.liveModel !== s.whisperModel);
       // Onboarding: con brain Claude serve la chiave; Ollama no (offline, nessuna chiave).
       setNeedsApiKey(s.brain === "claude" && !s.hasApiKey);
+      // Primo avvio: mostra il wizard di benvenuto finché non è stato completato (B4).
+      // Mutua esclusione col popup "Novità": chi non ha ancora onboardato vede solo il wizard.
+      if (!s.onboarded) {
+        setScreen("onboarding");
+      } else {
+        // Tema 2: dopo un aggiornamento, mostra le novità non ancora viste. Il backend filtra
+        // per versione (entries vuote = già viste o build dev/browser) → niente popup in quei casi.
+        void bridge.getChangelog(s.lastSeenVersion).then((cl) => {
+          if (cl.entries.length > 0) setChangelog(cl);
+        });
+      }
     });
     // Onboarding: serve almeno un modello Whisper scaricato/attivo per trascrivere.
     bridge.listModels().then((ms) => {
@@ -213,6 +231,7 @@ export default function App() {
       home: "Registra", live: "Registrazione", processing: "Elaborazione",
       interview: "Rifinitura", artifacts: artifacts?.title || "Sessione",
       settings: "Impostazioni", sessions: "Sessioni", models: "Modelli AI", error: "Errore",
+      onboarding: "Benvenuto",
     };
     document.title = `VOKARI — ${names[screen]}`;
   }, [screen, artifacts]);
@@ -238,6 +257,24 @@ export default function App() {
       setLastArtifacts(art);
       setScreen("artifacts");
     }
+  }
+
+  // Completamento (o salto) del wizard di primo avvio: segna onboarded=true, ricarica i flag
+  // di configurazione (il wizard può aver impostato chiave/brain/modello) e va alla Home.
+  async function finishOnboarding() {
+    try {
+      // Segna anche la versione corrente come "novità già viste": chi completa ora l'onboarding
+      // su questa versione non deve rivedere il changelog di ciò che ha appena installato.
+      await bridge.saveSettings({ onboarded: true, lastSeenVersion: appInfo.version });
+      const s = await bridge.getSettings();
+      setRecWhisper(s.whisperModel || "");
+      setNeedsApiKey(s.brain === "claude" && !s.hasApiKey);
+      const ms = await bridge.listModels();
+      setNeedsModel(ms.length > 0 && !ms.some((m) => m.state === "active" || m.state === "downloaded"));
+    } catch {
+      /* non bloccare l'uscita dal wizard su un errore di salvataggio */
+    }
+    setScreen("home");
   }
 
   async function handleStart(source: "mic" | "system" | "both", context?: string) {
@@ -274,12 +311,14 @@ export default function App() {
       setWarnings([]);
       setAnalysisFit(null);             // nuovo job → niente badge idoneità stantio del precedente
       initNotifications();              // operazione lunga: prepara il richiamo a fine elaborazione
-      const { jobId } = await bridge.importFile(path, res.mode, undefined, res.context || undefined);
-      jobIdRef.current = jobId;
+      const imp = await bridge.importFile(path, res.mode, undefined, res.context || undefined);
+      if (imp.error) { toast(imp.error, "error"); return; }   // gate backend: file mancante/vuoto
+      if (!imp.jobId) return;
+      jobIdRef.current = imp.jobId;
       // Pulisce il job precedente prima di navigare: evita che partialText della sessione
       // precedente venga mostrato nella console di Processing (il componente riceve il
       // vecchio job?.partialText se non viene resettato qui, come handleStop fa con il placeholder).
-      const fresh = await bridge.getJob(jobId);
+      const fresh = await bridge.getJob(imp.jobId);
       setJob(fresh);
       setScreen("processing");
     } catch (e) {
@@ -413,12 +452,21 @@ export default function App() {
                                 onExportPdf={() => bridge.exportPdf(jobIdRef.current)}
                                 onExportObsidian={() => bridge.exportObsidian(jobIdRef.current)}
                                 onDownload={(name, content) => bridge.saveTextFile(content, name)}
+                                onReexport={async () => {
+                                  const r = await bridge.reexportSession(jobIdRef.current);
+                                  if (r.ok) {
+                                    const art = await bridge.openSession(jobIdRef.current);
+                                    if (art) setArtifacts(art);
+                                  }
+                                  return r;
+                                }}
                                 onBack={() => setScreen("sessions")} />,
     settings: <ScreenSettings onOpenModels={() => setScreen("models")} />,
     sessions: <ScreenSessions
                 onOpen={(id) => void openSession(id)}
                 onImport={() => void handleImport()} />,
     models: <ScreenModels />,
+    onboarding: <ScreenOnboarding onDone={() => void finishOnboarding()} />,
     error: <ScreenError message={errorMsg} warnings={warnings}
                         onRetry={retryRef.current ?? undefined}
                         onOpenSettings={() => { setWarnings([]); setScreen("settings"); }}
@@ -428,7 +476,8 @@ export default function App() {
   return (
     <>
     <AppFrame active={NAV_FOR[screen]} screen={screen} onNavigate={(n) => void handleNavigate(n)}
-              onOpenSession={(id) => void openSession(id)} appInfo={appInfo} resources={resources}>
+              onOpenSession={(id) => void openSession(id)} appInfo={appInfo} resources={resources}
+              bare={screen === "onboarding"}>
       {warnings.length > 0 && screen !== "error" && (
         <Banner kind="warn" onClose={() => setWarnings([])}>
           ⚠ {warnings.join(" · ")}
@@ -497,6 +546,17 @@ export default function App() {
     )}
     <Toaster />
     <ConfirmHost />
+    {changelog && (
+      <WhatsNew
+        entries={changelog.entries}
+        currentVersion={changelog.currentVersion}
+        onClose={() => {
+          // Memorizza la versione vista così il popup non riappare al prossimo avvio.
+          void bridge.saveSettings({ lastSeenVersion: changelog.currentVersion });
+          setChangelog(null);
+        }}
+      />
+    )}
     </>
   );
 }

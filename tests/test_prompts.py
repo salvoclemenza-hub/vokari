@@ -75,3 +75,15 @@ def test_build_user_asks_for_purpose_first():
     u = prompts.build_user("t", mode="riunione")
     assert "purpose" in u  # il campo purpose è nella shape JSON
     assert "SCOPO" in u.upper()  # istruzione esplicita a individuare lo scopo
+
+
+def test_user_injects_markers():
+    u = prompts.build_user("t", mode="solo", markers=[{"t_ms": 90_000, "label": "Lotto X"}])
+    assert "SEGNALIBRI" in u.upper()
+    assert "Lotto X" in u
+    assert "01:30" in u  # 90 s formattato
+
+
+def test_user_no_markers_block_when_empty():
+    u = prompts.build_user("t", mode="solo")
+    assert "SEGNALIBRI" not in u.upper()

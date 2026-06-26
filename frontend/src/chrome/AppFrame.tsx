@@ -11,6 +11,7 @@ export function AppFrame({
   onOpenSession,
   appInfo,
   resources,
+  bare = false,
   children,
 }: {
   active: NavItem;
@@ -19,16 +20,19 @@ export function AppFrame({
   onOpenSession?: (id: string) => void;
   appInfo: AppInfo;
   resources?: ResourceUsage | null;
+  // `bare`: chrome minimale (solo titlebar + main, niente sidebar/status bar). Usato
+  // dall'onboarding per un'esperienza immersiva e focalizzata al primo avvio.
+  bare?: boolean;
   children: ReactNode;
 }) {
   return (
     <div className="vk-screen-app">
-      <Titlebar appInfo={appInfo} screen={screen} onNavigate={onNavigate} />
+      <Titlebar appInfo={appInfo} screen={screen} onNavigate={onNavigate} bare={bare} />
       <div className="vk-shell">
-        <Sidebar active={active} onNavigate={onNavigate} onOpenSession={onOpenSession} />
+        {!bare && <Sidebar active={active} onNavigate={onNavigate} onOpenSession={onOpenSession} />}
         <main className="vk-main">{children}</main>
       </div>
-      <StatusBar appInfo={appInfo} resources={resources} />
+      {!bare && <StatusBar appInfo={appInfo} resources={resources} />}
     </div>
   );
 }

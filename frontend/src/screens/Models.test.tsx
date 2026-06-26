@@ -17,6 +17,9 @@ const FAKE_SETTINGS: VokariSettings = {
   transcriptionLanguage: "auto",
   livePreview: true,
   liveModel: "base",
+  onboarded: true,
+  lastSeenVersion: "",
+  appLanguage: "it",
   hasApiKey: false,
 };
 
@@ -124,6 +127,20 @@ describe("ScreenModels", () => {
       expect(screen.getByText("Attivo")).toBeInTheDocument();
       expect(screen.getByText("Scaricato")).toBeInTheDocument();
     });
+  });
+
+  it("B1: il modello selezionato ma non scaricato mostra 'Selezionato · da scaricare', non 'Attivo'", async () => {
+    // Scenario PC pulito (caso reale collega): large-v3-turbo è il whisperModel scelto ma
+    // NON è ancora scaricato (state=available). Prima compariva "Attivo" + Download insieme.
+    mockListModels.mockResolvedValue([
+      { name: "large-v3-turbo", sizeLabel: "~1.6 GB", speed: 4, quality: 4, languages: "IT·EN·+90",
+        description: "Consigliato", recommended: true, state: "available" },
+    ]);
+    render(<ScreenModels />);
+    await waitFor(() => expect(screen.getByText("large-v3-turbo")).toBeInTheDocument());
+    expect(screen.queryByText("Attivo")).not.toBeInTheDocument();
+    expect(screen.getByText(/Selezionato · da scaricare/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Download/i })).toBeInTheDocument();
   });
 
   it("mostra bottoni Download per i modelli disponibili (state=available)", async () => {

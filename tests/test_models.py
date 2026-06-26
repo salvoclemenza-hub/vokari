@@ -81,3 +81,49 @@ def test_state_active_downloaded_available(monkeypatch):
     assert models.state("large-v3-turbo", s) == "active"  # default + scaricato
     assert models.state("small", s) == "downloaded"
     assert models.state("large-v3", s) == "available"
+
+
+def test_expected_bytes_parses_gb():
+    from vokari.transcribe import models
+
+    assert models.expected_bytes("large-v3-turbo") == 1_600_000_000  # "~1.6 GB"
+    assert models.expected_bytes("small") == 500_000_000  # "~0.5 GB"
+    assert models.expected_bytes("inesistente") == 0
+
+
+def test_download_with_progress_emits_and_returns_path(monkeypatch, tmp_path):
+    """download_with_progress chiama download() e invoca on_progress almeno una volta
+    mentre la dir modelli cresce. Poll accelerato per il test."""
+    import time
+
+    from vokari.transcribe import models
+
+    monkeypatch.setattr(models, "_DL_POLL_S", 0.02)
+    monkeypatch.setattr(models, "_cache_dir", lambda: str(tmp_path))
+
+    def fake_download(name):
+        (tmp_path / "blob.bin").write_bytes(b"\0" * 1_000_000)  # fa crescere la dir
+        time.sleep(0.1)  # tiene occupato il monitor
+        return "/fake/path"
+
+    monkeypatch.setattr(models, "download", fake_download)
+
+    seen: list[tuple[int, int]] = []
+    out = models.download_with_progress("small", on_progress=lambda d, t: seen.append((d, t)))
+
+    assert out == "/fake/path"
+    assert seen, "on_progress mai invocato"
+
+
+def test_download_with_progress_reraises_and_stops_monitor(monkeypatch, tmp_path):
+    """Se download() lancia, download_with_progress rilancia (e non lascia il monitor appeso)."""
+    from vokari.transcribe import models
+
+    monkeypatch.setattr(models, "_DL_POLL_S", 0.02)
+    monkeypatch.setattr(models, "_cache_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(models, "download", lambda name: (_ for _ in ()).throw(RuntimeError("rete")))
+
+    import pytest
+
+    with pytest.raises(RuntimeError, match="rete"):
+        models.download_with_progress("small", on_progress=lambda d, t: None)

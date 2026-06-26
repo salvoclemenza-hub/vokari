@@ -22,7 +22,7 @@ vi.mock("./bridge", async (importOriginal) => {
       getSettings: vi.fn().mockResolvedValue({
         brain: "claude", ollamaEndpoint: "", ollamaModel: "", whisperModel: "large-v3-turbo",
         claudeModel: "claude-opus-4-8", briefingDir: "", obsidianVault: "",
-        defaultMode: "solo", transcriptionLanguage: "auto", livePreview: true, liveModel: "base", hasApiKey: false,
+        defaultMode: "solo", transcriptionLanguage: "auto", livePreview: true, liveModel: "base", onboarded: true, lastSeenVersion: "", appLanguage: "it", hasApiKey: false,
       }),
       resumeJob: vi.fn().mockResolvedValue(null),
       getJob: vi.fn().mockResolvedValue(null),
@@ -38,6 +38,13 @@ vi.mock("./bridge", async (importOriginal) => {
       importFile: vi.fn().mockResolvedValue({ jobId: "job-import" }),
       listSessions: vi.fn().mockResolvedValue([]),
       listModels: vi.fn().mockResolvedValue([]),
+      saveSettings: vi.fn().mockResolvedValue({
+        brain: "claude", ollamaEndpoint: "", ollamaModel: "", whisperModel: "large-v3-turbo",
+        claudeModel: "claude-opus-4-8", briefingDir: "", obsidianVault: "",
+        defaultMode: "solo", transcriptionLanguage: "auto", livePreview: true, liveModel: "base", onboarded: true, lastSeenVersion: "", appLanguage: "it", hasApiKey: false,
+      }),
+      ollamaStatus: vi.fn().mockResolvedValue({ installed: false, running: false, canInstall: false }),
+      getChangelog: vi.fn().mockResolvedValue({ currentVersion: "test", entries: [] }),
     },
   };
 });
@@ -53,16 +60,71 @@ async function goToLive() {
 }
 
 describe("App — macchina a stati", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     delete (window as unknown as { pywebview?: unknown }).pywebview;
     delete (window as unknown as { __vokari_emit?: unknown }).__vokari_emit;
     delete (window as unknown as { __vokari_handlers?: unknown }).__vokari_handlers;
     vi.clearAllMocks();
+    // clearAllMocks azzera le chiamate ma NON le implementazioni mockResolvedValue → ripristina
+    // il default (onboarded:true = niente wizard) così un test che imposta onboarded:false non
+    // "contagia" i successivi. I test che vogliono altri settings lo ri-sovrascrivono nel corpo.
+    const { bridge } = await import("./bridge");
+    (bridge.getSettings as ReturnType<typeof vi.fn>).mockResolvedValue({
+      brain: "claude", ollamaEndpoint: "", ollamaModel: "", whisperModel: "large-v3-turbo",
+      claudeModel: "claude-opus-4-8", briefingDir: "", obsidianVault: "",
+      defaultMode: "solo", transcriptionLanguage: "auto", livePreview: true, liveModel: "base", onboarded: true, lastSeenVersion: "", appLanguage: "it", hasApiKey: false,
+    });
   });
 
   it("mount senza job attivo → mostra schermata Home", async () => {
     render(<App />);
     expect(await screen.findByText(/Registra\. Trascrivi\. Pensa meglio/)).toBeInTheDocument();
+  });
+
+  it("primo avvio (onboarded:false) → mostra il wizard; 'Salta' → Home e segna onboarded", async () => {
+    const { bridge } = await import("./bridge");
+    (bridge.getSettings as ReturnType<typeof vi.fn>).mockResolvedValue({
+      brain: "claude", ollamaEndpoint: "", ollamaModel: "", whisperModel: "large-v3-turbo",
+      claudeModel: "claude-opus-4-8", briefingDir: "", obsidianVault: "",
+      defaultMode: "solo", transcriptionLanguage: "auto", livePreview: true, liveModel: "base", onboarded: false, lastSeenVersion: "", appLanguage: "it", hasApiKey: false,
+    });
+    render(<App />);
+    // il gate del primo avvio mostra il wizard (passo Benvenuto) invece della Home
+    expect(await screen.findByText(/Benvenuto in VOKARI/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Salta" }));
+    // completando l'onboarding segna anche la versione corrente come novità già viste
+    await waitFor(() => expect(bridge.saveSettings).toHaveBeenCalledWith({ onboarded: true, lastSeenVersion: "test" }));
+    expect(await screen.findByText(/Registra\. Trascrivi\. Pensa meglio/)).toBeInTheDocument();
+    // mutua esclusione: durante l'onboarding il popup "Novità" non viene nemmeno interrogato
+    expect(bridge.getChangelog).not.toHaveBeenCalled();
+  });
+
+  it("aggiornamento con novità non viste → popup 'Novità'; chiudendolo segna lastSeenVersion (Tema 2)", async () => {
+    const { bridge } = await import("./bridge");
+    (bridge.getSettings as ReturnType<typeof vi.fn>).mockResolvedValue({
+      brain: "claude", ollamaEndpoint: "", ollamaModel: "", whisperModel: "large-v3-turbo",
+      claudeModel: "claude-opus-4-8", briefingDir: "", obsidianVault: "",
+      defaultMode: "solo", transcriptionLanguage: "auto", livePreview: true, liveModel: "base",
+      onboarded: true, lastSeenVersion: "0.1.1", appLanguage: "it", hasApiKey: false,
+    });
+    (bridge.getChangelog as ReturnType<typeof vi.fn>).mockResolvedValue({
+      currentVersion: "0.1.2",
+      entries: [
+        {
+          version: "0.1.2", date: "2026-06-25", title: "Benvenuto guidato",
+          highlights: [{ kind: "feature", text: "Wizard di benvenuto." }],
+        },
+      ],
+    });
+
+    render(<App />);
+    expect(await screen.findByText(/Novità di VOKARI/)).toBeInTheDocument();
+    expect(await screen.findByText("Benvenuto guidato")).toBeInTheDocument();
+    // interrogato con l'ultima versione vista
+    expect(bridge.getChangelog).toHaveBeenCalledWith("0.1.1");
+    // chiudendo memorizza la versione corrente così non riappare al prossimo avvio
+    await userEvent.click(screen.getByRole("button", { name: /Ho capito/ }));
+    await waitFor(() => expect(bridge.saveSettings).toHaveBeenCalledWith({ lastSeenVersion: "0.1.2" }));
   });
 
   it("click su Avvia registrazione → mostra schermata Live (REGISTRAZIONE)", async () => {
@@ -76,7 +138,7 @@ describe("App — macchina a stati", () => {
     (bridge.getSettings as ReturnType<typeof vi.fn>).mockResolvedValue({
       brain: "claude", ollamaEndpoint: "", ollamaModel: "", whisperModel: "large-v3-turbo",
       claudeModel: "claude-opus-4-8", briefingDir: "", obsidianVault: "",
-      defaultMode: "riunione", transcriptionLanguage: "auto", livePreview: true, liveModel: "base", hasApiKey: false,
+      defaultMode: "riunione", transcriptionLanguage: "auto", livePreview: true, liveModel: "base", onboarded: true, lastSeenVersion: "", appLanguage: "it", hasApiKey: false,
     });
 
     render(<App />);
@@ -283,7 +345,7 @@ describe("App — macchina a stati", () => {
     (bridge.getSettings as ReturnType<typeof vi.fn>).mockResolvedValue({
       brain: "claude", ollamaEndpoint: "", ollamaModel: "", whisperModel: "large-v3-turbo",
       claudeModel: "claude-opus-4-8", briefingDir: "", obsidianVault: "",
-      defaultMode: "solo", transcriptionLanguage: "auto", livePreview: true, liveModel: "base", hasApiKey: false,
+      defaultMode: "solo", transcriptionLanguage: "auto", livePreview: true, liveModel: "base", onboarded: true, lastSeenVersion: "", appLanguage: "it", hasApiKey: false,
     });
     (bridge.browseAudioFile as ReturnType<typeof vi.fn>).mockResolvedValue({ path: "C:/tmp/183.m4a" });
     (bridge.probeAudio as ReturnType<typeof vi.fn>).mockResolvedValue({ durationS: 1661, sizeBytes: 24_300_000 });
@@ -309,5 +371,23 @@ describe("App — macchina a stati", () => {
     // diamo modo alle promise di risolvere; importFile non deve essere chiamato
     await new Promise((r) => setTimeout(r, 0));
     expect(bridge.importFile).not.toHaveBeenCalled();
+  });
+
+  it("import: file rifiutato dal gate (error) → toast, niente navigazione a Processing", async () => {
+    const { bridge } = await import("./bridge");
+    (bridge.browseAudioFile as ReturnType<typeof vi.fn>).mockResolvedValue({ path: "C:/tmp/sparito.m4a" });
+    (bridge.probeAudio as ReturnType<typeof vi.fn>).mockResolvedValue({ durationS: 0, sizeBytes: 0 });
+    (importDialog as ReturnType<typeof vi.fn>).mockResolvedValue({ mode: "solo", context: "" });
+    (bridge.importFile as ReturnType<typeof vi.fn>).mockResolvedValue({
+      error: "File non trovato: potrebbe essere stato spostato o eliminato.",
+    });
+
+    render(<App />);
+    await userEvent.click(await screen.findByRole("button", { name: /Trascina o clicca/i }));
+
+    // il messaggio compare come toast
+    expect(await screen.findByText(/File non trovato/)).toBeInTheDocument();
+    // NON siamo finiti in Processing
+    expect(screen.queryByText("Annulla elaborazione")).not.toBeInTheDocument();
   });
 });

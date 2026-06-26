@@ -9,6 +9,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from vokari import i18n
+from vokari import markers as markers_mod
 from vokari.analyze.schema import Analysis
 
 
@@ -50,11 +52,17 @@ def _frontmatter(d: dict) -> str:
 
 
 def render_obsidian_notes(
-    analysis: Analysis, *, session_title: str = "", session_date: str = "", da_chiarire: list[str] | None = None
+    analysis: Analysis,
+    *,
+    session_title: str = "",
+    session_date: str = "",
+    da_chiarire: list[str] | None = None,
+    markers: list[dict] | None = None,
+    app_lang: str = "it",
 ) -> list[ObsidianNote]:
     a = analysis
     date = session_date or a.meta.date or "0000-00-00"
-    title = session_title or a.meta.title or "Sessione"
+    title = session_title or a.meta.title or i18n.t("common.session_fallback", app_lang)
     notes: list[ObsidianNote] = []
 
     # 1) Nota-sessione (ancora)
@@ -67,16 +75,16 @@ def render_obsidian_notes(
                 "created": date,
                 "type": "meeting" if a.meta.type == "meeting" else "permanent",
                 "status": "seedling",
-                "tags": ["sessione"],
+                "tags": [i18n.t("obs.tag_session", app_lang)],
             }
         ),
         "",
         f"# {title}",
         "",
         # Idea centrale = SCOPO (purpose, comprensione-prima); fallback al contesto.
-        "**Idea centrale:** " + (a.purpose or a.context or "—"),
+        f"**{i18n.t('obs.central_idea', app_lang)}** " + (a.purpose or a.context or "—"),
         "",
-        "## Punti chiave",
+        f"## {i18n.t('obs.key_points_h', app_lang)}",
         *([f"- {i}" for i in a.key_ideas] or ["- —"]),
     ]
     # Wikilink alle note-decisione atomiche (stesso nome-file generato sotto): l'ancora
@@ -87,12 +95,15 @@ def render_obsidian_notes(
         if d.title.strip() or d.decision.strip()
     ]
     if dec_links:
-        body += ["", "## Decisioni", *dec_links]
+        body += ["", f"## {i18n.t('obs.decisions_h', app_lang)}", *dec_links]
     if entity_links:
-        body += ["", "## Collegamenti", "- " + " · ".join(entity_links)]
+        body += ["", f"## {i18n.t('obs.links_h', app_lang)}", "- " + " · ".join(entity_links)]
     if da_chiarire:
-        body += ["", "## Punti da chiarire"]
+        body += ["", f"## {i18n.t('common.to_clarify_h', app_lang)}"]
         body += [f"- ⚠ {punto}" for punto in da_chiarire]
+    mk_lines = markers_mod.marker_lines(markers)
+    if mk_lines:
+        body += ["", f"## {i18n.t('common.bookmarks_h', app_lang)}", *mk_lines]
     session_note = ObsidianNote(f"{date} – {_safe(title)}.md", "\n".join(body).rstrip() + "\n")
     notes.append(session_note)
 
@@ -112,16 +123,16 @@ def render_obsidian_notes(
                         "type": "decision",
                         "status": "seedling",
                         "source": f'"[[{date} – {_safe(title)}]]"',
-                        "tags": ["decisione"],
+                        "tags": [i18n.t("obs.tag_decision", app_lang)],
                     }
                 ),
                 "",
                 f"# {d.title or _short(d.decision)}",
                 "",
-                "**Decisione:** " + d.decision,
-                *(["**Motivazione:** " + d.rationale] if d.rationale else []),
+                f"**{i18n.t('obs.decision_label', app_lang)}** " + d.decision,
+                *([f"**{i18n.t('obs.rationale_label', app_lang)}** " + d.rationale] if d.rationale else []),
                 "",
-                f"**Fonte:** [[{date} – {_safe(title)}]]",
+                f"**{i18n.t('obs.source_label', app_lang)}** [[{date} – {_safe(title)}]]",
             ]
         )
         notes.append(ObsidianNote(f"{date} – {claim}.md", content.rstrip() + "\n"))

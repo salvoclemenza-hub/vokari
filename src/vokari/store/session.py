@@ -22,6 +22,12 @@ class Session:
     refinement: dict | None = None  # {answers: {...}, skipped: [...]}
     artifacts: dict | None = None  # {briefing_md, recap_md, obsidian_note}
     word_count: int | None = None
+    # L02: l'Analysis JSON (model_dump di vokari.analyze.schema.Analysis) e i marcatori
+    # [DA CHIARIRE] persistiti → abilitano il re-export render-only degli artefatti dal
+    # risultato LLM salvato, anche dopo che il Job è stato abbandonato/cancellato.
+    analysis: dict | None = None
+    da_chiarire: list[str] = field(default_factory=list)
+    briefing_path: str = ""  # L02: percorso dell'ultimo briefing.md scritto (re-export/generazione)
 
     @classmethod
     def new(

@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { VkIcon } from "../icons";
 import { toast } from "../toast";
 import { MarkdownDoc } from "./MarkdownDoc";
@@ -11,14 +12,8 @@ function fmtDur(s: number): string {
 // Tempo di lettura stimato dal contenuto del tab (escluso il frontmatter YAML),
 // ~200 parole/min. Orienta l'utente prima di aprire il documento.
 function countWords(s: string): number {
-  const t = s.replace(/^---[\s\S]*?---/, "").trim();
-  return t ? t.split(/\s+/).filter(Boolean).length : 0;
-}
-function readTime(words: number): string {
-  if (!words) return "vuoto";
-  const secs = Math.round((words / 200) * 60);
-  const label = secs < 60 ? `~${Math.max(5, secs)} sec` : `~${Math.round(secs / 60)} min`;
-  return `${label} · ${words} parole`;
+  const body = s.replace(/^---[\s\S]*?---/, "").trim();
+  return body ? body.split(/\s+/).filter(Boolean).length : 0;
 }
 
 // Tag della nota Obsidian, letti dal frontmatter reale: supporta sia l'array inline
@@ -73,7 +68,7 @@ const IcoBars = () => (
 );
 
 export function ScreenArtifacts({
-  artifacts, onCopy, onOpenFolder, onExportPdf, onExportObsidian, onDownload, onBack,
+  artifacts, onCopy, onOpenFolder, onExportPdf, onExportObsidian, onDownload, onReexport, onBack,
 }: {
   artifacts?: Artifacts;
   onCopy?: (md: string) => void;
@@ -81,10 +76,19 @@ export function ScreenArtifacts({
   onExportPdf?: () => Promise<ExportResult> | void;
   onExportObsidian?: () => Promise<ExportResult> | void;
   onDownload?: (suggestedName: string, content: string) => Promise<ExportResult> | void;
+  onReexport?: () => Promise<ExportResult> | void;
   onBack?: () => void;
 }) {
+  const { t } = useTranslation();
+  // Tempo di lettura tradotto (~200 parole/min). Locale alla schermata per usare t().
+  const readTimeLabel = (words: number): string => {
+    if (!words) return t("art.empty");
+    const secs = Math.round((words / 200) * 60);
+    const label = secs < 60 ? t("art.readSec", { n: Math.max(5, secs) }) : t("art.readMin", { n: Math.round(secs / 60) });
+    return t("art.readTime", { label, words });
+  };
   const [tab, setTab] = useState<"briefing" | "recap" | "obsidian" | "transcript">("briefing");
-  const [busy, setBusy] = useState<"pdf" | "obsidian" | null>(null);
+  const [busy, setBusy] = useState<"pdf" | "obsidian" | "reexport" | null>(null);
   const [openInfo, setOpenInfo] = useState<string | null>(null);
   const a = artifacts;
   const briefing = a?.briefingMd ?? "";
@@ -141,14 +145,14 @@ export function ScreenArtifacts({
     try {
       const res = await onExportPdf();
       if (res && typeof res === "object") {
-        if (res.ok) toast(`PDF del recap salvato: ${res.path ?? ""}`, "success");
-        else if (res.error) toast(`PDF non generato: ${res.error}`, "error");
+        if (res.ok) toast(t("art.toastPdfSaved", { path: res.path ?? "" }), "success");
+        else if (res.error) toast(t("art.toastPdfFail", { error: res.error }), "error");
         // res.cancelled (utente ha chiuso il dialogo) → nessun toast
       } else {
-        toast("PDF del recap generato.", "success");
+        toast(t("art.toastPdfDone"), "success");
       }
     } catch (e) {
-      toast(`PDF non generato: ${String(e)}`, "error");
+      toast(t("art.toastPdfFail", { error: String(e) }), "error");
     } finally {
       setBusy(null);
     }
@@ -160,13 +164,33 @@ export function ScreenArtifacts({
     try {
       const res = await onExportObsidian();
       if (res && typeof res === "object") {
-        if (res.ok) toast(`Esportate ${res.count ?? 0} note su Obsidian.`, "success");
-        else if (res.error) toast(`Esportazione Obsidian non riuscita: ${res.error}`, "error");
+        if (res.ok) toast(t("art.toastObsExported", { count: res.count ?? 0 }), "success");
+        else if (res.error) toast(t("art.toastObsFail", { error: res.error }), "error");
       } else {
-        toast("Esportato su Obsidian.", "success");
+        toast(t("art.toastObsDone"), "success");
       }
     } catch (e) {
-      toast(`Esportazione Obsidian non riuscita: ${String(e)}`, "error");
+      toast(t("art.toastObsFail", { error: String(e) }), "error");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleReexport() {
+    if (!onReexport) return;
+    setBusy("reexport");
+    try {
+      const res = await onReexport();
+      if (res && typeof res === "object") {
+        if (res.ok) {
+          const vaultBit = res.count ? t("art.reexportVaultBit", { count: res.count }) : "";
+          toast(t("art.toastReexportOk", { vault: vaultBit }), "success");
+        } else if (res.error) toast(t("art.toastReexportFail", { error: res.error }), "error");
+      } else {
+        toast(t("art.toastReexportDone"), "success");
+      }
+    } catch (e) {
+      toast(t("art.toastReexportFail", { error: String(e) }), "error");
     } finally {
       setBusy(null);
     }
@@ -177,11 +201,11 @@ export function ScreenArtifacts({
     try {
       const res = await onDownload(suggestedName, content);
       if (res && typeof res === "object") {
-        if (res.ok) toast(`Salvato: ${res.path ?? suggestedName}`, "success");
-        else if (res.error) toast(`Salvataggio non riuscito: ${res.error}`, "error");
+        if (res.ok) toast(t("art.toastSaved", { path: res.path ?? suggestedName }), "success");
+        else if (res.error) toast(t("art.toastSaveFail", { error: res.error }), "error");
       }
     } catch (e) {
-      toast(`Salvataggio non riuscito: ${String(e)}`, "error");
+      toast(t("art.toastSaveFail", { error: String(e) }), "error");
     }
   }
 
@@ -192,16 +216,16 @@ export function ScreenArtifacts({
           {onBack && (
             <button className="vk-back" onClick={onBack}
                     style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "none", border: "none", color: "var(--mut)", cursor: "pointer", font: "inherit", padding: 0, marginBottom: 6 }}>
-              <VkIcon.back />Sessioni
+              <VkIcon.back />{t("art.back")}
             </button>
           )}
-          <div className="vk-kick">~/sessione</div>
-          <h1>{a?.title || "Sessione"}</h1>
+          <div className="vk-kick">{t("art.kick")}</div>
+          <h1>{a?.title || t("art.titleFallback")}</h1>
           <div className="meta">
             <span><b>{a ? fmtDur(a.durationS) : "—"}</b></span>
             <span>{a?.model || "—"}</span>
             <span>{a?.language || "—"}</span>
-            <span><b>{a?.wordCount ?? 0}</b> parole</span>
+            <span><b>{a?.wordCount ?? 0}</b> {t("art.wordsLabel")}</span>
           </div>
         </div>
       </div>
@@ -214,24 +238,24 @@ export function ScreenArtifacts({
             <button
               className={"t-recap" + (tab === "recap" ? " on" : "")}
               disabled={!hasRecap}
-              title={!hasRecap ? "recap.md non disponibile" : undefined}
+              title={!hasRecap ? t("art.ttRecapUnavailable") : undefined}
               onClick={() => setTab("recap")}
             ><span className="dot" />recap.md</button>
             <button
               className={"t-obs" + (tab === "obsidian" ? " on" : "")}
-              title={!hasObsidian ? "Nota Obsidian non ancora creata" : undefined}
+              title={!hasObsidian ? t("art.ttObsNotCreated") : undefined}
               onClick={() => setTab("obsidian")}
             ><span className="dot" />obsidian/</button>
             <button
               className={"t-trans" + (tab === "transcript" ? " on" : "")}
               disabled={!hasTranscript}
-              title={!hasTranscript ? "Trascrizione non disponibile" : undefined}
+              title={!hasTranscript ? t("art.ttTranscriptUnavailable") : undefined}
               onClick={() => setTab("transcript")}
-            ><span className="dot" />trascrizione</button>
+            ><span className="dot" />{t("art.tabTranscript")}</button>
             <span className="vk-tabs-grow" />
-            <span className="vk-readtime">{readTime(countWords(tabContent))}</span>
-            <button className="vk-copy" title="Copia il contenuto del tab visualizzato"
-                    onClick={() => onCopy?.(tabContent)}>⧉ copia</button>
+            <span className="vk-readtime">{readTimeLabel(countWords(tabContent))}</span>
+            <button className="vk-copy" title={t("art.copyTitle")}
+                    onClick={() => onCopy?.(tabContent)}>{t("art.copy")}</button>
           </div>
           <div className="vk-doc" ref={docRef}>
             {tabContent ? (
@@ -247,8 +271,8 @@ export function ScreenArtifacts({
                     )}
                     {clarCount > 0 && (
                       <button type="button" className="vk-dc-count" onClick={jumpClar}
-                              title="Salta alle domande aperte rimaste senza risposta">
-                        ? {clarCount} da chiarire
+                              title={t("art.toClarifyTitle")}>
+                        {t("art.toClarify", { n: clarCount })}
                       </button>
                     )}
                   </div>
@@ -258,21 +282,20 @@ export function ScreenArtifacts({
                   : <MarkdownDoc md={tabContent} />}
                 {tab === "obsidian" && obsTags.length > 0 && (
                   <div className="vk-otags">
-                    {obsTags.map((t) => <span key={t} className="vk-otag">#{t}</span>)}
+                    {obsTags.map((tag) => <span key={tag} className="vk-otag">#{tag}</span>)}
                   </div>
                 )}
               </>
             ) : tab === "obsidian" ? (
               <div className="vk-empty">
                 <div className="ico"><IcoVault /></div>
-                <div className="tt">Nota Obsidian non ancora creata</div>
-                <div className="dd">Esportala nel tuo vault come nota atomica con frontmatter e wikilink,
-                  pronta per il tuo second brain.</div>
+                <div className="tt">{t("art.ttObsNotCreated")}</div>
+                <div className="dd">{t("art.obsEmptyDesc")}</div>
                 <button type="button" onClick={handleExportObsidian} disabled={busy === "obsidian"}>
-                  <VkIcon.share />{busy === "obsidian" ? "Esportazione…" : "Esporta su Obsidian"}</button>
+                  <VkIcon.share />{busy === "obsidian" ? t("art.exporting") : t("art.exportObsidian")}</button>
               </div>
             ) : (
-              <p className="vk-doc-empty">{tab === "briefing" ? "(briefing non ancora generato)" : "(nessun contenuto)"}</p>
+              <p className="vk-doc-empty">{tab === "briefing" ? t("art.emptyBriefing") : t("art.emptyNoContent")}</p>
             )}
           </div>
         </div>
@@ -280,90 +303,93 @@ export function ScreenArtifacts({
         <aside className="vk-art-side">
           <div className="vk-card">
             <button className="vk-btn-g vk-rail-cta vk-cta-pop"
-                    title="Copia il briefing.md negli appunti: incollalo in ChatGPT, Claude o un'altra AI"
-                    onClick={() => onCopy?.(briefing)}><VkIcon.arrow />Copia il briefing per la tua AI</button>
+                    title={t("art.ctaTitle")}
+                    onClick={() => onCopy?.(briefing)}><VkIcon.arrow />{t("art.ctaCopy")}</button>
 
             <div className="vk-rail-sep" />
-            <div className="vk-rail-lbl">File generati</div>
+            <div className="vk-rail-lbl">{t("art.filesGenerated")}</div>
 
             <div className={"vk-fileitem" + (openInfo === "briefing" ? " open" : "")}>
               <div className="vk-file">
                 <span className="ico md"><IcoFile /></span>
-                <div className="info"><div className="nm">briefing.md</div><div className="ds">per l'AI</div></div>
+                <div className="info"><div className="nm">briefing.md</div><div className="ds">{t("art.dsForAI")}</div></div>
                 <div className="acts">
-                  <button type="button" className="vk-info-btn" aria-label="Cos'è il briefing"
+                  <button type="button" className="vk-info-btn" aria-label={t("art.whatBriefing")}
                           onClick={() => toggleInfo("briefing")}><IcoInfo /></button>
                   <button type="button" className="vk-mini"
-                          onClick={() => void handleDownload("briefing.md", briefing)}>Scarica</button>
+                          onClick={() => void handleDownload("briefing.md", briefing)}>{t("art.download")}</button>
                 </div>
               </div>
-              <div className="vk-file-exp">Documento ottimizzato per essere incollato in un'altra AI come
-                contesto: sezioni, decisioni, domande aperte e trascrizione integrale.</div>
+              <div className="vk-file-exp">{t("art.expBriefing")}</div>
             </div>
 
             <div className={"vk-fileitem" + (openInfo === "recap" ? " open" : "")}>
               <div className="vk-file">
                 <span className="ico rc"><IcoRecap /></span>
-                <div className="info"><div className="nm">recap.md</div><div className="ds">leggibile</div></div>
+                <div className="info"><div className="nm">recap.md</div><div className="ds">{t("art.dsReadable")}</div></div>
                 <div className="acts">
-                  <button type="button" className="vk-info-btn" aria-label="Cos'è il recap"
+                  <button type="button" className="vk-info-btn" aria-label={t("art.whatRecap")}
                           onClick={() => toggleInfo("recap")}><IcoInfo /></button>
-                  <button type="button" className="vk-mini" aria-label="Genera PDF del recap"
-                          title="Crea un PDF del recap e ti chiede dove salvarlo"
+                  <button type="button" className="vk-mini" aria-label={t("art.pdfAria")}
+                          title={t("art.pdfTitle")}
                           disabled={busy === "pdf"} onClick={handleExportPdf}>{busy === "pdf" ? "…" : "PDF"}</button>
                   {hasRecap && (
                     <button type="button" className="vk-mini"
-                            onClick={() => void handleDownload("recap.md", recap)}>Scarica</button>
+                            onClick={() => void handleDownload("recap.md", recap)}>{t("art.download")}</button>
                   )}
                 </div>
               </div>
-              <div className="vk-file-exp">Versione in prosa, pensata per essere letta da una persona.
-                Esportabile in PDF per condividerla o archiviarla.</div>
+              <div className="vk-file-exp">{t("art.expRecap")}</div>
             </div>
 
             <div className={"vk-fileitem" + (openInfo === "vault" ? " open" : "")}>
               <div className="vk-file">
                 <span className="ico vault"><IcoVault /></span>
-                <div className="info"><div className="nm">vault</div><div className="ds">nota Obsidian</div></div>
+                <div className="info"><div className="nm">vault</div><div className="ds">{t("art.dsObsNote")}</div></div>
                 <div className="acts">
-                  <button type="button" className="vk-info-btn" aria-label="Cos'è la nota Obsidian"
+                  <button type="button" className="vk-info-btn" aria-label={t("art.whatVault")}
                           onClick={() => toggleInfo("vault")}><IcoInfo /></button>
-                  <button type="button" className="vk-mini" aria-label="Esporta su Obsidian"
-                          title="Scrive la nota nel vault Obsidian configurato in Impostazioni"
-                          disabled={busy === "obsidian"} onClick={handleExportObsidian}>{busy === "obsidian" ? "…" : "esporta"}</button>
+                  <button type="button" className="vk-mini" aria-label={t("art.exportObsidian")}
+                          title={t("art.vaultTitle")}
+                          disabled={busy === "obsidian"} onClick={handleExportObsidian}>{busy === "obsidian" ? "…" : t("art.exportLower")}</button>
                   {hasObsidian && (
                     <button type="button" className="vk-mini"
-                            onClick={() => void handleDownload("nota.md", obsidian)}>Scarica</button>
+                            onClick={() => void handleDownload("nota.md", obsidian)}>{t("art.download")}</button>
                   )}
                 </div>
               </div>
-              <div className="vk-file-exp">Nota atomica per Obsidian con frontmatter e wikilink: alimenta il
-                tuo "second brain" collegando i concetti tra le sessioni.</div>
+              <div className="vk-file-exp">{t("art.expVault")}</div>
             </div>
 
             <div className="vk-rail-sep" />
+            {onReexport && (
+              <button type="button" className="vk-openfolder" disabled={busy === "reexport"}
+                      title={t("art.reexportTitle")}
+                      onClick={handleReexport}>
+                <VkIcon.arrow />{busy === "reexport" ? t("art.reexporting") : t("art.reexport")}</button>
+            )}
             <button type="button" className="vk-openfolder"
                     onClick={() => a?.briefingPath && onOpenFolder?.(a.briefingPath)}>
-              <VkIcon.folder />Apri cartella</button>
+              <VkIcon.folder />{t("art.openFolder")}</button>
           </div>
 
           <div className="vk-card">
-            <div className="vk-rail-lbl">Dettagli</div>
+            <div className="vk-rail-lbl">{t("art.details")}</div>
             <div className="vk-det-row">
               <span className="di"><IcoClock /></span>
-              <span className="dl">durata</span><span className="dv">{a ? fmtDur(a.durationS) : "—"}</span>
+              <span className="dl">{t("art.detDuration")}</span><span className="dv">{a ? fmtDur(a.durationS) : "—"}</span>
             </div>
             <div className="vk-det-row">
               <span className="di"><IcoBars /></span>
-              <span className="dl">trascrizione</span><span className="dv">{a?.model || "—"}</span>
+              <span className="dl">{t("art.detTranscription")}</span><span className="dv">{a?.model || "—"}</span>
             </div>
             <div className="vk-det-row">
               <span className="di"><VkIcon.globe /></span>
-              <span className="dl">lingua</span><span className="dv">{a?.language || "—"}</span>
+              <span className="dl">{t("art.detLanguage")}</span><span className="dv">{a?.language || "—"}</span>
             </div>
             <div className="vk-det-row">
               <span className="di priv"><VkIcon.lock /></span>
-              <span className="dl">privacy</span><span className="dv">solo testo all'AI</span>
+              <span className="dl">{t("art.detPrivacy")}</span><span className="dv">{t("art.detPrivacyVal")}</span>
             </div>
           </div>
         </aside>

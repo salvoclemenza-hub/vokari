@@ -50,3 +50,18 @@ def test_from_transcript_result_populates_fields():
     assert s.duration_ms == 120000
     assert s.word_count == 4
     assert s.status == "transcribed" if hasattr(s, "status") else True
+
+
+def test_session_persists_analysis_and_da_chiarire():
+    s = Session.new(title="Con analisi", mode="riunione")
+    s.analysis = {"meta": {"type": "meeting"}, "purpose": "decidere X"}
+    s.da_chiarire = ["Budget 700 o 730?"]
+    s2 = Session.from_dict(s.to_dict())
+    assert s2.analysis == {"meta": {"type": "meeting"}, "purpose": "decidere X"}
+    assert s2.da_chiarire == ["Budget 700 o 730?"]
+
+
+def test_session_analysis_defaults_none():
+    s = Session.new()
+    assert s.analysis is None
+    assert s.da_chiarire == []

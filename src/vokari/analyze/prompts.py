@@ -1,15 +1,22 @@
-"""Prompt per l'analisi della trascrizione -> JSON strutturato (spec §7)."""
+"""Prompt per l'analisi della trascrizione -> JSON strutturato (spec §7).
 
+La lingua dell'OUTPUT (i valori del JSON) è guidata da `language` (it|en = `app_language`), non
+dalla lingua dell'audio: l'LLM produce i contenuti nella lingua dell'app. Le ISTRUZIONI del
+prompt restano in italiano (l'LLM le comprende); cambia solo la direttiva sulla lingua dei valori.
+"""
+
+from vokari import i18n
+from vokari import markers as markers_mod
 from vokari.analyze.schema import Analysis
 
+# Base del system prompt SENZA la direttiva di lingua (appesa da build_system in base a `language`).
 _SYSTEM = (
     "Sei un analista esperto che trasforma trascrizioni vocali di un magazzino alimentare "
     "B2B in conoscenza strutturata. Conosci la terminologia del dominio: lotti VMM, "
     "processi MAC (lavorazione), OBB (obbligo), DDT, HACCP, resa, miscelazione, scarti, "
     "tracciabilità, distinta base. "
     "Rispondi ESCLUSIVAMENTE con un JSON valido conforme allo schema richiesto: "
-    "nessun testo prima o dopo, nessun code fence markdown, nessuna spiegazione. "
-    "Usa l'italiano nei contenuti."
+    "nessun testo prima o dopo, nessun code fence markdown, nessuna spiegazione."
 )
 
 _FOCUS = {
@@ -38,8 +45,7 @@ _GUIDANCE = (
     'dei prodotti per la clientela multilingua"), non etichette di 1-2 parole (es. "Galleria").'
 )
 
-_SHAPE = """Produci ESATTAMENTE questo JSON (chiavi in inglese, valori in italiano):
-{
+_SHAPE_BODY = """{
   "meta": {"type": "<meeting|solo>", "title": "<titolo breve>", "participants": [],
            "duration_min": 0, "date": ""},
   "purpose": "<lo SCOPO/decisione principale della sessione in 1-2 frasi: cosa si doveva decidere o capire>",
@@ -51,6 +57,13 @@ _SHAPE = """Produci ESATTAMENTE questo JSON (chiavi in inglese, valori in italia
   "entities": [{"name": "<nome>", "type": "<persona|progetto|termine>", "note": "<nota>"}]
 }
 Se un campo non è desumibile, usa lista vuota o stringa vuota; per owner/deadline usa null."""
+
+
+def _shape(language: str) -> str:
+    """Header della shape JSON con la clausola di lingua dei VALORI parametrica (it|en)."""
+    clause = i18n.t("prompts.values_lang", language)
+    return f"Produci ESATTAMENTE questo JSON (chiavi in inglese, {clause}):\n{_SHAPE_BODY}"
+
 
 # Esempio few-shot con terminologia aziendale specifica del dominio.
 # Stabilizza la lingua (italiano) e la granularità dei campi su modelli locali (Ollama).
@@ -76,8 +89,8 @@ JSON ATTESO:
 }"""
 
 
-def build_system() -> str:
-    return _SYSTEM
+def build_system(language: str = "it") -> str:
+    return _SYSTEM + " " + i18n.t("prompts.content_directive", language)
 
 
 def build_user(
@@ -87,8 +100,14 @@ def build_user(
     meta: dict | None = None,
     refinement: dict | None = None,
     context: str | None = None,
+    markers: list[dict] | None = None,
+    language: str = "it",
 ) -> str:
-    parts = [_FOCUS[_MODE_ALIASES.get(mode, "solo")], "", _GUIDANCE, "", _SHAPE, _FEWSHOT, ""]
+    parts = [_FOCUS[_MODE_ALIASES.get(mode, "solo")], "", _GUIDANCE, "", _shape(language), _FEWSHOT, ""]
+    # Rinforzo della lingua di output vicino al testo (recency): conta su modelli locali (qwen)
+    # che, col few-shot in italiano, tenderebbero a ignorare la direttiva del system.
+    parts.append(i18n.t("prompts.reinforce", language))
+    parts.append("")
     if context:
         parts.append("CONTESTO FORNITO DALL'UTENTE (usalo per capire lo SCOPO della sessione):")
         parts.append(context)
@@ -104,24 +123,35 @@ def build_user(
         for q, a in refinement.items():
             parts.append(f"- D: {q}\n  R: {a}")
         parts.append("")
+    mk_lines = markers_mod.marker_lines(markers)
+    if mk_lines:
+        parts.append(
+            "SEGNALIBRI INSERITI DALL'UTENTE durante la registrazione (momenti marcati come "
+            "importanti; dai priorità a questi punti nell'individuare scopo, decisioni e key_ideas):"
+        )
+        parts.extend(mk_lines)
+        parts.append("")
     parts.append("TRASCRIZIONE:")
     parts.append(transcript)
     return "\n".join(parts)
 
 
 # --- Check di copertura (Task 8): secondo passo "ho colto il punto?" -----------------------
+# Base SENZA direttiva di lingua (appesa da build_verify_system in base a `language`).
 _VERIFY_SYSTEM = (
     "Sei un revisore severo: verifichi se un'analisi cattura il PUNTO PRINCIPALE (lo scopo o la "
     "decisione centrale) di una sessione e la correggi se serve. Rispondi ESCLUSIVAMENTE con un JSON "
-    "Analysis valido, nessun code fence, nessuna spiegazione. Usa l'italiano nei contenuti."
+    "Analysis valido, nessun code fence, nessuna spiegazione."
 )
 
 
-def build_verify_system() -> str:
-    return _VERIFY_SYSTEM
+def build_verify_system(language: str = "it") -> str:
+    return _VERIFY_SYSTEM + " " + i18n.t("prompts.content_directive", language)
 
 
-def build_verify_user(transcript: str, analysis: Analysis, *, mode: str = "solo", context: str | None = None) -> str:
+def build_verify_user(
+    transcript: str, analysis: Analysis, *, mode: str = "solo", context: str | None = None, language: str = "it"
+) -> str:
     parts = [
         "Rileggi la TRASCRIZIONE e l'ANALISI CORRENTE qui sotto.",
         "Qual è il PUNTO PRINCIPALE (lo scopo o la decisione centrale) della sessione?",
@@ -132,5 +162,15 @@ def build_verify_user(transcript: str, analysis: Analysis, *, mode: str = "solo"
     ]
     if context:
         parts += ["CONTESTO FORNITO DALL'UTENTE (lo scopo dichiarato):", context, ""]
-    parts += [_SHAPE, "", "ANALISI CORRENTE (JSON):", analysis.model_dump_json(), "", "TRASCRIZIONE:", transcript]
+    parts += [
+        _shape(language),
+        "",
+        i18n.t("prompts.reinforce", language),
+        "",
+        "ANALISI CORRENTE (JSON):",
+        analysis.model_dump_json(),
+        "",
+        "TRASCRIZIONE:",
+        transcript,
+    ]
     return "\n".join(parts)

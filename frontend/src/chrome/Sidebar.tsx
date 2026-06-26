@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { bridge, onVokariEvent, type SessionItem } from "../bridge";
 import { onSessionsChanged } from "../sessionsBus";
 
+// I valori restano in italiano perché sono ANCHE identificatori (NavItem) usati come chiavi
+// in App.tsx/DevHarness (NAV_FOR, SCREEN_FOR_NAV, active===label): si traduce solo il DISPLAY.
 export const VK_NAV = [
   "Registra",
   "Sessioni",
@@ -10,16 +13,24 @@ export const VK_NAV = [
 ] as const;
 export type NavItem = (typeof VK_NAV)[number];
 
+// Identità NavItem → chiave di traduzione del display.
+const NAV_KEY: Record<NavItem, string> = {
+  Registra: "nav.record",
+  Sessioni: "nav.sessions",
+  "Modelli AI": "nav.models",
+  Impostazioni: "nav.settings",
+};
+
 // Formattazione coerente con screens/Sessions.tsx.
 function fmtDur(ms: number): string {
   const s = Math.round(ms / 1000);
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 }
 
-function fmtDate(iso: string): string {
+function fmtDate(iso: string, locale: string): string {
   if (!iso) return "";
   try {
-    return new Date(iso).toLocaleString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+    return new Date(iso).toLocaleString(locale, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   } catch {
     return iso.slice(0, 10);
   }
@@ -34,6 +45,8 @@ export function Sidebar({
   onNavigate: (n: NavItem) => void;
   onOpenSession?: (id: string) => void;
 }) {
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language === "en" ? "en-US" : "it-IT";
   const [recents, setRecents] = useState<SessionItem[]>([]);
 
   // Carica i recenti UNA volta al mount, poi ricarica solo quando nasce una nuova
@@ -57,7 +70,7 @@ export function Sidebar({
       <div className="vk-side-brand">
         vokari<span className="vk-caret"></span>
       </div>
-      <div className="vk-side-tag">local-first · open source</div>
+      <div className="vk-side-tag">{t("sidebar.tagline")}</div>
       <nav className="vk-nav">
         {VK_NAV.map((label) => (
           <a
@@ -66,27 +79,27 @@ export function Sidebar({
             onClick={() => onNavigate(label)}
           >
             <span className="gl"></span>
-            {label}
+            {t(NAV_KEY[label])}
           </a>
         ))}
       </nav>
       <div className="vk-side-sec">
-        Recenti
+        {t("sidebar.recent")}
         {recents.length > 0 && (
           <a role="button" tabIndex={0} onClick={() => onNavigate("Sessioni")}
              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onNavigate("Sessioni"); }}>
-            Tutte →
+            {t("sidebar.all")}
           </a>
         )}
       </div>
       <div className="vk-side-rc">
         {recents.length === 0 ? (
           <div className="r" style={{ cursor: "default" }}>
-            <div className="m" style={{ marginBottom: 6, opacity: 0.6 }}>nessuna sessione recente</div>
+            <div className="m" style={{ marginBottom: 6, opacity: 0.6 }}>{t("sidebar.noRecent")}</div>
             <a role="button" tabIndex={0} onClick={() => onNavigate("Registra")}
                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onNavigate("Registra"); }}
                style={{ color: "var(--green-d)", fontWeight: 600, fontSize: 12, cursor: "pointer" }}>
-              Registra la prima →
+              {t("sidebar.recordFirst")}
             </a>
           </div>
         ) : (
@@ -102,10 +115,10 @@ export function Sidebar({
                 onClick={() => onOpenSession?.(s.id)}
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onOpenSession?.(s.id); }}
               >
-                <span className={"vk-rc-tag " + (meeting ? "riun" : "solo")}>{meeting ? "riun" : "solo"}</span>
+                <span className={"vk-rc-tag " + (meeting ? "riun" : "solo")}>{meeting ? t("common.tagMeeting") : t("common.tagSolo")}</span>
                 <div className="rc-b">
                   <div className="t" title={s.title}>{s.title}</div>
-                  <div className="m">{fmtDate(s.createdAt)} · {fmtDur(s.durationMs)}</div>
+                  <div className="m">{fmtDate(s.createdAt, locale)} · {fmtDur(s.durationMs)}</div>
                 </div>
               </div>
             );

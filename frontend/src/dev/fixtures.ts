@@ -121,6 +121,9 @@ export const sampleSettings: VokariSettings = {
   transcriptionLanguage: "it",
   livePreview: true,
   liveModel: "base",
+  onboarded: true,
+  lastSeenVersion: "0.1.2",
+  appLanguage: "it",
   hasApiKey: true,
 };
 

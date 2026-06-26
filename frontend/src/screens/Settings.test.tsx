@@ -17,6 +17,9 @@ const FAKE_SETTINGS: VokariSettings = {
   transcriptionLanguage: "it",
   livePreview: true,
   liveModel: "base",
+  onboarded: true,
+  lastSeenVersion: "",
+  appLanguage: "it",
   hasApiKey: true,
 };
 
@@ -35,6 +38,7 @@ const mockListModels = vi.fn();
 const mockDownloadModel = vi.fn();
 const mockSetActiveModel = vi.fn();
 const mockLhmStatus = vi.fn();
+const mockOllamaStatus = vi.fn();
 const mockOnVokariEvent = vi.fn();
 
 vi.mock("../bridge", () => ({
@@ -58,10 +62,12 @@ vi.mock("../bridge", () => ({
     downloadModel: (name: string) => mockDownloadModel(name) as Promise<{ ok: boolean }>,
     setActiveModel: (name: string) => mockSetActiveModel(name) as Promise<VokariSettings>,
     lhmStatus: () => mockLhmStatus() as Promise<LhmStatus>,
+    ollamaStatus: () => mockOllamaStatus() as Promise<{ installed: boolean; running: boolean; canInstall: boolean }>,
     lhmInstall: vi.fn().mockResolvedValue({ ok: true }),
     lhmStart: vi.fn().mockResolvedValue({ ok: true }),
     lhmStop: vi.fn().mockResolvedValue({ ok: true }),
     lhmUninstall: vi.fn().mockResolvedValue({ ok: true }),
+    openUrl: vi.fn().mockResolvedValue({ ok: true }),
   },
   onVokariEvent: (handler: (event: string, payload: Record<string, unknown>) => void) =>
     mockOnVokariEvent(handler) as () => void,
@@ -82,12 +88,34 @@ describe("ScreenSettings", () => {
     mockBrowseFolder.mockResolvedValue({ path: "" });
     mockListModels.mockResolvedValue([...FAKE_MODELS]);
     mockSetActiveModel.mockResolvedValue({ ...FAKE_SETTINGS });
-    mockLhmStatus.mockResolvedValue({ installed: false, running: false });
+    mockLhmStatus.mockResolvedValue({ installed: false, running: false, canInstall: true });
+    mockOllamaStatus.mockResolvedValue({ installed: false, running: false, canInstall: true });
     mockOnVokariEvent.mockReturnValue(() => {});
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  // Clicca il "Verifica" del runtime Ollama (≠ quello della chiave API), scope al campo Endpoint.
+  async function clickOllamaVerify() {
+    const label = await screen.findByText(/Endpoint Ollama/);
+    const field = label.closest(".vk-field") as HTMLElement;
+    fireEvent.click(within(field).getByRole("button", { name: "Verifica" }));
+  }
+
+  it("B2: Ollama installato ma fermo → messaggio 'avvialo' (non 'installalo')", async () => {
+    mockOllamaStatus.mockResolvedValue({ installed: true, running: false, canInstall: true });
+    render(<ScreenSettings />);
+    await clickOllamaVerify();
+    expect(await screen.findByText(/installato ma fermo/i)).toBeInTheDocument();
+  });
+
+  it("B2: Ollama non installato → messaggio 'installalo' (non 'avvialo')", async () => {
+    mockOllamaStatus.mockResolvedValue({ installed: false, running: false, canInstall: true });
+    render(<ScreenSettings />);
+    await clickOllamaVerify();
+    expect(await screen.findByText(/non installato — installalo/i)).toBeInTheDocument();
   });
 
   it("carica e mostra le impostazioni reali da getSettings", async () => {
@@ -142,19 +170,32 @@ describe("ScreenSettings", () => {
 
   it("mostra lingua corrente come attiva", async () => {
     render(<ScreenSettings />);
+    // scoping al campo "Lingua di trascrizione": esiste anche il selettore lingua dell'app
+    // con bottoni "Italiano"/"English" → una query non scopata sarebbe ambigua.
+    const field = (await screen.findByText("Lingua di trascrizione")).closest(".vk-field") as HTMLElement;
     await waitFor(() => {
-      const btn = screen.getByRole("button", { name: "Italiano" });
+      const btn = within(field).getByRole("button", { name: "Italiano" });
       expect(btn.className).toContain("on");
     });
   });
 
   it("chiama saveSettings per transcriptionLanguage", async () => {
     render(<ScreenSettings />);
-    await waitFor(() => screen.getByRole("button", { name: "English" }));
-    fireEvent.click(screen.getByRole("button", { name: "English" }));
+    const field = (await screen.findByText("Lingua di trascrizione")).closest(".vk-field") as HTMLElement;
+    fireEvent.click(within(field).getByRole("button", { name: "English" }));
     await waitFor(() => {
       expect(mockSaveSettings).toHaveBeenCalledWith({ transcriptionLanguage: "en" });
     });
+  });
+
+  it("LHM: in MSIX (canInstall=false) guida all'install manuale, niente bottone Installa", async () => {
+    mockLhmStatus.mockResolvedValue({ installed: false, running: false, canInstall: false });
+    render(<ScreenSettings />);
+    // testo guida con link a LibreHardwareMonitor (ramo Store)
+    expect(await screen.findByText(/LibreHardwareMonitor/)).toBeInTheDocument();
+    expect(screen.getByText(/Microsoft Store/)).toBeInTheDocument();
+    // nessun bottone "Installa" (auto-download vietato in pacchetto)
+    expect(screen.queryByRole("button", { name: "Installa" })).not.toBeInTheDocument();
   });
 });
 
@@ -163,7 +204,7 @@ describe("ScreenSettings — verifica/rimuovi chiave API (SET1/SET2)", () => {
     mockGetSettings.mockResolvedValue({ ...FAKE_SETTINGS, hasApiKey: true });
     mockListModels.mockResolvedValue([...FAKE_MODELS]);
     mockSetActiveModel.mockResolvedValue({ ...FAKE_SETTINGS });
-    mockLhmStatus.mockResolvedValue({ installed: false, running: false });
+    mockLhmStatus.mockResolvedValue({ installed: false, running: false, canInstall: true });
     mockOnVokariEvent.mockReturnValue(() => {});
   });
   afterEach(() => vi.clearAllMocks());

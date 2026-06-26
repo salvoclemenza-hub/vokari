@@ -1,0 +1,34 @@
+{
+  "_comment": "Changelog VOKARI — mostrato in-app dopo un aggiornamento. Aggiungi una voce in cima a 'versions' a ogni rilascio. kind: feature | fix | improvement. Allinea la versione a pyproject.toml.",
+  "versions": [
+    {
+      "version": "0.1.2",
+      "date": "2026-06-25",
+      "title": "Benvenuto guidato e modelli più chiari",
+      "highlights": [
+        { "kind": "feature", "text": "Wizard di benvenuto al primo avvio: configuri cervello AI e modello di trascrizione passo dopo passo." },
+        { "kind": "feature", "text": "Questa finestra: dopo ogni aggiornamento vedi cosa è cambiato." },
+        { "kind": "fix", "text": "Schermata Modelli AI: il modello selezionato ma non ancora scaricato non viene più mostrato come \"Attivo\"." },
+        { "kind": "fix", "text": "Impostazioni: lo stato di Ollama ora distingue \"installato ma fermo\" da \"non installato\" e indica dove agire." }
+      ]
+    },
+    {
+      "version": "0.1.1",
+      "date": "2026-06-20",
+      "title": "Primo pacchetto distribuibile",
+      "highlights": [
+        { "kind": "feature", "text": "Pacchetto di installazione per Windows (ZIP con setup), nessuna configurazione manuale richiesta." },
+        { "kind": "improvement", "text": "Avvisi più onesti quando la lingua rilevata nell'audio non coincide con quella impostata." }
+      ]
+    },
+    {
+      "version": "0.1.0",
+      "date": "2026-06-10",
+      "title": "Primo rilascio",
+      "highlights": [
+        { "kind": "feature", "text": "Da una registrazione vocale a briefing.md, recap e note Obsidian — tutto in locale, solo il testo trascritto va all'AI." },
+        { "kind": "feature", "text": "Trascrizione locale con faster-whisper e analisi con Claude oppure Ollama (offline)." }
+      ]
+    }
+  ]
+}

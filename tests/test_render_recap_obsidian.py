@@ -141,3 +141,27 @@ def test_obsidian_frontmatter_uses_yaml_block_for_lists():
     content = notes[0].content
     # YAML block: tags:\n  - sessione (non tags: [sessione])
     assert "tags:\n  - sessione" in content, f"frontmatter deve usare YAML block per tags, trovato: {content[:300]}"
+
+
+# --- L01: segnalibri temporali ---
+
+
+def test_render_recap_includes_markers_section():
+    md = recap_mod.render_recap(Analysis(meta=Meta()), title="T", markers=[{"t_ms": 5_000, "label": "Intro"}])
+    assert "## Segnalibri" in md
+    assert "- 00:05 — Intro" in md
+    assert "<" not in md  # resta consumatore umano: niente tag XML
+
+
+def test_render_recap_no_markers_section_when_none():
+    md = recap_mod.render_recap(Analysis(meta=Meta()), title="T")
+    assert "Segnalibri" not in md
+
+
+def test_obsidian_session_note_includes_markers():
+    notes = obs_mod.render_obsidian_notes(
+        Analysis(meta=Meta()), session_title="T", markers=[{"t_ms": 90_000, "label": "Lotto X"}]
+    )
+    session = notes[0].content
+    assert "## Segnalibri" in session
+    assert "- 01:30 — Lotto X" in session

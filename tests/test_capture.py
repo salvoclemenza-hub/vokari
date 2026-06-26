@@ -482,6 +482,53 @@ def test_list_loopback_devices(monkeypatch):
     assert devs[0]["samplerate"] == 48000
 
 
+def test_add_marker_excludes_paused_time(monkeypatch):
+    """Il t_ms del marker deve riflettere l'audio EFFETTIVO (le pause scartano i frame),
+    non il wall-clock: registra 10s, pausa 30s, riprende, marca a 45s wall → 15s audio."""
+    rec = capture.Recorder("mic", "x.wav")
+    clock = {"t": 0.0}
+    monkeypatch.setattr(capture.time, "monotonic", lambda: clock["t"])
+    clock["t"] = 0.0
+    rec._start_monotonic = 0.0  # simula start() senza avviare i thread reali
+    clock["t"] = 10.0
+    rec.pause()
+    clock["t"] = 40.0
+    rec.resume()  # 30 s in pausa
+    clock["t"] = 45.0
+    mk = rec.add_marker("X")
+    assert mk["t_ms"] == 15_000  # 45 - 30 = 15 s
+
+
+def test_add_marker_during_active_pause_counts_pause_in_progress(monkeypatch):
+    """Marker inserito MENTRE è in pausa: conta anche la pausa in corso (t_ms congelato)."""
+    rec = capture.Recorder("mic", "x.wav")
+    clock = {"t": 0.0}
+    monkeypatch.setattr(capture.time, "monotonic", lambda: clock["t"])
+    rec._start_monotonic = 0.0
+    clock["t"] = 8.0
+    rec.pause()
+    clock["t"] = 20.0  # 12 s di pausa in corso
+    mk = rec.add_marker("in pausa")
+    assert mk["t_ms"] == 8_000  # solo gli 8 s pre-pausa
+
+
+def test_update_marker_changes_label():
+    rec = capture.Recorder("mic", "x.wav")
+    rec._start_monotonic = 0.0
+    rec.add_marker("Segnalibro 1")
+    updated = rec.update_marker(0, "Lotto X")
+    assert updated is not None and updated["label"] == "Lotto X"
+    assert rec._markers[0]["label"] == "Lotto X"
+
+
+def test_update_marker_out_of_range_returns_none():
+    rec = capture.Recorder("mic", "x.wav")
+    assert rec.update_marker(0, "x") is None  # nessun marker
+    rec._start_monotonic = 0.0
+    rec.add_marker("a")
+    assert rec.update_marker(5, "y") is None
+
+
 @pytest.mark.slow
 def test_real_mic_capture_produces_16k_mono(tmp_path):
     sd = pytest.importorskip("sounddevice")

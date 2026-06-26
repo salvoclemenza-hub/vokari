@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "../toast";
 
 export function ScreenError({ message, warnings = [], onBack, onRetry, onOpenSettings }:
@@ -9,14 +10,15 @@ export function ScreenError({ message, warnings = [], onBack, onRetry, onOpenSet
     onRetry?: () => void;
     onOpenSettings?: () => void;
   }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
-  const detail = message || "Errore sconosciuto";
+  const detail = message || t("errorScreen.unknown");
 
   function copyDetail() {
-    if (!navigator.clipboard) { toast("Copia non disponibile in questo contesto", "error"); return; }
+    if (!navigator.clipboard) { toast(t("errorScreen.copyUnavailable"), "error"); return; }
     navigator.clipboard.writeText(detail).then(
       () => { setCopied(true); window.setTimeout(() => setCopied(false), 1400); },
-      () => toast("Copia negli appunti non riuscita", "error"),
+      () => toast(t("errorScreen.copyFailed"), "error"),
     );
   }
 
@@ -26,11 +28,8 @@ export function ScreenError({ message, warnings = [], onBack, onRetry, onOpenSet
         <div className="vk-err-ico">
           <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" /></svg>
         </div>
-        <h1>Qualcosa è andato storto</h1>
-        <p className="lead">
-          L'operazione non è riuscita. Qui sotto il dettaglio tecnico: puoi riprovare, aprire
-          le impostazioni o tornare indietro senza perdere nulla.
-        </p>
+        <h1>{t("errorScreen.heading")}</h1>
+        <p className="lead">{t("errorScreen.lead")}</p>
 
         {/* Dettaglio tecnico su pannello "carta" (non console nera): è il `message` reale. */}
         <div className="vk-err-detail">
@@ -41,7 +40,7 @@ export function ScreenError({ message, warnings = [], onBack, onRetry, onOpenSet
             <code>{detail}</code>
           </div>
           <button className={"copy" + (copied ? " done" : "")} onClick={copyDetail}>
-            {copied ? "copiato ✓" : "copia"}
+            {copied ? t("errorScreen.copied") : t("errorScreen.copy")}
           </button>
         </div>
 
@@ -57,17 +56,17 @@ export function ScreenError({ message, warnings = [], onBack, onRetry, onOpenSet
         <div className="vk-err-foot">
           <div className="vk-reassure">
             <svg viewBox="0 0 24 24"><path d="M12 1 3 5v6c0 5.5 3.8 10.7 9 12 5.2-1.3 9-6.5 9-12V5l-9-4z" /></svg>
-            Nessun dato è stato inviato
+            {t("errorScreen.reassure")}
           </div>
           <div className="vk-err-actions">
             {onOpenSettings && (
-              <button className="vk-link" onClick={onOpenSettings}>Apri impostazioni</button>
+              <button className="vk-link" onClick={onOpenSettings}>{t("errorScreen.openSettings")}</button>
             )}
-            <button className="vk-ghost" onClick={onBack}>Torna indietro</button>
+            <button className="vk-ghost" onClick={onBack}>{t("errorScreen.back")}</button>
             {onRetry && (
               <button className="vk-primary" onClick={onRetry}>
                 <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z" /></svg>
-                Riprova
+                {t("errorScreen.retry")}
               </button>
             )}
           </div>

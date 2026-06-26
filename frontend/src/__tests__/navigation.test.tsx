@@ -10,6 +10,7 @@ describe("navigazione", () => {
     (window as unknown as { pywebview: { api: Record<string, unknown> } }).pywebview = {
       api: {
         get_app_info: async () => ({ version: "t", license: "MIT", githubStars: 0 }),
+        get_changelog: async () => ({ currentVersion: "t", entries: [] }),
         system_specs: async () => ({ ramTotalGb: 16 }),
         disk_usage: async () => ({ usedByModelsGb: 1.6, freeGb: 200 }),
         get_active_job: async () => null,
@@ -24,13 +25,13 @@ describe("navigazione", () => {
           brain: "claude", ollamaEndpoint: "http://localhost:11434", ollamaModel: "gemma2:9b",
           whisperModel: "large-v3-turbo", claudeModel: "claude-opus-4-8",
           briefingDir: "", obsidianVault: "", defaultMode: "solo",
-          transcriptionLanguage: "auto", hasApiKey: false,
+          transcriptionLanguage: "auto", onboarded: true, lastSeenVersion: "", appLanguage: "it", hasApiKey: false,
         }),
         save_settings: async () => ({
           brain: "claude", ollamaEndpoint: "http://localhost:11434", ollamaModel: "gemma2:9b",
           whisperModel: "large-v3-turbo", claudeModel: "claude-opus-4-8",
           briefingDir: "", obsidianVault: "", defaultMode: "solo",
-          transcriptionLanguage: "auto", hasApiKey: false,
+          transcriptionLanguage: "auto", onboarded: true, lastSeenVersion: "", appLanguage: "it", hasApiKey: false,
         }),
         set_api_key: async () => ({ ok: true, hasApiKey: false }),
         browse_folder: async () => ({ path: "" }),
@@ -67,7 +68,7 @@ describe("navigazione", () => {
         search_sessions: async () => [],
         open_session: async () => null,
         // I — LibreHardwareMonitor
-        lhm_status: async () => ({ installed: false, running: false }),
+        lhm_status: async () => ({ installed: false, running: false, canInstall: true }),
         lhm_install: async () => ({ ok: true }),
         lhm_start: async () => ({ ok: true }),
         lhm_stop: async () => ({ ok: true }),

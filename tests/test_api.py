@@ -42,17 +42,34 @@ def test_import_file_derives_title_from_filename(api, monkeypatch, tmp_path):
     """B3: importando un file senza titolo esplicito, il titolo viene dal nome file
     (es. '183.m4a' → '183') invece dell'ennesima 'Sessione senza titolo'."""
     monkeypatch.setattr(api, "_spawn_processing", lambda job: None)  # niente pipeline reale
-    # path costruito con l'OS corrente: Path(...).stem funziona su Windows e in CI Linux
-    # (un path Windows hardcoded come C:\audio\183.m4a non si splitta su POSIX → stem errato).
-    out = api.import_file(str(tmp_path / "183.m4a"))
+    f = tmp_path / "183.m4a"
+    f.write_bytes(b"\0" * 16)  # il gate richiede un file esistente e non vuoto
+    out = api.import_file(str(f))
     job = api._store.get(out["jobId"])
     assert job.title == "183"
 
 
 def test_import_file_keeps_explicit_title(api, monkeypatch, tmp_path):
     monkeypatch.setattr(api, "_spawn_processing", lambda job: None)
-    out = api.import_file(str(tmp_path / "183.m4a"), title="Riunione marketing")
+    f = tmp_path / "183.m4a"
+    f.write_bytes(b"\0" * 16)
+    out = api.import_file(str(f), title="Riunione marketing")
     assert api._store.get(out["jobId"]).title == "Riunione marketing"
+
+
+def test_import_file_rejects_missing_file(api):
+    """Gate import (audit #6): file inesistente → {error} immediato, nessun job creato."""
+    out = api.import_file("/non/esiste/audio.m4a")
+    assert "error" in out and "jobId" not in out
+    assert api._store.active() is None  # nessun job fantasma
+
+
+def test_import_file_rejects_empty_file(api, tmp_path):
+    """Gate import (audit #6): file a 0 byte → {error}, nessun job creato."""
+    f = tmp_path / "vuoto.m4a"
+    f.write_bytes(b"")
+    out = api.import_file(str(f))
+    assert "error" in out and "jobId" not in out
 
 
 def test_save_session_skips_empty_transcript(api):
@@ -68,6 +85,24 @@ def test_save_session_persists_when_transcript_present(api):
     api._save_session(api._store.get(job.id))
     sessions = api.list_sessions()
     assert len(sessions) == 1 and sessions[0]["title"] == "vera"
+
+
+def test_save_session_persists_analysis_and_da_chiarire(api):
+    """L02: _save_session copia analysis + da_chiarire dal Job alla Session, così il
+    re-export render-only può rigenerare gli artefatti dal JSON salvato."""
+    job = api._store.create(Job.new("/tmp/x.wav", title="con analisi", status="ready"))
+    api._store.update(
+        job.id,
+        transcript="ciao questo è un test",
+        duration_s=10.0,
+        analysis={"meta": {"type": "solo"}, "purpose": "p", "key_ideas": ["i"]},
+        da_chiarire=["Domanda saltata?"],
+    )
+    api._save_session(api._store.get(job.id))
+    saved = api._sessions.get(job.id)
+    assert saved is not None
+    assert saved.analysis == {"meta": {"type": "solo"}, "purpose": "p", "key_ideas": ["i"]}
+    assert saved.da_chiarire == ["Domanda saltata?"]
 
 
 def test_shutdown_abandons_all_midflight_jobs(api):
@@ -555,11 +590,11 @@ def test_download_model_emits_error_on_failure(isolated_api, monkeypatch):
 
 
 def test_expected_bytes_parses_gb():
-    import app.api as apimod
+    from vokari.transcribe import models
 
-    assert apimod._expected_bytes("large-v3-turbo") == 1_600_000_000  # "~1.6 GB"
-    assert apimod._expected_bytes("small") == 500_000_000  # "~0.5 GB"
-    assert apimod._expected_bytes("inesistente") == 0
+    assert models.expected_bytes("large-v3-turbo") == 1_600_000_000  # "~1.6 GB"
+    assert models.expected_bytes("small") == 500_000_000  # "~0.5 GB"
+    assert models.expected_bytes("inesistente") == 0
 
 
 def test_download_model_emits_progress(isolated_api, monkeypatch):
@@ -567,12 +602,10 @@ def test_download_model_emits_progress(isolated_api, monkeypatch):
     crescita della dir modelli (poll accelerato per il test)."""
     import time
 
-    import app.api as apimod
-
     import vokari.transcribe.models as mmod
     from vokari.paths import ensure_dirs
 
-    monkeypatch.setattr(apimod, "_DL_POLL_S", 0.02)
+    monkeypatch.setattr(mmod, "_DL_POLL_S", 0.02)
     models_dir = ensure_dirs().models
 
     def fake_download(name):
@@ -1204,6 +1237,22 @@ def test_ollama_status_reports_runtime_state(isolated_api, monkeypatch):
     assert isinstance(st["endpoint"], str)
 
 
+def test_lhm_status_reports_can_install(isolated_api, monkeypatch):
+    """lhm_status espone installed/running/canInstall per la UI: in MSIX (build Store)
+    canInstall=False → la sezione Temperatura CPU guida all'install manuale (ADR-046)."""
+    import app.lhm_manager as lm
+
+    monkeypatch.setattr(lm, "is_installed", lambda d: False)
+    monkeypatch.setattr(lm, "is_running", lambda: False)
+    monkeypatch.setattr(lm, "can_auto_install", lambda: False)
+
+    st = isolated_api.lhm_status()
+    assert set(st) >= {"installed", "running", "canInstall"}
+    assert st["installed"] is False
+    assert st["running"] is False
+    assert st["canInstall"] is False
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # M7-H — Artefatti: get_artifacts espone recapMd/obsidianNote; export_pdf/obsidian
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1540,6 +1589,202 @@ def test_export_obsidian_fallback_to_session_when_job_missing(sessions_api, tmp_
     assert len(list(vault.glob("*.md"))) == 1
 
 
+def test_export_obsidian_fallback_rerenders_from_session_analysis(sessions_api, tmp_path, monkeypatch):
+    """L02: senza Job ma con Session.analysis persistita, export_obsidian ri-renderizza le note
+    ATOMICHE dall'analisi (non più la singola nota congelata) verso il vault corrente."""
+    from datetime import UTC, datetime
+
+    import vokari.settings as sm
+    from vokari.store.session import Session
+
+    sessions_api._sessions.save(
+        Session(
+            id="sess-analysis",
+            title="Riunione con decisioni",
+            created_at=datetime.now(UTC).isoformat(),
+            mode="riunione",
+            analysis={
+                "meta": {
+                    "type": "meeting",
+                    "title": "Riunione con decisioni",
+                    "date": "2026-06-23",
+                    "participants": [],
+                    "duration_min": 5,
+                },
+                "purpose": "Decidere",
+                "context": "ctx",
+                "key_ideas": ["idea"],
+                "decisions": [
+                    {"title": "Landing page", "decision": "Si fa", "rationale": "valore"},
+                    {"title": "Calendario", "decision": "Aggiungere stagioni", "rationale": ""},
+                ],
+                "open_questions": [],
+                "next_steps": [],
+                "entities": [],
+            },
+            da_chiarire=[],
+            artifacts={"briefing_md": "# B", "recap_md": "# R", "obsidian_note": "# Nota congelata"},
+        )
+    )
+    vault = tmp_path / "vault-rerender"
+    monkeypatch.setattr(sm, "load", lambda: sm.Settings(obsidian_vault=str(vault)))
+
+    res = sessions_api.export_obsidian("sess-analysis")
+    assert res["ok"] is True
+    # nota-ancora + 2 note-decisione atomiche = >= 3 file (la singola congelata ne darebbe 1)
+    assert res["count"] >= 3
+    assert len(list(vault.glob("*.md"))) >= 3
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# L02 — reexport_session render-only
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_reexport_session_regenerates_to_current_settings(sessions_api, tmp_path, monkeypatch):
+    """L02: reexport_session rigenera briefing+recap+obsidian dalla Session.analysis salvata
+    verso il briefing_dir e il vault CORRENTI, senza chiamare LLM/whisper, e aggiorna gli
+    artefatti congelati della Session."""
+    from app.jobs import Job
+
+    import vokari.settings as sm
+
+    # Sessione salvata con analisi persistita (post Task 1), MA briefing/recap vecchi/vuoti
+    audio = str(tmp_path / "r.wav")
+    Path(audio).touch()
+    job = sessions_api._store.create(
+        Job.new(audio, mode="riunione", title="Riunione Re-export", model="small", language="it")
+    )
+    sessions_api._store.update(
+        job.id,
+        transcript="trascrizione lunga di prova",
+        duration_s=300.0,
+        analysis={
+            "meta": {
+                "type": "meeting",
+                "title": "Riunione Re-export",
+                "date": "2026-06-23",
+                "participants": [],
+                "duration_min": 5,
+            },
+            "purpose": "Decidere la landing page",
+            "context": "ctx",
+            "key_ideas": ["idea uno"],
+            "decisions": [{"title": "Si fa", "decision": "Procedere", "rationale": "valore"}],
+            "open_questions": [],
+            "next_steps": [],
+            "entities": [],
+        },
+        da_chiarire=["Budget 700 o 730?"],
+        status="ready",
+    )
+    sessions_api._save_session(sessions_api._store.get(job.id))
+    # Il Job non deve più servire al re-export: rimuovilo per provare il path Session-only
+    sessions_api._store.delete(job.id)
+
+    new_dir = tmp_path / "nuovo-briefing"
+    new_vault = tmp_path / "nuovo-vault"
+    monkeypatch.setattr(sm, "load", lambda: sm.Settings(briefing_dir=str(new_dir), obsidian_vault=str(new_vault)))
+
+    res = sessions_api.reexport_session(job.id)
+    assert res["ok"] is True
+    # briefing.md scritto nella NUOVA cartella, contenuto rigenerato dall'analisi
+    bp = Path(res["path"])
+    assert bp.exists() and bp.parent == new_dir
+    assert "Decidere la landing page" in bp.read_text(encoding="utf-8")
+    assert "DA CHIARIRE: Budget 700 o 730?" in bp.read_text(encoding="utf-8")
+    # note scritte nel NUOVO vault
+    assert res["count"] >= 1 and len(list(new_vault.glob("*.md"))) >= 1
+    # artefatti della Session aggiornati (non più vecchi/vuoti)
+    refreshed = sessions_api._sessions.get(job.id)
+    assert "Decidere la landing page" in (refreshed.artifacts or {}).get("recap_md", "")
+
+
+def test_reexport_session_without_analysis_returns_error(sessions_api, tmp_path):
+    """Sessione salvata PRIMA di L02 (nessuna analysis) → re-export impossibile: errore esplicito,
+    nessun crash."""
+    from datetime import UTC, datetime
+
+    from vokari.store.session import Session
+
+    sessions_api._sessions.save(
+        Session(
+            id="old-session",
+            title="Vecchia",
+            created_at=datetime.now(UTC).isoformat(),
+            mode="solo",
+            artifacts={"briefing_md": "# B", "recap_md": "# R", "obsidian_note": "# N"},
+        )
+    )
+    res = sessions_api.reexport_session("old-session")
+    assert res["ok"] is False
+    assert "analisi" in res.get("error", "").lower()
+
+
+def test_reexport_session_missing_returns_error(sessions_api):
+    res = sessions_api.reexport_session("nope")
+    assert res["ok"] is False
+    assert "error" in res
+
+
+def test_reexport_session_sets_briefing_path_on_session_and_open_session_returns_it(
+    sessions_api, tmp_path, monkeypatch
+):
+    """L02 fix: dopo reexport_session, la Session persiste briefing_path → open_session
+    ritorna briefingPath non vuoto ANCHE quando il Job è stato eliminato."""
+    from app.jobs import Job
+
+    import vokari.settings as sm
+
+    audio = str(tmp_path / "reexport_fix.wav")
+    Path(audio).touch()
+    job = sessions_api._store.create(Job.new(audio, mode="solo", title="Fix Reexport", model="small", language="it"))
+    sessions_api._store.update(
+        job.id,
+        transcript="testo di prova per il fix",
+        duration_s=60.0,
+        analysis={
+            "meta": {
+                "type": "solo",
+                "title": "Fix Reexport",
+                "date": "2026-06-23",
+                "participants": [],
+                "duration_min": 1,
+            },
+            "purpose": "Verificare briefing_path durevole",
+            "context": "ctx fix",
+            "key_ideas": ["key idea fix"],
+            "decisions": [],
+            "open_questions": [],
+            "next_steps": [],
+            "entities": [],
+        },
+        da_chiarire=[],
+        status="ready",
+    )
+    sessions_api._save_session(sessions_api._store.get(job.id))
+    # Rimuovi il job: simula lo scenario "Job gone, Session rimasta"
+    sessions_api._store.delete(job.id)
+
+    new_dir = tmp_path / "briefing-fix"
+    monkeypatch.setattr(sm, "load", lambda: sm.Settings(briefing_dir=str(new_dir)))
+
+    res = sessions_api.reexport_session(job.id)
+    assert res["ok"] is True
+    expected_path = res["path"]
+    assert expected_path  # non vuoto
+
+    # La Session aggiornata deve avere briefing_path impostato
+    refreshed = sessions_api._sessions.get(job.id)
+    assert refreshed.briefing_path == expected_path
+
+    # open_session deve restituire briefingPath = il path del re-export (job assente)
+    opened = sessions_api.open_session(job.id)
+    assert opened is not None
+    assert opened["briefingPath"] == expected_path
+    assert opened["briefingPath"]  # non vuoto
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Task 12 — LiveTranscriber cablato in start_recording
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1739,6 +1984,10 @@ def test_happy_path_import_to_session_real_seams(tmp_path, monkeypatch):
 
     monkeypatch.setattr(whisper_mod, "_load_model", lambda name: _FakeModel())
 
+    # Il preflight modello (run_processing) chiama models.is_downloaded prima di trascrivere:
+    # nel path real-seams il modello è "già scaricato" → niente chiamata reale a faster-whisper.
+    monkeypatch.setattr("vokari.transcribe.models.is_downloaded", lambda name: True)
+
     # Provider stub via factory (no LLM reale) + 0 domande → genera subito il briefing
     class _Stub:
         def chat_json(self, system, user, *, json_schema=None):
@@ -1872,3 +2121,30 @@ def test_save_session_uses_job_created_at_not_processing_time(tmp_path, monkeypa
     sessions = api.list_sessions()
     assert len(sessions) == 1
     assert sessions[0]["createdAt"] == fixed_ts
+
+
+def test_update_marker_delegates_to_recorder():
+    from app.api import Api
+
+    class FakeRec:
+        def __init__(self):
+            self.calls = []
+
+        def update_marker(self, index, label):
+            self.calls.append((index, label))
+            return {"t_ms": 1000, "label": label}
+
+    api = Api()
+    api._rec = FakeRec()
+    out = api.update_marker(0, "Lotto X")
+    assert out == {"t_ms": 1000, "label": "Lotto X"}
+    assert api._rec.calls == [(0, "Lotto X")]
+
+
+def test_update_marker_no_active_recording():
+    from app.api import Api
+
+    api = Api()
+    api._rec = None
+    out = api.update_marker(0, "x")
+    assert out["ok"] is False

@@ -6,6 +6,8 @@ solo la logica di selezione/avvio con `is_up`/`exe_path` mockati."""
 import os
 
 import app.ollama_manager as om
+import app.runtime_env as rt
+import pytest
 
 
 def test_exe_path_prefers_system(monkeypatch, tmp_path):
@@ -74,3 +76,33 @@ def test_start_false_if_not_installed(monkeypatch, tmp_path):
     monkeypatch.setattr(om, "is_up", lambda e: False)
     monkeypatch.setattr(om, "exe_path", lambda d: None)
     assert om.start(tmp_path, "http://localhost:11434") is False
+
+
+# --- gate policy Store (MSIX): niente auto-download del binario Ollama ---------
+
+
+def test_is_packaged_false_in_test_env():
+    """In test/dev (non MSIX) deve essere False ed essere un bool puro (fail-safe)."""
+    rt.is_packaged.cache_clear()
+    assert rt.is_packaged() is False
+
+
+def test_can_auto_install_true_on_windows_unpackaged(monkeypatch):
+    monkeypatch.setattr(om.sys, "platform", "win32")
+    monkeypatch.setattr("app.runtime_env.is_packaged", lambda: False)
+    assert om.can_auto_install() is True
+
+
+def test_can_auto_install_false_when_packaged(monkeypatch):
+    """In MSIX (build Store) NON auto-installiamo Ollama anche se siamo su Windows."""
+    monkeypatch.setattr(om.sys, "platform", "win32")
+    monkeypatch.setattr("app.runtime_env.is_packaged", lambda: True)
+    assert om.can_auto_install() is False
+
+
+def test_download_packaged_raises_store_guidance(monkeypatch, tmp_path):
+    """In MSIX download() non scarica: solleva guida all'install manuale (mai rete in test)."""
+    monkeypatch.setattr(om.sys, "platform", "win32")
+    monkeypatch.setattr("app.runtime_env.is_packaged", lambda: True)
+    with pytest.raises(RuntimeError, match="Store"):
+        om.download(tmp_path)

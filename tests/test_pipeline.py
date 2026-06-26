@@ -21,6 +21,8 @@ def store(tmp_path):
 
 
 def _patch_engine(monkeypatch, analysis, questions):
+    monkeypatch.setattr(P.models_mod, "is_downloaded", lambda name: True)
+
     def fake_stream(path, *, model, language, on_segment=None, should_cancel=None):
         if on_segment:
             on_segment(1.0, "testo trascritto", "testo trascritto")
@@ -29,7 +31,7 @@ def _patch_engine(monkeypatch, analysis, questions):
     monkeypatch.setattr(P.whisper_mod, "transcribe_stream", fake_stream)
     monkeypatch.setattr(P.analyzer_mod, "analyze", lambda text, *, mode, provider, refinement=None, **_kw: analysis)
     monkeypatch.setattr(
-        P.interview_mod, "detect_questions", lambda a, t, *, provider, mode, should_cancel=None: questions
+        P.interview_mod, "detect_questions", lambda a, t, *, provider, mode, should_cancel=None, **_kw: questions
     )
 
 
@@ -62,9 +64,10 @@ def test_transcribe_progress_emits_cumulative_text(store, tmp_path, monkeypatch)
             on_segment(1.0, "ciao mondo", " mondo")  # cumulativo cresce, seg diverso
         return {"text": "ciao mondo", "duration_s": 5.0}
 
+    monkeypatch.setattr(P.models_mod, "is_downloaded", lambda name: True)
     monkeypatch.setattr(P.whisper_mod, "transcribe_stream", fake_stream)
     monkeypatch.setattr(P.analyzer_mod, "analyze", lambda text, *, mode, provider, refinement=None, **_kw: analysis)
-    monkeypatch.setattr(P.interview_mod, "detect_questions", lambda a, t, *, provider, mode: [])
+    monkeypatch.setattr(P.interview_mod, "detect_questions", lambda a, t, *, provider, mode, **_kw: [])
     job = store.create(Job.new("/tmp/a.wav", model="small", language="it", mode="solo"))
 
     events: list[tuple[str, dict]] = []
@@ -120,6 +123,7 @@ def test_run_processing_detect_questions_failure_still_generates_briefing(store,
     def boom(a, t, *, provider, mode, should_cancel=None):
         raise LLMError("Ollama è attivo ma la risposta ha superato il timeout")
 
+    monkeypatch.setattr(P.models_mod, "is_downloaded", lambda name: True)
     monkeypatch.setattr(P.whisper_mod, "transcribe_stream", fake_stream)
     monkeypatch.setattr(P.analyzer_mod, "analyze", lambda text, *, mode, provider, refinement=None, **_kw: analysis)
     monkeypatch.setattr(P.interview_mod, "detect_questions", boom)
@@ -149,7 +153,9 @@ def test_run_processing_emits_analysis_fit_when_transcript_exceeds_budget(store,
 
     monkeypatch.setattr(P.whisper_mod, "transcribe_stream", fake_stream)
     monkeypatch.setattr(P.analyzer_mod, "analyze", lambda text, *, mode, provider, refinement=None, **_kw: analysis)
-    monkeypatch.setattr(P.interview_mod, "detect_questions", lambda a, t, *, provider, mode, should_cancel=None: [])
+    monkeypatch.setattr(
+        P.interview_mod, "detect_questions", lambda a, t, *, provider, mode, should_cancel=None, **_kw: []
+    )
 
     class _BudgetProv:
         def chat_json(self, system, user):
@@ -209,7 +215,7 @@ def test_detect_questions_gets_empty_transcript_when_over_budget(store, tmp_path
     def fake_stream(path, *, model, language, on_segment=None, should_cancel=None):
         return {"text": long_text, "duration_s": 600.0}
 
-    def fake_detect(a, t, *, provider, mode, should_cancel=None):
+    def fake_detect(a, t, *, provider, mode, should_cancel=None, **_kw):
         captured["t"] = t
         return []
 
@@ -246,7 +252,7 @@ def test_detect_questions_gets_full_transcript_when_ideal(store, tmp_path, monke
     def fake_stream(path, *, model, language, on_segment=None, should_cancel=None):
         return {"text": "trascrizione breve", "duration_s": 12.0}
 
-    def fake_detect(a, t, *, provider, mode, should_cancel=None):
+    def fake_detect(a, t, *, provider, mode, should_cancel=None, **_kw):
         captured["t"] = t
         return []
 
@@ -418,7 +424,7 @@ def test_run_processing_aborts_when_cancelled_during_analysis(store, monkeypatch
     monkeypatch.setattr(
         P.interview_mod,
         "detect_questions",
-        lambda a, t, *, provider, mode, should_cancel=None: [IV.Question(id="q1", text="?", priority="high")],
+        lambda a, t, *, provider, mode, should_cancel=None, **_kw: [IV.Question(id="q1", text="?", priority="high")],
     )
 
     events: list[tuple[str, dict]] = []
@@ -578,3 +584,284 @@ def test_run_processing_really_emits_analysis_preview_and_step(store, tmp_path, 
     assert all(previews[i] == previews[i + 1][: len(previews[i])] for i in range(len(previews) - 1))
     steps = [p["step"] for ev, p in events if ev == "analyze_step"]
     assert "questions" in steps, "analyze_step('questions') non emesso prima di detect_questions"
+
+
+def test_run_processing_downloads_model_when_missing(store, tmp_path, monkeypatch):
+    """Preflight: modello non in cache → emette model_download start/done PRIMA di transcribing,
+    e scarica via download_with_progress. Seam reale: solo models/whisper/analyze finti."""
+    analysis = Analysis(meta=Meta(type="solo", title="X"))
+    _patch_engine(monkeypatch, analysis, [])
+    # sovrascrivi lo stub di _patch_engine: questo modello NON è scaricato
+    monkeypatch.setattr(P.models_mod, "is_downloaded", lambda name: False)
+    monkeypatch.setattr(P.models_mod, "expected_bytes", lambda name: 1_600_000_000)
+    called = {"download": False}
+
+    def fake_dl(name, on_progress=None):
+        called["download"] = True
+        if on_progress:
+            on_progress(800_000_000, 1_600_000_000)
+        return "/fake/path"
+
+    monkeypatch.setattr(P.models_mod, "download_with_progress", fake_dl)
+    job = store.create(Job.new(str(tmp_path / "a.wav"), model="large-v3-turbo", language="it", mode="solo"))
+
+    events: list[tuple[str, dict]] = []
+    s = Settings(briefing_dir=str(tmp_path / "out"))
+    out = P.run_processing(job, store, settings=s, provider=StubProvider(), emit=lambda ev, p: events.append((ev, p)))
+
+    assert called["download"] is True
+    dl = [p["status"] for ev, p in events if ev == "model_download"]
+    assert "start" in dl and "done" in dl
+    assert out.status == "ready"  # dopo il download, la pipeline prosegue normalmente
+
+
+def test_run_processing_model_download_failure_is_terminal(store, tmp_path, monkeypatch):
+    """Se il download del modello fallisce, il job va in error (no trascrizione a vuoto)."""
+    analysis = Analysis(meta=Meta(type="solo", title="X"))
+    _patch_engine(monkeypatch, analysis, [])
+    monkeypatch.setattr(P.models_mod, "is_downloaded", lambda name: False)
+    monkeypatch.setattr(P.models_mod, "expected_bytes", lambda name: 0)
+    monkeypatch.setattr(
+        P.models_mod,
+        "download_with_progress",
+        lambda name, on_progress=None: (_ for _ in ()).throw(RuntimeError("rete assente")),
+    )
+    job = store.create(Job.new(str(tmp_path / "a.wav"), model="large-v3", language="it", mode="solo"))
+
+    events: list[tuple[str, dict]] = []
+    out = P.run_processing(
+        job, store, settings=Settings(), provider=StubProvider(), emit=lambda ev, p: events.append((ev, p))
+    )
+
+    assert out.status == "error"
+    assert "large-v3" in out.error
+    err = [p for ev, p in events if ev == "model_download" and p.get("status") == "error"]
+    assert err, "evento model_download error non emesso"
+
+
+def test_run_processing_passes_markers_to_analyze(store, tmp_path, monkeypatch):
+    """Seam reale: run_processing inoltra job.markers ad analyzer.analyze."""
+    seen = {}
+    analysis = Analysis(meta=Meta(type="solo", title="X"))
+    monkeypatch.setattr(P.models_mod, "is_downloaded", lambda name: True)
+
+    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None):
+        return {"text": "testo trascritto", "duration_s": 5.0}
+
+    monkeypatch.setattr(P.whisper_mod, "transcribe_stream", fake_stream)
+
+    def fake_analyze(text, *, mode, provider, markers=None, **_kw):
+        seen["markers"] = markers
+        return analysis
+
+    monkeypatch.setattr(P.analyzer_mod, "analyze", fake_analyze)
+    monkeypatch.setattr(
+        P.interview_mod, "detect_questions", lambda a, t, *, provider, mode, should_cancel=None, **_kw: []
+    )
+    job = store.create(
+        Job.new(
+            str(tmp_path / "a.wav"),
+            model="small",
+            language="it",
+            mode="solo",
+            markers=[{"t_ms": 5_000, "label": "Punto A"}],
+        )
+    )
+    P.run_processing(
+        job,
+        store,
+        settings=Settings(briefing_dir=str(tmp_path / "out")),
+        provider=StubProvider(),
+        emit=lambda ev, payload: None,
+    )
+    assert seen["markers"] == [{"t_ms": 5_000, "label": "Punto A"}]
+
+
+def test_render_all_artifacts_renders_all_three_without_llm():
+    """L02: render_all_artifacts produce briefing/recap/obsidian dai renderer REALI a
+    partire da un Analysis già pronto, senza alcuna chiamata LLM/whisper."""
+    analysis = Analysis(meta=Meta(type="meeting", title="Riunione", date="2026-06-23"))
+    analysis.purpose = "Decidere se fare la landing page"
+    analysis.key_ideas = ["Aggiungere il calendario stagionale"]
+
+    out = P.render_all_artifacts(
+        analysis,
+        title="Riunione",
+        source_name="rec.m4a",
+        transcription_model="large-v3-turbo",
+        llm_model="ollama:qwen2.5:7b",
+        session_id="abc123",
+        transcript="testo trascritto",
+        da_chiarire=["Budget 700 o 730?"],
+        markers=[{"t_ms": 1000, "label": "punto chiave"}],
+        language="it",
+        word_count=2,
+    )
+    assert "Decidere se fare la landing page" in out["briefing_md"]
+    assert "session_id: abc123" in out["briefing_md"]
+    assert "DA CHIARIRE: Budget 700 o 730?" in out["briefing_md"]
+    assert out["recap_md"].startswith("# Recap — Riunione")
+    assert "Budget 700 o 730?" in out["recap_md"]  # da_chiarire anche nel recap
+    assert isinstance(out["obsidian_notes"], list) and len(out["obsidian_notes"]) >= 1
+    assert out["obsidian_note"] == out["obsidian_notes"][0].content
+
+
+def test_generate_briefing_warns_on_sparse_analysis(store, tmp_path):
+    """L10: se l'analisi finale non ha contenuto strutturato (liste vuote), generate_briefing
+    emette un warning leggibile MA genera comunque il briefing (status=ready, non bloccante)."""
+    sparse = Analysis(meta=Meta(type="solo", title="Vuota"))  # purpose/liste vuoti → sparse
+    job = store.create(Job.new(str(tmp_path / "a.wav"), model="small", mode="solo"))
+    store.update(
+        job.id,
+        transcript="un po' di testo trascritto",
+        analysis=sparse.model_dump(),
+        questions=[],
+        status="awaiting_interview",
+    )
+    events: list[tuple] = []
+    s = Settings(briefing_dir=str(tmp_path / "out"))
+    out = P.generate_briefing(
+        store.get(job.id),
+        store,
+        answers={},
+        skipped=[],
+        settings=s,
+        provider=StubProvider(),
+        emit=lambda ev, payload: events.append((ev, payload)),
+    )
+    assert out.status == "ready"
+    assert out.briefing_md  # il briefing è comunque generato
+    warn_msgs = [
+        p
+        for (ev, p) in events
+        if ev == "warning"
+        for m in p.get("messages", [])
+        if "vuot" in m.lower() or "sostanz" in m.lower()
+    ]
+    assert warn_msgs, "atteso un warning sull'analisi vuota"
+
+
+def test_generate_briefing_no_sparse_warning_when_content_present(store, tmp_path):
+    """Controprova: con un'analisi che ha contenuto, NESSUN warning di analisi vuota."""
+    full = Analysis(meta=Meta(type="solo", title="Piena"), key_ideas=["un'idea concreta"])
+    job = store.create(Job.new(str(tmp_path / "b.wav"), model="small", mode="solo"))
+    store.update(job.id, transcript="testo", analysis=full.model_dump(), questions=[], status="awaiting_interview")
+    events: list[tuple] = []
+    s = Settings(briefing_dir=str(tmp_path / "out2"))
+    out = P.generate_briefing(
+        store.get(job.id),
+        store,
+        answers={},
+        skipped=[],
+        settings=s,
+        provider=StubProvider(),
+        emit=lambda ev, payload: events.append((ev, payload)),
+    )
+    assert out.status == "ready"
+    sparse_warn = [p for (ev, p) in events if ev == "warning" for m in p.get("messages", []) if "vuot" in m.lower()]
+    assert not sparse_warn
+
+
+def test_generate_briefing_renders_markers_in_artifacts(store, tmp_path, monkeypatch):
+    """Seam reale end-to-end: job.markers compaiono nel briefing_md (path 0-domande →
+    generate_briefing usa i renderer REALI, solo analyze/whisper sono finti)."""
+    analysis = Analysis(meta=Meta(type="solo", title="X"))
+    _patch_engine(monkeypatch, analysis, [])  # detect_questions → [] ; analyze → analysis
+    job = store.create(
+        Job.new(
+            str(tmp_path / "a.wav"),
+            model="small",
+            language="it",
+            mode="solo",
+            markers=[{"t_ms": 90_000, "label": "Lotto X"}],
+        )
+    )
+    out = P.run_processing(
+        job,
+        store,
+        settings=Settings(briefing_dir=str(tmp_path / "out")),
+        provider=StubProvider(),
+        emit=lambda ev, payload: None,
+    )
+    assert out.status == "ready"
+    assert "Lotto X" in out.briefing_md
+    assert "01:30" in out.briefing_md
+    assert "## Segnalibri" in out.recap_md
+
+
+# ── L09: warning lingua configurata ≠ rilevata ───────────────────────────────
+
+
+def test_language_warning_mismatch():
+    from app.pipeline import _language_warning
+
+    msg = _language_warning("it", "en", 0.95)
+    assert msg and "inglese" in msg.lower() and "it" in msg.lower()
+
+
+def test_language_warning_none_when_match():
+    from app.pipeline import _language_warning
+
+    assert _language_warning("it", "it", 0.99) is None
+
+
+def test_language_warning_none_when_low_confidence_mismatch():
+    """Mismatch ma confidenza bassa (<0.66) → niente allarme (rilevazione inaffidabile)."""
+    from app.pipeline import _language_warning
+
+    assert _language_warning("it", "en", 0.4) is None
+
+
+def test_language_warning_uncertain_multilang():
+    """Confidenza molto bassa (<0.5) con lingua rilevata → avviso 'incerta/multilingua'."""
+    from app.pipeline import _language_warning
+
+    msg = _language_warning("auto", "it", 0.42)
+    assert msg and ("incert" in msg.lower() or "multiling" in msg.lower())
+
+
+def test_language_warning_none_when_auto_and_confident():
+    from app.pipeline import _language_warning
+
+    assert _language_warning("auto", "it", 0.95) is None
+
+
+def test_run_processing_warns_on_language_mismatch(store, tmp_path, monkeypatch):
+    """Seam: se la lingua rilevata ≠ configurata (con confidenza), run_processing emette un warning."""
+    monkeypatch.setattr(P.models_mod, "is_downloaded", lambda name: True)
+
+    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None):
+        if on_segment:
+            on_segment(1.0, "hello world", "hello world", from_cache=False)
+        return {
+            "source": path,
+            "model": model,
+            "language": language,
+            "detected_language": "en",
+            "language_probability": 0.96,
+            "duration_s": 5.0,
+            "segments": [],
+            "text": "hello world",
+        }
+
+    monkeypatch.setattr(P.whisper_mod, "transcribe_stream", fake_stream)
+
+    # analisi finta per non chiamare l'LLM reale
+    monkeypatch.setattr(
+        P.analyzer_mod,
+        "analyze",
+        lambda text, **kw: Analysis(meta=Meta(type="solo"), key_ideas=["x"]),
+    )
+    monkeypatch.setattr(P.interview_mod, "detect_questions", lambda *a, **k: [])
+
+    events: list[tuple] = []
+    job = store.create(Job.new(str(tmp_path / "a.wav"), model="large-v3-turbo", mode="solo", language="it"))
+    P.run_processing(
+        job,
+        store,
+        settings=Settings(briefing_dir=str(tmp_path / "o")),
+        provider=StubProvider(),
+        emit=lambda ev, p: events.append((ev, p)),
+    )
+    lang_warn = [p for (ev, p) in events if ev == "warning" for m in p.get("messages", []) if "inglese" in m.lower()]
+    assert lang_warn, "atteso un warning di lingua sbagliata"

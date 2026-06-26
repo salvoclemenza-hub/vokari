@@ -16,9 +16,11 @@ from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
 from pathlib import Path
 
+from app import changelog as changelog_mod
 from app import debuglog
 from app import pipeline as pipeline_mod
 from app.jobs import Job, JobStore
+from vokari import i18n
 from vokari import settings as settings_mod
 from vokari.analyze.schema import Analysis
 from vokari.audio import capture
@@ -34,7 +36,7 @@ def _vokari_version() -> str:
     try:
         return _pkg_version("vokari")
     except PackageNotFoundError:
-        return "0.1.1"
+        return "0.1.2"
 
 
 _GITHUB_REPO = "salvoclemenza-hub/vokari"
@@ -62,36 +64,6 @@ def _github_stars() -> int:
         stars = 0
     _stars_cache["value"] = stars
     return stars
-
-
-_DL_POLL_S = 1.0  # intervallo di polling per la stima del progresso download
-
-
-def _dir_size(path: Path) -> int:
-    """Byte totali dei file sotto `path` (best-effort, ignora errori transitori)."""
-    total = 0
-    try:
-        for p in path.rglob("*"):
-            if p.is_file():
-                try:
-                    total += p.stat().st_size
-                except OSError:
-                    pass
-    except OSError:
-        pass
-    return total
-
-
-def _expected_bytes(name: str) -> int:
-    """Stima i byte attesi dal size_label del CATALOG ('~1.6 GB' -> 1_600_000_000). 0 se ignoto."""
-    import re
-
-    for m in models_mod.CATALOG:
-        if m.name == name:
-            mt = re.search(r"([\d.]+)\s*GB", m.size_label)
-            if mt:
-                return int(float(mt.group(1)) * 1_000_000_000)
-    return 0
 
 
 def _file_dialog(kind: str):
@@ -211,24 +183,31 @@ def _match_curated(name: str) -> dict | None:
     return None
 
 
-def _ollama_entry(name: str, *, size_label: str, curated: dict | None, installed: bool, active: bool) -> dict:
+def _ollama_entry(
+    name: str, *, size_label: str, curated: dict | None, installed: bool, active: bool, lang: str = "it"
+) -> dict:
     """Costruisce una voce OllamaModelEntry (== interface in bridge.ts).
 
     I metadati "scheda modello" (speed/quality/context/tags/detailUrl) vengono dal catalogo
     curato. Per un modello installato fuori catalogo: speed/quality/tags restano neutri (non
     inventiamo metriche), ma deriviamo `params` dal nome e mostriamo una descrizione neutra
-    così la card resta coerente con le altre invece di apparire "rotta" (fix Phase C)."""
+    così la card resta coerente con le altre invece di apparire "rotta" (fix Phase C).
+    `lang` (app_language) localizza descrizione e tag (card "Modelli AI")."""
     detail = (curated or {}).get("detailUrl") or f"https://ollama.com/library/{name.split(':')[0]}"
-    off_desc = "Modello locale installato (fuori dal catalogo consigliato di VOKARI)."
+    # description: dal catalogo i18n per nome (fallback al testo IT del catalogo); fuori-catalogo → off_desc.
+    if curated:
+        description = i18n.model_desc(name, lang) or curated.get("description", "")
+    else:
+        description = i18n.t("models.off_desc", lang) if installed else ""
     return {
         "name": name,
         "sizeLabel": size_label,
-        "description": curated["description"] if curated else (off_desc if installed else ""),
+        "description": description,
         "speed": curated.get("speed", 0) if curated else 0,
         "quality": curated.get("quality", 0) if curated else 0,
         "params": curated.get("params", "") if curated else _derive_params(name),
         "context": curated.get("context", "") if curated else "",
-        "tags": curated.get("tags", []) if curated else [],
+        "tags": i18n.model_tags(curated.get("tags", []), lang) if curated else [],
         "detailUrl": detail,
         "minRamGb": _min_ram_gb(size_label),  # MOD2: RAM minima stimata (0 = ignota → nessun avviso)
         "isInstalled": installed,
@@ -341,9 +320,23 @@ class Api:
         except Exception as e:
             debuglog.log_exc("emit_error", e, name=event)
 
+    def _lang(self) -> str:
+        """Lingua dell'app (app_language) per localizzare i messaggi restituiti alla UI."""
+        return i18n.normalize_lang(settings_mod.load().app_language)
+
     # --- chrome (M5) --------------------------------------------------
     def get_app_info(self) -> dict:
         return {"version": _vokari_version(), "license": "MIT", "githubStars": _github_stars()}
+
+    @_traced
+    def get_changelog(self, since: str = "") -> dict:
+        """Novità della versione (Tema 2): voci di versione > `since` e <= versione corrente,
+        dalla più recente. `since` = settings.last_seen_version (vuoto la prima volta). Le chiavi
+        delle voci sono già camelCase (vengono dal JSON versionato `app/assets/changelog.json`).
+        Il frontend mostra il popup solo se `entries` è non vuoto (gate via versione vista)."""
+        current = _vokari_version()
+        entries = changelog_mod.entries_since(changelog_mod.load(), since, current)
+        return {"currentVersion": current, "entries": entries}
 
     def system_specs(self) -> dict:
         """MOD2: specifiche hardware per i suggerimenti di compatibilità modelli.
@@ -390,7 +383,7 @@ class Api:
         """Apre un URL nel browser di sistema. In pywebview un <a href> esterno dirotterebbe
         la finestra → il frontend chiama questo metodo per i link (es. repository GitHub)."""
         if not isinstance(url, str) or not url.startswith(("http://", "https://")):
-            return {"ok": False, "error": "url non valido"}
+            return {"ok": False, "error": i18n.t("api.invalid_url", self._lang())}
         try:
             webbrowser.open(url)
             return {"ok": True}
@@ -580,6 +573,9 @@ class Api:
             "transcriptionLanguage": s.transcription_language,
             "livePreview": s.live_preview,
             "liveModel": s.live_model,
+            "onboarded": s.onboarded,
+            "lastSeenVersion": s.last_seen_version,
+            "appLanguage": s.app_language,
             "hasApiKey": bool(settings_mod.get_api_key()),
         }
 
@@ -598,6 +594,9 @@ class Api:
             "transcriptionLanguage": "transcription_language",
             "livePreview": "live_preview",
             "liveModel": "live_model",
+            "onboarded": "onboarded",
+            "lastSeenVersion": "last_seen_version",
+            "appLanguage": "app_language",
         }
         s = settings_mod.load()
         for camel, snake in _CAMEL_TO_SNAKE.items():
@@ -625,10 +624,11 @@ class Api:
         error}. Sync con timeout corto (un ping è breve). La chiave NON viene mai loggata; l'errore
         restituito è generico. Speculare al pre-flight Ollama: scopre subito una chiave errata
         invece che a fine trascrizione."""
+        s = settings_mod.load()
+        lang = i18n.normalize_lang(s.app_language)
         key = settings_mod.get_api_key()
         if not key:
-            return {"ok": False, "reachable": False, "error": "Nessuna chiave API impostata."}
-        s = settings_mod.load()
+            return {"ok": False, "reachable": False, "error": i18n.t("api.no_api_key", lang)}
         try:
             import anthropic
 
@@ -636,12 +636,12 @@ class Api:
             client.messages.create(model=s.claude_model, max_tokens=1, messages=[{"role": "user", "content": "ping"}])
             return {"ok": True, "reachable": True, "error": ""}
         except anthropic.AuthenticationError:
-            return {"ok": False, "reachable": True, "error": "Chiave API non valida o scaduta."}
+            return {"ok": False, "reachable": True, "error": i18n.t("api.key_invalid", lang)}
         except anthropic.APIConnectionError:
-            return {"ok": False, "reachable": False, "error": "Claude non raggiungibile (controlla la rete)."}
+            return {"ok": False, "reachable": False, "error": i18n.t("api.claude_unreachable", lang)}
         except Exception as e:
             debuglog.log_exc("verify_api_key_error", e)
-            return {"ok": False, "reachable": False, "error": "Verifica non riuscita."}
+            return {"ok": False, "reachable": False, "error": i18n.t("api.verify_failed", lang)}
 
     @_traced
     def browse_folder(self) -> dict:
@@ -677,45 +677,30 @@ class Api:
         """Scarica un modello Whisper in background thread. Emette eventi model_download via push
         (start → progress* → done|error). Ritorna subito per non bloccare il thread pywebview.
 
-        Il progresso è STIMATO dalla crescita della dir modelli su disco: faster-whisper
-        hardcoda tqdm_class=disabled_tqdm, quindi non c'è un callback di progresso vero — la
-        stima evita di reimplementarne il download (fragile). È approssimata e capata al 99%
-        fino all'evento done."""
-        expected = _expected_bytes(name)
-        models_dir = ensure_dirs().models
+        Il progresso è STIMATO dalla crescita della dir modelli (faster-whisper non espone un
+        callback reale) — vedi models.download_with_progress."""
+        expected = models_mod.expected_bytes(name)
 
         def _do_download():
             self._emit("model_download", {"name": name, "status": "start", "totalBytes": expected})
-            stop = threading.Event()
-            baseline = _dir_size(models_dir)
-
-            def _monitor():
-                while not stop.wait(_DL_POLL_S):
-                    grown = max(0, _dir_size(models_dir) - baseline)
-                    pct = min(0.99, grown / expected) if expected else 0.0
-                    # MOD3: bytesDone/bytesTotal (stimati per Whisper) → ETA calcolato lato frontend.
-                    self._emit(
+            try:
+                models_mod.download_with_progress(
+                    name,
+                    on_progress=lambda done, total: self._emit(
                         "model_download",
                         {
                             "name": name,
                             "status": "progress",
-                            "pct": round(pct, 3),
-                            "bytesDone": grown,
-                            "bytesTotal": expected,
+                            "pct": round(min(0.99, done / total), 3) if total else 0.0,
+                            "bytesDone": done,
+                            "bytesTotal": total,
                         },
-                    )
-
-            mon = threading.Thread(target=_monitor, daemon=True)
-            if expected:
-                mon.start()
-            try:
-                models_mod.download(name)
+                    ),
+                )
                 self._emit("model_download", {"name": name, "status": "done"})
             except Exception as e:
                 debuglog.log_exc("model_download_error", e, name=name)
                 self._emit("model_download", {"name": name, "status": "error", "error": str(e)})
-            finally:
-                stop.set()
 
         threading.Thread(target=_do_download, daemon=True).start()
         return {"ok": True}  # ritorna subito; il vero stato arriva via evento
@@ -744,6 +729,7 @@ class Api:
         from vokari.llm.ollama_provider import is_up
 
         s = settings_mod.load()
+        lang = i18n.normalize_lang(s.app_language)
         active = s.ollama_model
         endpoint = s.ollama_endpoint.rstrip("/")
 
@@ -786,6 +772,7 @@ class Api:
                     curated=curated,
                     installed=True,
                     active=name == active,
+                    lang=lang,
                 )
             )
 
@@ -793,7 +780,9 @@ class Api:
         for c in _OLLAMA_CATALOG:
             if c["name"] not in seen:
                 result.append(
-                    _ollama_entry(c["name"], size_label=c["sizeLabel"], curated=c, installed=False, active=False)
+                    _ollama_entry(
+                        c["name"], size_label=c["sizeLabel"], curated=c, installed=False, active=False, lang=lang
+                    )
                 )
 
         return result
@@ -807,6 +796,7 @@ class Api:
         from vokari.llm.ollama_provider import is_up
 
         s = settings_mod.load()
+        lang = i18n.normalize_lang(s.app_language)
         endpoint = s.ollama_endpoint.rstrip("/")
 
         def _do_pull() -> None:
@@ -818,7 +808,7 @@ class Api:
                     {
                         "name": name,
                         "status": "error",
-                        "error": "Ollama non raggiungibile. Assicurati che sia in esecuzione.",
+                        "error": i18n.t("api.ollama_unreachable_run", lang),
                     },
                 )
                 return
@@ -907,7 +897,7 @@ class Api:
         import shutil
 
         models_dir = ensure_dirs().models
-        used = _dir_size(models_dir) + self._ollama_installed_bytes()
+        used = models_mod._dir_size(models_dir) + self._ollama_installed_bytes()
         try:
             free = shutil.disk_usage(str(models_dir)).free
         except OSError:
@@ -922,10 +912,11 @@ class Api:
         from vokari.llm.ollama_provider import is_up
 
         s = settings_mod.load()
+        lang = i18n.normalize_lang(s.app_language)
         endpoint = s.ollama_endpoint.rstrip("/")
 
         if not is_up(endpoint):
-            return {"ok": False, "error": "Ollama non raggiungibile"}
+            return {"ok": False, "error": i18n.t("api.ollama_unreachable", lang)}
         try:
             r = httpx.request("DELETE", f"{endpoint}/api/delete", json={"name": name}, timeout=30.0)
             return {"ok": r.status_code in (200, 204)}
@@ -972,6 +963,7 @@ class Api:
         from app import ollama_manager
 
         s = settings_mod.load()
+        lang = i18n.normalize_lang(s.app_language)
 
         def _do() -> None:
             data_dir = ensure_dirs().data
@@ -987,7 +979,7 @@ class Api:
                     "ollama_setup",
                     {"pct": 1.0, "status": "done"}
                     if ok
-                    else {"pct": 1.0, "status": "error", "error": "Ollama installato ma non avviato"},
+                    else {"pct": 1.0, "status": "error", "error": i18n.t("api.ollama_installed_not_started", lang)},
                 )
             except Exception as e:
                 debuglog.log_exc("ollama_install_error", e)
@@ -1004,6 +996,7 @@ class Api:
         from app import ollama_manager
 
         s = settings_mod.load()
+        lang = i18n.normalize_lang(s.app_language)
         if s.brain != "ollama" or ollama_manager.is_running(s.ollama_endpoint):
             return
         if not ollama_manager.is_installed(ensure_dirs().data):
@@ -1013,20 +1006,22 @@ class Api:
             self._emit("ollama_setup", {"pct": 1.0, "status": "starting"})
             ok = ollama_manager.start(ensure_dirs().data, s.ollama_endpoint)
             done = {"pct": 1.0, "status": "done"}
-            err = {"pct": 1.0, "status": "error", "error": "Ollama non avviato"}
+            err = {"pct": 1.0, "status": "error", "error": i18n.t("api.ollama_not_started", lang)}
             self._emit("ollama_setup", done if ok else err)
 
         threading.Thread(target=_do, daemon=True).start()
 
     # --- LibreHardwareMonitor (telemetria temperatura) ----------------
     def lhm_status(self) -> dict:
-        """Ritorna {installed, running}: usato dalla sezione LHM in Impostazioni."""
+        """Ritorna {installed, running, canInstall}: usato dalla sezione LHM in Impostazioni.
+        canInstall=False in MSIX (build Store) → la UI guida all'install manuale (ADR-046)."""
         from app import lhm_manager
 
         data_dir = ensure_dirs().data
         return {
             "installed": lhm_manager.is_installed(data_dir),
             "running": lhm_manager.is_running(),
+            "canInstall": lhm_manager.can_auto_install(),
         }
 
     def lhm_install(self) -> dict:
@@ -1181,8 +1176,16 @@ class Api:
     @_traced
     def add_marker(self, label: str) -> dict:
         if self._rec is None:
-            return {"ok": False, "error": "nessuna registrazione attiva"}
+            return {"ok": False, "error": i18n.t("api.no_active_recording", self._lang())}
         return self._rec.add_marker(label)
+
+    @_traced
+    def update_marker(self, index: int, label: str) -> dict:
+        """Aggiorna l'etichetta di un segnalibro già creato (editing inline in Live)."""
+        if self._rec is None:
+            return {"ok": False, "error": i18n.t("api.no_active_recording", self._lang())}
+        m = self._rec.update_marker(int(index), label)
+        return m if m is not None else {"ok": False, "error": i18n.t("api.bookmark_not_found", self._lang())}
 
     @_traced
     def cancel_recording(self) -> dict:
@@ -1191,7 +1194,7 @@ class Api:
         Il thread mic chiama on_audio/feed() fino al join: fermando il LiveTranscriber
         prima gli si passa audio da fermo (race I1)."""
         if self._rec is None:
-            return {"ok": False, "error": "nessuna registrazione attiva"}
+            return {"ok": False, "error": i18n.t("api.no_active_recording", self._lang())}
         # Cattura in locali e azzera PRIMA di fermare (previene race con start_recording)
         rec = self._rec
         live = self._live
@@ -1220,21 +1223,21 @@ class Api:
     @_traced
     def pause_recording(self) -> dict:
         if self._rec is None:
-            return {"ok": False, "error": "nessuna registrazione attiva"}
+            return {"ok": False, "error": i18n.t("api.no_active_recording", self._lang())}
         self._rec.pause()
         return {"ok": True, "paused": True}
 
     @_traced
     def resume_recording(self) -> dict:
         if self._rec is None:
-            return {"ok": False, "error": "nessuna registrazione attiva"}
+            return {"ok": False, "error": i18n.t("api.no_active_recording", self._lang())}
         self._rec.resume()
         return {"ok": True, "paused": False}
 
     @_traced
     def stop_recording(self, mode: str | None = None, title: str | None = None, context: str | None = None) -> dict:
         if self._rec is None:
-            return {"ok": False, "error": "nessuna registrazione attiva"}
+            return {"ok": False, "error": i18n.t("api.no_active_recording", self._lang())}
         # Catturiamo rec E live in locali SUBITO (sul thread js-api) e azzeriamo i campi:
         # _finalize gira in un thread daemon, e una nuova start_recording potrebbe riassegnare
         # self._live mentre la closure lo sta fermando (race → anteprima persa o None.feed).
@@ -1286,9 +1289,14 @@ class Api:
     def _error_job(self, message: str, *, title: str | None, mode: str | None) -> dict:
         """Crea un job in stato error + emette lo status: l'errore arriva sempre alla UI."""
         s = settings_mod.load()
+        lang = i18n.normalize_lang(s.app_language)
         job = self._store.create(
             Job.new(
-                "", title=title or "Sessione senza titolo", mode=mode or s.default_mode, status="error", error=message
+                "",
+                title=title or i18n.t("api.untitled_session", lang),
+                mode=mode or s.default_mode,
+                status="error",
+                error=message,
             )
         )
         self._emit("status", {"jobId": job.id, "status": "error", "error": message})
@@ -1298,10 +1306,24 @@ class Api:
     def import_file(
         self, path: str, mode: str | None = None, title: str | None = None, context: str | None = None
     ) -> dict:
+        # Gate (audit #6): rifiuta subito un file mancante/vuoto invece di scoprirlo a fine
+        # pipeline dentro ffmpeg. La decodificabilità del formato resta gestita da
+        # convert.to_wav_16k_mono (AudioConversionError) con messaggio chiaro.
+        lang = i18n.normalize_lang(settings_mod.load().app_language)
+        p = Path(path)
+        if not p.is_file():
+            debuglog.log("import_rejected", reason="missing")
+            return {"error": i18n.t("api.file_not_found", lang)}
+        try:
+            empty = p.stat().st_size == 0
+        except OSError:
+            empty = False
+        if empty:
+            debuglog.log("import_rejected", reason="empty")
+            return {"error": i18n.t("api.file_empty", lang)}
         # B3: senza titolo esplicito, derivalo dal nome del file (es. "183.m4a" → "183")
-        # invece di lasciare l'ennesima "Sessione senza titolo" nella libreria.
         if not title:
-            title = Path(path).stem or None
+            title = p.stem or None
         return self._start_job(path, source="mic", mode=mode, title=title, context=context, markers=[])
 
     # --- elaborazione -------------------------------------------------
@@ -1362,9 +1384,8 @@ class Api:
         job = self._store.get(job_id)
         if job and job.status in ("queued", "transcribing", "analyzing", "rendering"):
             if not job.audio_path or not Path(job.audio_path).exists():
-                error_msg = (
-                    f"File audio non trovato ('{job.audio_path or 'vuoto'}'): impossibile riprendere l'elaborazione."
-                )
+                lang = i18n.normalize_lang(settings_mod.load().app_language)
+                error_msg = i18n.t("api.resume_file_missing", lang, path=job.audio_path or "—")
                 job = self._store.update(job_id, status="error", error=error_msg)
                 self._emit("status", {"jobId": job_id, "status": "error", "error": error_msg})
             else:
@@ -1451,6 +1472,9 @@ class Api:
             status="ready",
             audio_path=job.audio_path,
             markers=job.markers,
+            analysis=job.analysis,
+            da_chiarire=job.da_chiarire,
+            briefing_path=job.briefing_path,
             artifacts={
                 "briefing_md": job.briefing_md,
                 "recap_md": job.recap_md,
@@ -1521,10 +1545,10 @@ class Api:
         {ok:False, error} se la sessione non esiste, non ha audio o il file è stato rimosso."""
         s = self._sessions.get(session_id)
         if not s or not s.audio_path:
-            return {"ok": False, "error": "audio non disponibile"}
+            return {"ok": False, "error": i18n.t("api.audio_unavailable", self._lang())}
         p = Path(s.audio_path)
         if not p.exists():
-            return {"ok": False, "error": "file audio non trovato (spostato o eliminato)"}
+            return {"ok": False, "error": i18n.t("api.audio_file_missing", self._lang())}
         try:
             os.startfile(str(p))  # Windows  # noqa: S606 — apre l'audio nel lettore di sistema
             return {"ok": True}
@@ -1539,9 +1563,10 @@ class Api:
         if not session:
             return None
         arts = session.artifacts or {}
-        # briefingPath dal job persistito (session.id == job.id): serve a "Apri cartella".
+        # briefingPath: preferisce session.briefing_path (durevole dopo re-export/L02),
+        # fallback al job persistito (session.id == job.id) per sessioni pre-L02.
         job = self._store.get(session_id)
-        briefing_path = job.briefing_path if job else ""
+        briefing_path = session.briefing_path or (job.briefing_path if job else "")
         return {
             "title": session.title,
             "briefingMd": arts.get("briefing_md", ""),
@@ -1569,7 +1594,7 @@ class Api:
         else:
             session = self._sessions.get(job_id)
             if not session:
-                return {"ok": False, "error": f"job {job_id!r} non trovato"}
+                return {"ok": False, "error": i18n.t("api.job_not_found", self._lang(), sid=repr(job_id))}
             arts = session.artifacts or {}
             title, recap_md, audio_path = session.title, arts.get("recap_md", ""), session.audio_path
         out = self._choose_save_path(f"{_slug(title)}.recap.pdf", audio_path, ".recap.pdf")
@@ -1618,14 +1643,15 @@ class Api:
     def export_obsidian(self, job_id: str) -> dict:
         """Esporta le note Obsidian nel vault configurato.
         Ritorna {"ok": True, "count": n, "paths": [...]} o {"ok": False, "error": ...}."""
+        lang = i18n.normalize_lang(settings_mod.load().app_language)
         job = self._store.get(job_id)
         session = None if job else self._sessions.get(job_id)
         if not job and not session:
-            return {"ok": False, "error": f"job {job_id!r} non trovato"}
+            return {"ok": False, "error": i18n.t("api.job_not_found", lang, sid=repr(job_id))}
         try:
             s = settings_mod.load()
             if not s.obsidian_vault:
-                return {"ok": False, "error": "vault Obsidian non configurato (Impostazioni)"}
+                return {"ok": False, "error": i18n.t("api.vault_not_configured", lang)}
             if job:
                 # Percorso normale: re-render completo dall'analysis (sessione + note atomiche).
                 analysis = Analysis.model_validate(job.analysis) if job.analysis else Analysis()
@@ -1634,19 +1660,87 @@ class Api:
                     session_title=job.title,
                     session_date=analysis.meta.date if analysis.meta else "",
                     da_chiarire=job.da_chiarire,  # marcatori persistiti → note esportate complete
+                    app_lang=lang,
                 )
             else:
-                # Fallback: il job non c'è più; scrivi la singola nota già renderizzata
-                # salvata nella Session (niente analysis → niente note atomiche).
-                arts = session.artifacts or {}
-                note_md = arts.get("obsidian_note", "")
-                if not note_md:
-                    return {"ok": False, "error": "nessuna nota Obsidian disponibile per la sessione"}
-                filename = f"{obsidian_mod.safe(session.title)}.md"
-                notes = [obsidian_mod.ObsidianNote(filename, note_md)]
+                # Fallback senza Job. Con l'Analysis persistita nella Session (L02) ri-renderizza
+                # le note ATOMICHE complete (ancora + decisioni) dal JSON salvato verso il vault
+                # corrente; altrimenti (sessioni pre-L02) scrivi la singola nota già renderizzata.
+                if session.analysis:
+                    analysis = Analysis.model_validate(session.analysis)
+                    notes = obsidian_mod.render_obsidian_notes(
+                        analysis,
+                        session_title=session.title,
+                        session_date=analysis.meta.date if analysis.meta else "",
+                        da_chiarire=session.da_chiarire,
+                        app_lang=lang,
+                    )
+                else:
+                    arts = session.artifacts or {}
+                    note_md = arts.get("obsidian_note", "")
+                    if not note_md:
+                        return {"ok": False, "error": i18n.t("api.no_obsidian_note", lang)}
+                    filename = f"{obsidian_mod.safe(session.title)}.md"
+                    notes = [obsidian_mod.ObsidianNote(filename, note_md)]
             written = obsidian_mod.export_to_vault(notes, s.obsidian_vault)
             return {"ok": True, "count": len(written), "paths": written}
         except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    @_traced
+    def reexport_session(self, session_id: str) -> dict:
+        """L02: rigenera briefing.md / recap.md / note Obsidian di una sessione salvata dal JSON
+        Analysis PERSISTITO, scrivendoli nelle impostazioni CORRENTI (briefing_dir + vault). NESSUNA
+        ri-trascrizione né chiamata LLM (render-only). Aggiorna gli artefatti congelati della Session
+        e ritorna ExportResult {ok, path: briefing, count: n note, paths: [vault], error?}.
+
+        Sessioni salvate prima di L02 non hanno `analysis` → errore esplicito (mai crash)."""
+        s = settings_mod.load()
+        lang = i18n.normalize_lang(s.app_language)
+        session = self._sessions.get(session_id)
+        if not session:
+            return {"ok": False, "error": i18n.t("api.session_not_found", lang, sid=repr(session_id))}
+        if not session.analysis:
+            return {"ok": False, "error": i18n.t("api.reexport_no_analysis", lang)}
+        try:
+            analysis = Analysis.model_validate(session.analysis)
+            source_name = Path(session.audio_path).name if session.audio_path else ""
+            rendered = pipeline_mod.render_all_artifacts(
+                analysis,
+                title=session.title,
+                source_name=source_name,
+                transcription_model=session.model,
+                llm_model=pipeline_mod.llm_label(s),
+                session_id=session.id,
+                transcript=session.transcript or "",
+                da_chiarire=session.da_chiarire,
+                markers=session.markers,
+                language=("" if session.language in ("", "auto") else session.language),
+                word_count=session.word_count or 0,
+                app_lang=lang,
+            )
+            # briefing.md → briefing_dir corrente, altrimenti userData/data/briefings (azione di
+            # libreria esplicita: non scriviamo accanto all'audio originale dell'utente).
+            name = f"{_slug(session.title)}.briefing.md"
+            briefing_dir = Path(s.briefing_dir) if s.briefing_dir else (ensure_dirs().data / "briefings")
+            briefing_dir.mkdir(parents=True, exist_ok=True)
+            briefing_path = briefing_dir / name
+            briefing_path.write_text(rendered["briefing_md"], encoding="utf-8")
+            # note Obsidian → vault corrente (se configurato)
+            vault_paths: list[str] = []
+            if s.obsidian_vault:
+                vault_paths = obsidian_mod.export_to_vault(rendered["obsidian_notes"], s.obsidian_vault)
+            # aggiorna gli artefatti congelati della Session (template/contenuto correnti)
+            session.briefing_path = str(briefing_path)
+            session.artifacts = {
+                "briefing_md": rendered["briefing_md"],
+                "recap_md": rendered["recap_md"],
+                "obsidian_note": rendered["obsidian_note"],
+            }
+            self._sessions.save(session)
+            return {"ok": True, "path": str(briefing_path), "count": len(vault_paths), "paths": vault_paths}
+        except Exception as e:
+            debuglog.log_exc("reexport_session_error", e, jobId=session_id)
             return {"ok": False, "error": str(e)}
 
     @_traced

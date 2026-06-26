@@ -22,6 +22,14 @@ def _icon_path() -> str | None:
 def main() -> None:
     if not _DIST.exists():
         sys.exit(f"Frontend non buildato: {_DIST} mancante.\nEsegui:  cd frontend && pnpm install && pnpm build")
+    # Pacchetto distribuibile: rende visibile l'ffmpeg bundlato (no-op in sviluppo → ffmpeg di sistema).
+    # Va fatto PRIMA di qualunque uso di ffmpeg (conversione audio) così shutil.which lo trova.
+    try:
+        from app import ffmpeg_manager
+
+        ffmpeg_manager.add_bundled_to_path()
+    except Exception:  # noqa: S110 — best-effort: in sviluppo si usa l'ffmpeg di sistema
+        pass
     # Pulizia all'avvio: rimuove le registrazioni temporanee non finalizzate da un crash
     # precedente (dir 'vokari-rec-*' più vecchie di 2h; il filtro età non tocca cattura in corso).
     from vokari.audio import capture as _capture

@@ -4,19 +4,28 @@ Soglia generosa: la trascrizione intera va in un'unica chiamata (spec §7); il
 chunk-and-merge annacqua le decisioni, quindi è solo un paracadute oltre ~100k token.
 """
 
+from vokari import i18n
 from vokari.analyze import fit, prompts
 from vokari.analyze.schema import Analysis
 from vokari.llm.base import LLMError
 
 FALLBACK_WORD_THRESHOLD = 70000  # paracadute assoluto (proxy parole) per provider senza budget
+
+
+def is_sparse_analysis(analysis: Analysis) -> bool:
+    """True se l'analisi non porta alcun contenuto STRUTTURATO: key_ideas, decisions,
+    open_questions, next_steps, entities tutte vuote. È il sintomo "stringhe piene, liste
+    vuote" (ADR-038): purpose/context possono essere pieni ma il briefing resta privo di
+    sostanza. Puro (nessun LLM/IO): usato dalla pipeline per avvisare invece di consegnare
+    in silenzio un briefing pieno di "(nessuna…)"."""
+    return not (
+        analysis.key_ideas or analysis.decisions or analysis.open_questions or analysis.next_steps or analysis.entities
+    )
+
+
 # Fonte unica delle costanti di chunk in fit.py; alias a livello modulo perché i test
 # monkeypatchano `analyzer.SUMMARY_CHUNK_WORDS` e `_summarize_long` legge il globale del modulo.
 SUMMARY_CHUNK_WORDS = fit.SUMMARY_CHUNK_WORDS
-
-_SYS_SUMMARY = (
-    "Riassumi in italiano questa porzione di trascrizione mantenendo "
-    "decisioni, nomi, numeri e prossimi passi. Sii conciso."
-)
 
 
 def _needs_summary(transcript: str, provider) -> bool:
@@ -32,28 +41,20 @@ def _needs_summary(transcript: str, provider) -> bool:
     return fit.assess_fit(transcript, provider).level != "ideal"
 
 
-def _summarize_long(transcript: str, provider, *, emit=None, should_cancel=None) -> str:
+def _summarize_long(transcript: str, provider, *, emit=None, should_cancel=None, language: str = "it") -> str:
     words = transcript.split()
     chunks = [" ".join(words[i : i + SUMMARY_CHUNK_WORDS]) for i in range(0, len(words), SUMMARY_CHUNK_WORDS)]
     # Trascrizione enorme (~8h): N chiamate LLM in serie. Avvisa (riusa l'evento `warning`,
     # niente nuovo evento → no drift di contratto) e onora la cancellazione tra un chunk e
     # l'altro: senza, l'utente resterebbe minuti senza feedback né modo di fermare.
     if emit:
-        emit(
-            "warning",
-            {
-                "messages": [
-                    f"Trascrizione oltre il contesto del modello: la riassumo in {len(chunks)} parti "
-                    "prima dell'analisi (qualche minuto; il dettaglio può ridursi). Per la massima "
-                    "fedeltà usa un modello con contesto più ampio o dividi la registrazione."
-                ]
-            },
-        )
+        emit("warning", {"messages": [i18n.t("analyzer.summary_warning", language, n=len(chunks))]})
+    sys_summary = i18n.t("analyzer.summary_system", language)
     summaries: list[str] = []
     for i, c in enumerate(chunks):
         if should_cancel and should_cancel():
             break
-        summaries.append(provider.chat_text(_SYS_SUMMARY, f"Porzione {i + 1}/{len(chunks)}:\n\n{c}"))
+        summaries.append(provider.chat_text(sys_summary, f"Porzione {i + 1}/{len(chunks)}:\n\n{c}"))
     return "\n\n---\n\n".join(summaries)
 
 
@@ -64,32 +65,38 @@ def analyze(
     meta: dict | None = None,
     refinement: dict | None = None,
     context: str | None = None,
+    markers: list[dict] | None = None,
     verify: bool = False,
     provider,
     emit=None,
     should_cancel=None,
     on_progress=None,
     on_step=None,
+    language: str = "it",
 ) -> Analysis:
     text = transcript
     if _needs_summary(transcript, provider):
-        text = _summarize_long(transcript, provider, emit=emit, should_cancel=should_cancel)
+        text = _summarize_long(transcript, provider, emit=emit, should_cancel=should_cancel, language=language)
 
     # Usa chat_json_stream se disponibile (streaming con on_progress), altrimenti fallback a chat_json.
     # Contratto: il fallback mantiene compatibilità con provider che non implementano lo streaming
     # (es. fake nei test). On_progress riceve il testo grezzo accumulato.
     if hasattr(provider, "chat_json_stream") and on_progress:
         raw = provider.chat_json_stream(
-            prompts.build_system(),
-            prompts.build_user(text, mode=mode, meta=meta, refinement=refinement, context=context),
+            prompts.build_system(language),
+            prompts.build_user(
+                text, mode=mode, meta=meta, refinement=refinement, context=context, markers=markers, language=language
+            ),
             json_schema=Analysis.model_json_schema(),
             on_delta=on_progress,
             should_cancel=should_cancel,
         )
     else:
         raw = provider.chat_json(
-            prompts.build_system(),
-            prompts.build_user(text, mode=mode, meta=meta, refinement=refinement, context=context),
+            prompts.build_system(language),
+            prompts.build_user(
+                text, mode=mode, meta=meta, refinement=refinement, context=context, markers=markers, language=language
+            ),
             json_schema=Analysis.model_json_schema(),
         )
 
@@ -105,7 +112,13 @@ def analyze(
         if on_step:
             on_step("verify")
         analysis = _verify_coverage(
-            text, analysis, mode=mode, context=context, provider=provider, should_cancel=should_cancel
+            text,
+            analysis,
+            mode=mode,
+            context=context,
+            provider=provider,
+            should_cancel=should_cancel,
+            language=language,
         )
     return analysis
 
@@ -116,14 +129,16 @@ def _coverage_needed(analysis: Analysis, mode: str) -> bool:
     return not analysis.purpose.strip() or mode in ("meeting", "riunione")
 
 
-def _verify_coverage(text: str, analysis: Analysis, *, mode, context, provider, should_cancel=None) -> Analysis:
+def _verify_coverage(
+    text: str, analysis: Analysis, *, mode, context, provider, should_cancel=None, language: str = "it"
+) -> Analysis:
     """Rilegge la trascrizione e corregge purpose + voci mancanti. Tollerante: su cancel o
     risposta inattesa tiene la prima analisi (non peggiora mai)."""
     if should_cancel and should_cancel():
         return analysis
     raw = provider.chat_json(
-        prompts.build_verify_system(),
-        prompts.build_verify_user(text, analysis, mode=mode, context=context),
+        prompts.build_verify_system(language),
+        prompts.build_verify_user(text, analysis, mode=mode, context=context, language=language),
         json_schema=Analysis.model_json_schema(),
     )
     if not isinstance(raw, dict):

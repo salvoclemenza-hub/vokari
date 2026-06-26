@@ -226,6 +226,13 @@ kbd{font-family:var(--mono);font-size:11px;font-weight:500;}
 .vk-bm-track{position:relative;height:8px;background:var(--console2);border:1px solid var(--con-line);border-radius:999px;}
 .vk-bm-track i{position:absolute;top:-3px;width:2px;height:12px;background:var(--phos);border-radius:2px;}
 .vk-bm-list{font-family:var(--mono);font-size:11px;color:var(--con-dim);margin-top:8px;text-align:center;}
+.vk-bm-item { display: inline-flex; align-items: center; gap: 6px; margin-right: 12px; }
+.vk-bm-t { opacity: .7; font-variant-numeric: tabular-nums; }
+.vk-bm-edit {
+  background: transparent; border: none; border-bottom: 1px dashed var(--line, #3a3a3a);
+  color: inherit; font: inherit; padding: 1px 2px; min-width: 90px;
+}
+.vk-bm-edit:focus { outline: none; border-bottom-color: var(--accent, #6ea8fe); }
 
 .vk-kbd-hint{text-align:center;font-family:var(--mono);font-size:10px;color:var(--con-dim);margin-top:12px;flex:0 0 auto;}
 .vk-kbd-hint kbd{font-family:var(--mono);font-size:10px;color:var(--con-ink);border:1px solid var(--con-line);border-radius:4px;padding:0 5px;}
@@ -515,6 +522,11 @@ kbd{font-family:var(--mono);font-size:11px;font-weight:500;}
 .vk-seg2 button.on{background:var(--green);color:#fff;}
 .vk-set-priv{grid-column:1 / -1;display:flex;align-items:center;gap:10px;background:var(--green-soft);border:1px solid #d3e4d3;border-radius:12px;padding:12px 16px;font-size:13px;color:var(--green-d);font-weight:500;}
 .vk-set-priv svg{width:16px;height:16px;flex:0 0 auto;}
+
+/* ── Onboarding wizard (immersivo, primo avvio) ──────────────────────── */
+/* wrapper icona scalabile: l'SVG di VkIcon non ha dimensioni proprie → le eredita dal box */
+.vk-onb-ic{display:inline-flex;flex:0 0 auto;}
+.vk-onb-ic svg{width:100%;height:100%;display:block;}
 
 /* ── Impostazioni — redesign 2026-06-17 ──────────────────────────────────────
    chiave API azionabile (mascherata + Sostituisci), hairline tra sotto-impostazioni,
@@ -1039,6 +1051,22 @@ button:disabled,[disabled]{opacity:.5;cursor:not-allowed;}
 @keyframes vk-modal-fade{from{opacity:0;}to{opacity:1;}}
 @keyframes vk-modal-pop{from{opacity:0;transform:translateY(8px) scale(.97);}to{opacity:1;transform:none;}}
 @media (prefers-reduced-motion:reduce){.vk-modal,.vk-modal .card{animation:none;}}
+
+/* ── Popup "Novità della versione" (Tema 2) ── */
+.vk-modal .card.vk-whatsnew{width:540px;max-width:calc(100% - 40px);}
+.vk-wn-list{display:flex;flex-direction:column;gap:18px;max-height:46vh;overflow-y:auto;margin:0 -4px 18px;padding:2px 4px;scrollbar-width:thin;}
+.vk-wn-list::-webkit-scrollbar{width:8px;}
+.vk-wn-list::-webkit-scrollbar-thumb{background:var(--line2);border-radius:8px;}
+.vk-wn-ver header{display:flex;align-items:baseline;gap:9px;margin-bottom:9px;flex-wrap:wrap;}
+.vk-wn-ver header .v{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--green-d);background:var(--green-soft);border:1px solid #c7e0cf;border-radius:6px;padding:2px 7px;}
+.vk-wn-ver header .t{font-family:var(--disp);font-size:14px;font-weight:600;color:var(--ink);}
+.vk-wn-ver header .d{font-family:var(--mono);font-size:10.5px;color:var(--faint);margin-left:auto;}
+.vk-wn-ver ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;}
+.vk-wn-hl{display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--ink2);line-height:1.5;}
+.vk-wn-hl .k{flex:0 0 auto;font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;border-radius:5px;padding:3px 7px;margin-top:1px;color:var(--green-d);background:var(--green-soft);border:1px solid #c7e0cf;}
+.vk-wn-hl.fix .k{color:#9a6b1f;background:rgba(216,162,76,.16);border-color:rgba(216,162,76,.4);}
+.vk-wn-hl.improvement .k{color:#6c52a8;background:rgba(154,122,214,.14);border-color:rgba(154,122,214,.32);}
+.vk-wn-hl .x{flex:1 1 auto;}
 
 /* ── Navigabilità (round 2 onda 1) ──────────────────────────────────────
    Uscita/Annulla terziaria con un trattamento UNICO nel flusso (A3/UX1): prima

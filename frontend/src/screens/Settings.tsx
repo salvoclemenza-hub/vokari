@@ -1,84 +1,17 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { bridge, onVokariEvent, DEFAULT_SETTINGS, type ModelEntry, type VokariSettings, type LhmStatus } from "../bridge";
 import { toast } from "../toast";
 import { confirmDialog } from "../confirm";
 import { VkIcon } from "../icons";
-
-// ────────────────────────────────────────────────────────────
-// Sezione Whisper (usata anche da Models.tsx se importata)
-// ────────────────────────────────────────────────────────────
-export function WhisperModelList({
-  models,
-  activeModel,
-  downloading,
-  onDownload,
-  onActivate,
-}: {
-  models: ModelEntry[];
-  activeModel: string;
-  downloading: string | null;
-  onDownload: (name: string) => void;
-  onActivate: (name: string) => void;
-}) {
-  return (
-    <>
-      {models.map((m) => {
-        const isActive = m.name === activeModel;
-        const isDownloading = downloading === m.name;
-        return (
-          <div
-            className={"vk-model" + (isActive ? " on" : "")}
-            key={m.name}
-            title={m.description}
-            onClick={() => {
-              if (m.state !== "available" && !isActive) onActivate(m.name);
-            }}
-            style={{ cursor: m.state !== "available" && !isActive ? "pointer" : "default" }}
-          >
-            <span className="vk-radio"></span>
-            <span className="nm">
-              <span className="t">
-                {m.name}
-                {m.recommended && <span className="df">DEFAULT</span>}
-              </span>
-              <span className="m">
-                {m.sizeLabel} · {m.languages}
-              </span>
-            </span>
-            {isActive ? (
-              <span className="dl ok">
-                <VkIcon.check />
-                Attivo
-              </span>
-            ) : m.state === "downloaded" ? (
-              <span className="dl ok">
-                <VkIcon.check />
-                Scaricato
-              </span>
-            ) : (
-              <button
-                className="dl get"
-                disabled={isDownloading}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDownload(m.name);
-                }}
-              >
-                <VkIcon.down />
-                {isDownloading ? "Scaricando…" : "Scarica"}
-              </button>
-            )}
-          </div>
-        );
-      })}
-    </>
-  );
-}
+import { ollamaHint, type OllamaHint } from "../modelStatus";
+import i18n, { SUPPORTED_LANGUAGES, LANGUAGE_LABELS, type AppLanguage } from "../i18n";
 
 // ────────────────────────────────────────────────────────────
 // Schermata Impostazioni
 // ────────────────────────────────────────────────────────────
 export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } = {}) {
+  const { t } = useTranslation();
   const [settings, setSettings] = useState<VokariSettings>(DEFAULT_SETTINGS);
   const [apiKeyInput, setApiKeyInput] = useState("");
   // Chiave già impostata: si mostra mascherata + "Sostituisci"; `replacing` rivela l'input.
@@ -90,7 +23,8 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
   const [downloading, setDownloading] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   // Verifica runtime Ollama (metodo bridge esistente; gestione completa → schermata Modelli AI).
-  const [ollamaState, setOllamaState] = useState<"unknown" | "checking" | "up" | "down">("unknown");
+  // OllamaHint distingue installato-ma-fermo da non-installato (B2).
+  const [ollamaState, setOllamaState] = useState<"unknown" | "checking" | OllamaHint>("unknown");
   const [lhmStatus, setLhmStatus] = useState<LhmStatus | null>(null);
   const [lhmInstalling, setLhmInstalling] = useState(false);
 
@@ -109,15 +43,16 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
         setDownloading(payload.name as string);
       } else if (payload.status === "done") {
         setDownloading(null);
-        toast(`Modello ${payload.name as string} scaricato ✓`, "success");
+        toast(t("settings.modelDownloaded", { name: payload.name as string }), "success");
         bridge.listModels().then(setModels);
       } else if (payload.status === "error") {
         setDownloading(null);
-        toast(`Download di ${payload.name as string} non riuscito: ${(payload.error as string) ?? "errore sconosciuto"}`, "error");
+        toast(t("settings.modelDownloadFail", { name: payload.name as string, error: (payload.error as string) ?? t("settings.unknownError") }), "error");
         bridge.listModels().then(setModels);
       }
     });
     return off;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ascolta eventi lhm_progress per aggiornare lo stato LHM
@@ -126,14 +61,15 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
       if (event !== "lhm_progress") return;
       if (payload.status === "done") {
         setLhmInstalling(false);
-        toast("LibreHardwareMonitor installato e avviato ✓", "success");
+        toast(t("settings.lhmInstalled"), "success");
         bridge.lhmStatus().then(setLhmStatus);
       } else if (payload.status === "error") {
         setLhmInstalling(false);
-        toast(`Installazione LHM non riuscita: ${(payload.error as string) ?? "errore sconosciuto"}`, "error");
+        toast(t("settings.lhmInstallFail", { error: (payload.error as string) ?? t("settings.unknownError") }), "error");
       }
     });
     return off;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // helper: salva un patch parziale e aggiorna lo stato locale
@@ -142,9 +78,9 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
     try {
       const updated = await bridge.saveSettings(patch);
       setSettings(updated);
-      toast("Salvato ✓", "success");   // auto-save: feedback immediato a ogni cambio
+      toast(t("settings.saved"), "success");   // auto-save: feedback immediato a ogni cambio
     } catch (e) {
-      toast(`Salvataggio impostazioni non riuscito: ${String(e)}`, "error");
+      toast(t("settings.saveFail", { error: String(e) }), "error");
     } finally {
       setSaving(false);
     }
@@ -155,9 +91,9 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
     setOllamaState("checking");
     try {
       const st = await bridge.ollamaStatus();
-      setOllamaState(st.running ? "up" : "down");
+      setOllamaState(ollamaHint(st)); // up | installed-down | not-installed
     } catch {
-      setOllamaState("down");
+      setOllamaState("not-installed");
     }
   }
 
@@ -165,10 +101,10 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
   // selezione modelli (gestiti in Modelli AI) NON vengono toccati — pure-frontend via saveSettings.
   async function handleReset() {
     const ok = await confirmDialog({
-      title: "Ripristinare le impostazioni predefinite?",
-      message: "Le preferenze di comportamento tornano ai valori di default. Cartelle, chiave API e modelli non vengono toccati.",
-      confirmLabel: "Ripristina",
-      cancelLabel: "Annulla",
+      title: t("settings.resetTitle"),
+      message: t("settings.resetMsg"),
+      confirmLabel: t("settings.resetConfirm"),
+      cancelLabel: t("settings.cancel"),
     });
     if (!ok) return;
     await savePatch({
@@ -190,29 +126,29 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
         setSettings((s) => ({ ...s, hasApiKey: true }));
         setApiKeyInput("");          // svuota il campo: mai rimandare la chiave in chiaro
         setReplacing(false);          // torna alla vista mascherata "(impostata)"
-        toast("Chiave API salvata ✓", "success");
+        toast(t("settings.keySaved"), "success");
       } else {
-        toast("Chiave API non salvata", "error");
+        toast(t("settings.keyNotSaved"), "error");
       }
     } catch (e) {
-      toast(`Salvataggio chiave non riuscito: ${String(e)}`, "error");
+      toast(t("settings.keySaveFail", { error: String(e) }), "error");
     }
   }
 
   // SET1: verifica la chiave salvata con un ping a Claude (solo on-click, mai al mount).
   async function handleVerifyKey() {
-    setKeyVerify({ state: "checking", msg: "Verifica in corso…" });
+    setKeyVerify({ state: "checking", msg: t("settings.verifying") });
     const res = await bridge.verifyApiKey();
-    if (res.ok) setKeyVerify({ state: "ok", msg: "Chiave valida · Claude raggiungibile" });
-    else setKeyVerify({ state: "err", msg: res.error || "Verifica non riuscita" });
+    if (res.ok) setKeyVerify({ state: "ok", msg: t("settings.keyValid") });
+    else setKeyVerify({ state: "err", msg: res.error || t("settings.verifyFail") });
   }
 
   // SET2: rimuove la chiave dal keyring previa conferma in-app.
   async function handleRemoveKey() {
     const ok = await confirmDialog({
-      title: "Rimuovere la chiave API?",
-      message: "La chiave Claude verrà cancellata dal keyring. Potrai reinserirla quando vuoi.",
-      confirmLabel: "Rimuovi", cancelLabel: "Annulla", danger: true,
+      title: t("settings.removeKeyTitle"),
+      message: t("settings.removeKeyMsg"),
+      confirmLabel: t("settings.remove"), cancelLabel: t("settings.cancel"), danger: true,
     });
     if (!ok) return;
     const res = await bridge.deleteApiKey();
@@ -221,9 +157,9 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
       setReplacing(false);
       setApiKeyInput("");
       setKeyVerify({ state: "idle", msg: "" });
-      toast("Chiave API rimossa", "success");
+      toast(t("settings.keyRemoved"), "success");
     } else {
-      toast("Rimozione non riuscita", "error");
+      toast(t("settings.removeFail"), "error");
     }
   }
 
@@ -232,12 +168,20 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
     if (path) await savePatch({ [field]: path });
   }
 
+  // Tema 3: cambia la lingua dell'app (UI + output AI). changeLanguage prima → UI a caldo
+  // immediata; poi persiste in settings.app_language.
+  async function changeAppLanguage(lang: AppLanguage) {
+    if (lang === settings.appLanguage) return;
+    void i18n.changeLanguage(lang);
+    await savePatch({ appLanguage: lang });
+  }
+
   async function handleLhmInstall() {
     setLhmInstalling(true);
     try {
       await bridge.lhmInstall();
     } catch (e) {
-      toast(`Installazione LHM non riuscita: ${String(e)}`, "error");
+      toast(t("settings.lhmInstallFail", { error: String(e) }), "error");
       setLhmInstalling(false);
     }
   }
@@ -245,25 +189,25 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
   async function handleLhmStart() {
     try {
       const res = await bridge.lhmStart();
-      if (!res.ok) toast("Avvio LHM non riuscito (UAC annullato?)", "error");
-      else { toast("LibreHardwareMonitor avviato ✓", "success"); bridge.lhmStatus().then(setLhmStatus); }
-    } catch (e) { toast(`Avvio LHM non riuscito: ${String(e)}`, "error"); }
+      if (!res.ok) toast(t("settings.lhmStartFailUac"), "error");
+      else { toast(t("settings.lhmStarted"), "success"); bridge.lhmStatus().then(setLhmStatus); }
+    } catch (e) { toast(t("settings.lhmStartFail", { error: String(e) }), "error"); }
   }
 
   async function handleLhmStop() {
     try {
       await bridge.lhmStop();
-      toast("LibreHardwareMonitor fermato", "success");
+      toast(t("settings.lhmStopped"), "success");
       bridge.lhmStatus().then(setLhmStatus);
-    } catch (e) { toast(`Stop LHM non riuscito: ${String(e)}`, "error"); }
+    } catch (e) { toast(t("settings.lhmStopFail", { error: String(e) }), "error"); }
   }
 
   async function handleLhmUninstall() {
     try {
       await bridge.lhmUninstall();
-      toast("LibreHardwareMonitor rimosso", "success");
+      toast(t("settings.lhmRemoved"), "success");
       bridge.lhmStatus().then(setLhmStatus);
-    } catch (e) { toast(`Rimozione LHM non riuscita: ${String(e)}`, "error"); }
+    } catch (e) { toast(t("settings.lhmUninstallFail", { error: String(e) }), "error"); }
   }
 
   async function handleDownload(name: string) {
@@ -271,7 +215,7 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
       await bridge.downloadModel(name);   // l'esito reale arriva via evento model_download
       bridge.listModels().then(setModels);
     } catch (e) {
-      toast(`Avvio download non riuscito: ${String(e)}`, "error");
+      toast(t("settings.downloadStartFail", { error: String(e) }), "error");
     }
   }
 
@@ -279,14 +223,14 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
     <>
       <div className="vk-greet">
         <div>
-          <div className="vk-kick">~/impostazioni</div>
-          <h1>Impostazioni{saving ? <span style={{ fontSize: 13, marginLeft: 8, opacity: 0.5 }}>Salvo…</span> : null}</h1>
+          <div className="vk-kick">{t("settings.kick")}</div>
+          <h1>{t("settings.heading")}{saving ? <span style={{ fontSize: 13, marginLeft: 8, opacity: 0.5 }}>{t("settings.savingInline")}</span> : null}</h1>
         </div>
         <button className="vk-reset" onClick={() => void handleReset()}>
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
             <path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" />
           </svg>
-          Ripristina predefiniti
+          {t("settings.resetBtn")}
         </button>
       </div>
 
@@ -300,30 +244,30 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
                 <span className="ico">
                   <VkIcon.brain />
                 </span>
-                Cervello AI
+                {t("settings.brainTitle")}
               </div>
               <div className="vk-sc-sub">
-                Chi organizza la trascrizione nel briefing. Solo il testo viene inviato.
+                {t("settings.brainSub")}
               </div>
 
               <div className="vk-field">
-                <label>Anthropic API key</label>
+                <label>{t("settings.apiKeyLabel")}</label>
                 {settings.hasApiKey && !replacing ? (
                   <div className="vk-key">
-                    <span className="val">••••••••••••••••<b>(impostata)</b></span>
+                    <span className="val">••••••••••••••••<b>{t("settings.keySet")}</b></span>
                     <button className="vk-keyact" onClick={() => void handleVerifyKey()}
                             disabled={keyVerify.state === "checking"}>
-                      {keyVerify.state === "checking" ? "Verifico…" : "Verifica"}
+                      {keyVerify.state === "checking" ? t("settings.verifyingShort") : t("settings.verify")}
                     </button>
-                    <button className="vk-keyact" onClick={() => setReplacing(true)}>Sostituisci</button>
-                    <button className="vk-keyact danger" onClick={() => void handleRemoveKey()}>Rimuovi</button>
+                    <button className="vk-keyact" onClick={() => setReplacing(true)}>{t("settings.replace")}</button>
+                    <button className="vk-keyact danger" onClick={() => void handleRemoveKey()}>{t("settings.remove")}</button>
                   </div>
                 ) : (
                   <input
                     className="vk-input key"
                     type="password"
                     value={apiKeyInput}
-                    placeholder={settings.hasApiKey ? "••••••••••••••••••• (impostata)" : "sk-ant-…"}
+                    placeholder={settings.hasApiKey ? t("settings.keyPlaceholderSet") : t("settings.keyPlaceholderEmpty")}
                     onChange={(e) => setApiKeyInput(e.target.value)}
                     onBlur={() => void handleApiKeyBlur()}
                     onKeyDown={(e) => { if (e.key === "Enter") void handleApiKeyBlur(); }}
@@ -332,7 +276,7 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
                 )}
                 <div className="vk-hlp lock">
                   <VkIcon.lock />
-                  Necessaria per Claude API. Salvata nel keyring del sistema, mai su disco.
+                  {t("settings.keyHelp")}
                 </div>
                 {keyVerify.state !== "idle" && (
                   <div className={"vk-verify " + keyVerify.state} role="status">
@@ -342,31 +286,31 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
                 )}
                 {replacing && settings.hasApiKey && (
                   <button className="vk-linkbtn" onClick={() => { setReplacing(false); setApiKeyInput(""); }}>
-                    Annulla
+                    {t("settings.cancel")}
                   </button>
                 )}
               </div>
 
               <div className="vk-field">
-                <label>Modalità di organizzazione</label>
+                <label>{t("settings.orgModeLabel")}</label>
                 <div className="vk-seg2">
                   <button
                     className={settings.brain === "claude" ? "on" : ""}
                     onClick={() => void savePatch({ brain: "claude" })}
                   >
-                    Claude API
+                    {t("settings.claudeApi")}
                   </button>
                   <button
                     className={settings.brain === "ollama" ? "on" : ""}
                     onClick={() => void savePatch({ brain: "ollama" })}
                   >
-                    Locale (Ollama)
+                    {t("settings.localOllama")}
                   </button>
                 </div>
               </div>
 
               <div className="vk-field" style={{ marginBottom: 0 }}>
-                <label>Endpoint Ollama (offline)</label>
+                <label>{t("settings.ollamaEndpointLabel")}</label>
                 <div className="vk-path">
                   <input
                     className="vk-input"
@@ -376,21 +320,23 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
                     onChange={(e) => setSettings((s) => ({ ...s, ollamaEndpoint: e.target.value }))}
                     onBlur={() => void savePatch({ ollamaEndpoint: settings.ollamaEndpoint })}
                   />
-                  <button className="vk-mini" onClick={() => void verifyOllama()}>Verifica</button>
+                  <button className="vk-mini" onClick={() => void verifyOllama()}>{t("settings.verify")}</button>
                 </div>
                 {ollamaState !== "unknown" && (
                   <div className={"vk-ollama-state" + (ollamaState === "up" ? " up" : "")}>
                     <span className="dot" />
                     {ollamaState === "checking"
-                      ? "verifica in corso…"
+                      ? t("settings.ollamaChecking")
                       : ollamaState === "up"
-                      ? "runtime in esecuzione · raggiungibile"
-                      : "runtime fermo — avvialo dalla schermata Modelli AI"}
+                      ? t("settings.ollamaUp")
+                      : ollamaState === "installed-down"
+                      ? t("settings.ollamaDown")
+                      : t("settings.ollamaNotInstalled")}
                   </div>
                 )}
                 {onOpenModels && (
                   <button className="vk-xlink" onClick={() => onOpenModels()}>
-                    Gestione completa dei modelli <VkIcon.arrow /> Modelli AI
+                    {t("settings.modelsManage")} <VkIcon.arrow /> {t("settings.modelsAI")}
                   </button>
                 )}
               </div>
@@ -400,42 +346,59 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
             <div className="vk-sc">
               <div className="vk-sc-h">
                 <span className="ico"><VkIcon.cpu /></span>
-                Temperatura CPU
+                {t("settings.cpuTempTitle")}
               </div>
               <div className="vk-sc-sub">
-                LibreHardwareMonitor espone i sensori hardware via WMI. Richiede una
-                conferma UAC al primo avvio; le letture successive non richiedono admin.
+                {t("settings.cpuTempSub")}
               </div>
               {lhmStatus === null ? (
-                <div className="vk-hlp">Carico stato…</div>
+                <div className="vk-hlp">{t("settings.loadingState")}</div>
               ) : (
                 <div className="vk-field" style={{ marginBottom: 0 }}>
                   <div style={{ fontSize: 13, marginBottom: 10, opacity: 0.8 }}>
                     {!lhmStatus.installed
-                      ? "Non installato"
+                      ? t("settings.lhmNotInstalled")
                       : lhmStatus.running
-                      ? "Attivo — temperatura visibile nella barra di stato"
-                      : "Installato · non in esecuzione"}
+                      ? t("settings.lhmActive")
+                      : t("settings.lhmInstalledNotRunning")}
                   </div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     {!lhmStatus.installed ? (
-                      <button
-                        className="vk-mini"
-                        disabled={lhmInstalling}
-                        onClick={() => void handleLhmInstall()}
-                      >
-                        {lhmInstalling ? "Installando…" : "Installa"}
-                      </button>
+                      lhmStatus.canInstall ? (
+                        <button
+                          className="vk-mini"
+                          disabled={lhmInstalling}
+                          onClick={() => void handleLhmInstall()}
+                        >
+                          {lhmInstalling ? t("settings.installing") : t("settings.install")}
+                        </button>
+                      ) : (
+                        <span style={{ fontSize: 12, opacity: 0.78, maxWidth: 360 }}>
+                          {t("settings.msixPre")}
+                          <span
+                            className="mono"
+                            style={{ cursor: "pointer", textDecoration: "underline" }}
+                            onClick={() =>
+                              void bridge.openUrl(
+                                "https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases",
+                              )
+                            }
+                          >
+                            LibreHardwareMonitor
+                          </span>
+                          {t("settings.msixPost")}
+                        </span>
+                      )
                     ) : (
                       <>
                         {!lhmStatus.running && (
                           <button className="vk-mini" onClick={() => void handleLhmStart()}>
-                            Avvia
+                            {t("settings.start")}
                           </button>
                         )}
                         {lhmStatus.running && (
                           <button className="vk-mini" onClick={() => void handleLhmStop()}>
-                            Ferma
+                            {t("settings.stop")}
                           </button>
                         )}
                         <button
@@ -443,7 +406,7 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
                           style={{ opacity: 0.6 }}
                           onClick={() => void handleLhmUninstall()}
                         >
-                          Rimuovi
+                          {t("settings.remove")}
                         </button>
                       </>
                     )}
@@ -452,7 +415,7 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
                       style={{ opacity: 0.6 }}
                       onClick={() => bridge.lhmStatus().then(setLhmStatus)}
                     >
-                      Aggiorna stato
+                      {t("settings.refreshState")}
                     </button>
                   </div>
                 </div>
@@ -468,40 +431,40 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
                 <span className="ico">
                   <VkIcon.folder />
                 </span>
-                Output &amp; integrazioni
+                {t("settings.outputTitle")}
               </div>
-              <div className="vk-sc-sub">Dove finiscono i briefing e le note.</div>
+              <div className="vk-sc-sub">{t("settings.outputSub")}</div>
 
               <div className="vk-field">
-                <label>Cartella dei briefing</label>
+                <label>{t("settings.briefingDirLabel")}</label>
                 <div className="vk-path">
                   <input
                     className="vk-input"
                     type="text"
                     value={settings.briefingDir}
-                    placeholder="~/Documenti/Vokari/briefing"
+                    placeholder={t("settings.briefingDirPlaceholder")}
                     onChange={(e) => setSettings((s) => ({ ...s, briefingDir: e.target.value }))}
                     onBlur={() => void savePatch({ briefingDir: settings.briefingDir })}
                   />
                   <button className="vk-mini" onClick={() => void handleBrowse("briefingDir")}>
-                    Sfoglia
+                    {t("settings.browse")}
                   </button>
                 </div>
               </div>
 
               <div className="vk-field" style={{ marginBottom: 0 }}>
-                <label>Vault Obsidian</label>
+                <label>{t("settings.vaultLabel")}</label>
                 <div className="vk-path">
                   <input
                     className="vk-input"
                     type="text"
                     value={settings.obsidianVault}
-                    placeholder="~/Obsidian/Secondo cervello"
+                    placeholder={t("settings.vaultPlaceholder")}
                     onChange={(e) => setSettings((s) => ({ ...s, obsidianVault: e.target.value }))}
                     onBlur={() => void savePatch({ obsidianVault: settings.obsidianVault })}
                   />
                   <button className="vk-mini" onClick={() => void handleBrowse("obsidianVault")}>
-                    Sfoglia
+                    {t("settings.browse")}
                   </button>
                 </div>
               </div>
@@ -513,73 +476,89 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
                 <span className="ico">
                   <VkIcon.gear />
                 </span>
-                Generale
+                {t("settings.generalTitle")}
               </div>
-              <div className="vk-sc-sub">Comportamenti predefiniti.</div>
+              <div className="vk-sc-sub">{t("settings.generalSub")}</div>
 
               <div className="vk-field">
-                <label>Modalità di default</label>
+                <label>{t("settings.language.label")}</label>
+                <div className="vk-seg2">
+                  {SUPPORTED_LANGUAGES.map((lang) => (
+                    <button
+                      key={lang}
+                      className={settings.appLanguage === lang ? "on" : ""}
+                      onClick={() => void changeAppLanguage(lang)}
+                    >
+                      {LANGUAGE_LABELS[lang]}
+                    </button>
+                  ))}
+                </div>
+                <div className="vk-hlp">{t("settings.language.hint")}</div>
+              </div>
+
+              <div className="vk-field">
+                <label>{t("settings.defaultModeLabel")}</label>
                 <div className="vk-seg2">
                   <button
                     className={settings.defaultMode === "solo" ? "on" : ""}
                     onClick={() => void savePatch({ defaultMode: "solo" })}
                   >
-                    Solo
+                    {t("settings.modeSolo")}
                   </button>
                   <button
                     className={settings.defaultMode === "riunione" ? "on" : ""}
                     onClick={() => void savePatch({ defaultMode: "riunione" })}
                   >
-                    Riunione
+                    {t("settings.modeMeeting")}
                   </button>
                 </div>
               </div>
 
               <div className="vk-field">
-                <label>Lingua di trascrizione</label>
+                <label>{t("settings.transcriptionLangLabel")}</label>
                 <div className="vk-seg2">
                   <button
                     className={settings.transcriptionLanguage === "auto" ? "on" : ""}
                     onClick={() => void savePatch({ transcriptionLanguage: "auto" })}
                   >
-                    Automatica
+                    {t("settings.langAuto")}
                   </button>
                   <button
                     className={settings.transcriptionLanguage === "it" ? "on" : ""}
                     onClick={() => void savePatch({ transcriptionLanguage: "it" })}
                   >
-                    Italiano
+                    {t("settings.langItalian")}
                   </button>
                   <button
                     className={settings.transcriptionLanguage === "en" ? "on" : ""}
                     onClick={() => void savePatch({ transcriptionLanguage: "en" })}
                   >
-                    English
+                    {t("settings.langEnglish")}
                   </button>
                 </div>
               </div>
 
               <div className="vk-field">
-                <label>Anteprima live durante la registrazione</label>
+                <label>{t("settings.livePreviewLabel")}</label>
                 <div className="vk-seg2">
                   <button
                     className={settings.livePreview ? "on" : ""}
                     onClick={() => void savePatch({ livePreview: true })}
                   >
-                    Attiva
+                    {t("settings.enable")}
                   </button>
                   <button
                     className={!settings.livePreview ? "on" : ""}
                     onClick={() => void savePatch({ livePreview: false })}
                   >
-                    Disattiva
+                    {t("settings.disable")}
                   </button>
                 </div>
               </div>
 
               {settings.livePreview && (
                 <div className="vk-field" style={{ marginBottom: 0 }}>
-                  <label>Modello live</label>
+                  <label>{t("settings.liveModelLabel")}</label>
                   <div className="vk-seg2">
                     {(["tiny", "base", "small"] as const).map((m) => {
                       const notReady = (models.find((x) => x.name === m)?.state ?? "available") === "available";
@@ -589,7 +568,7 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
                           className={settings.liveModel === m ? "on" : ""}
                           onClick={() => void savePatch({ liveModel: m })}
                         >
-                          {m === "tiny" ? "tiny · veloce" : m === "base" ? "base · bilanciato" : "small · preciso"}
+                          {m === "tiny" ? t("settings.liveTiny") : m === "base" ? t("settings.liveBase") : t("settings.liveSmall")}
                           {notReady && <span style={{ marginLeft: 4, opacity: 0.5, fontSize: 11 }}>↓</span>}
                         </button>
                       );
@@ -601,19 +580,19 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
                       return (
                         <div className="vk-dlnote">
                           <VkIcon.down />
-                          <span><b>{settings.liveModel}</b> non è ancora scaricato.</span>
+                          <span><b>{settings.liveModel}</b>{t("settings.notDownloadedSuffix")}</span>
                           <button
                             disabled={downloading === settings.liveModel}
                             onClick={() => void handleDownload(settings.liveModel)}
                           >
-                            {downloading === settings.liveModel ? "Scaricando…" : "Scarica ora"}
+                            {downloading === settings.liveModel ? t("settings.downloading") : t("settings.downloadNow")}
                           </button>
                         </div>
                       );
                     }
                     return (
                       <div className="vk-hlp">
-                        tiny = quasi istantaneo ma impreciso · base = buon compromesso (default) · small = più accurato, ~3–5 s di ritardo
+                        {t("settings.liveModelHelp")}
                       </div>
                     );
                   })()}
@@ -624,8 +603,7 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
 
           <div className="vk-set-priv">
             <VkIcon.lock />
-            L'audio non lascia mai il dispositivo. Nessun account obbligatorio: solo il testo viene inviato
-            all'AI scelta.
+            {t("settings.privacyFooter")}
           </div>
         </div>
       </div>

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -52,6 +53,17 @@ def is_running() -> bool:
         return False
 
 
+def can_auto_install() -> bool:
+    """True dove possiamo scaricare+eseguire LHM da soli: Windows E **non** in un pacchetto
+    MSIX (build Store). Le policy Store vietano di scaricare+eseguire un binario di terze parti
+    dall'app → in MSIX l'utente installa/avvia LHM da sé (la UI lo guida) e VOKARI ne legge i
+    sensori via WMI. Avviare/leggere un LHM già in esecuzione resta consentito. Vedi
+    runtime_env.is_packaged e ADR-046."""
+    from app import runtime_env
+
+    return sys.platform.startswith("win") and not runtime_env.is_packaged()
+
+
 def _get_zip_url() -> str:
     req = urllib.request.Request(_GH_API, headers={"User-Agent": "VOKARI/1.0"})  # noqa: S310 — URL GitHub API hardcoded
     with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
@@ -64,7 +76,19 @@ def _get_zip_url() -> str:
 
 
 def download(data_dir: Path, on_progress=None) -> None:
-    """Scarica ed estrae LHM in data_dir/tools/lhm/. on_progress(pct 0..1) opzionale."""
+    """Scarica ed estrae LHM in data_dir/tools/lhm/. on_progress(pct 0..1) opzionale.
+    Solleva RuntimeError dove l'auto-installazione non è consentita (build Store MSIX): il
+    chiamante guida l'utente all'install manuale."""
+    if not can_auto_install():
+        from app import runtime_env
+
+        if runtime_env.is_packaged():
+            raise RuntimeError(
+                "Nella versione Microsoft Store, LibreHardwareMonitor va installato manualmente: "
+                "scaricalo da https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases "
+                "ed eseguilo — VOKARI ne leggerà i sensori (temperatura CPU) via WMI."
+            )
+        raise RuntimeError("Installazione automatica di LibreHardwareMonitor disponibile solo su Windows.")
     url = _get_zip_url()
     d = lhm_dir(data_dir)
     d.mkdir(parents=True, exist_ok=True)

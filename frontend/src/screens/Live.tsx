@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
+import { useTranslation } from "react-i18next";
 import { VkIcon } from "../icons";
 import { bridge, onVokariEvent } from "../bridge";
 import { confirmDialog } from "../confirm";
@@ -24,6 +25,7 @@ export function ScreenLive({ source, title = "", onTitleChange, context = "", on
   whisperModel?: string; livePreviewActive?: boolean;
   onStop?: (source: Source) => void; onCancel?: () => void;
 }) {
+  const { t } = useTranslation();
   const [elapsed, setElapsed] = useState(0);
   const [paused, setPaused] = useState(false);
   const [markers, setMarkers] = useState<{ tMs: number; t: string; label: string }[]>([]);
@@ -93,13 +95,21 @@ export function ScreenLive({ source, title = "", onTitleChange, context = "", on
   }, []);
 
   async function addMarker() {
-    const m = await bridge.addMarker(`Segnalibro ${markers.length + 1}`);
+    const m = await bridge.addMarker(t("live.bookmarkDefault", { n: markers.length + 1 }));
     if (m && "t_ms" in m) {
       setMarkers((xs) => [...xs, { tMs: m.t_ms, t: fmt(m.t_ms), label: m.label }]);
-      setFlash(`✓ segnalibro · ${fmt(m.t_ms)}`);
+      setFlash(t("live.bookmarkFlash", { time: fmt(m.t_ms) }));
       if (flashTimer.current) window.clearTimeout(flashTimer.current);
       flashTimer.current = window.setTimeout(() => setFlash(null), 1400);
     }
+  }
+
+  function renameMarker(i: number, label: string) {
+    setMarkers((xs) => xs.map((mk, j) => (j === i ? { ...mk, label } : mk)));
+  }
+
+  function commitMarker(i: number, label: string) {
+    void bridge.updateMarker(i, label);
   }
 
   async function togglePause() {
@@ -118,10 +128,10 @@ export function ScreenLive({ source, title = "", onTitleChange, context = "", on
   async function handleCancelClick() {
     // Azione distruttiva: conferma in-app stilizzata (no window.confirm nativo/rudimentale).
     const ok = await confirmDialog({
-      title: "Scartare la registrazione?",
-      message: "L'audio registrato finora andrà perso e non sarà recuperabile.",
-      confirmLabel: "Scarta",
-      cancelLabel: "Continua a registrare",
+      title: t("live.discardTitle"),
+      message: t("live.discardMsg"),
+      confirmLabel: t("live.discardConfirm"),
+      cancelLabel: t("live.discardCancel"),
       danger: true,
     });
     if (ok) onCancel?.();
@@ -129,9 +139,9 @@ export function ScreenLive({ source, title = "", onTitleChange, context = "", on
 
   const lanes: Source[] = source === "both" ? ["mic", "system"] : [source];
   const laneMeta: Record<Source, { cls: string; lbl: string; sub: string; bars: number[]; warn: string }> = {
-    mic: { cls: "mic", lbl: "Microfono", sub: "la tua voce", bars: micBars, warn: "nessun segnale — controlla il microfono" },
-    system: { cls: "sys", lbl: "Audio di sistema", sub: "call & video", bars: sysBars, warn: "nessun segnale — controlla l'audio di sistema" },
-    both: { cls: "mic", lbl: "Entrambi", sub: "", bars: micBars, warn: "nessun segnale" },
+    mic: { cls: "mic", lbl: t("live.laneMic"), sub: t("live.laneMicSub"), bars: micBars, warn: t("live.laneMicWarn") },
+    system: { cls: "sys", lbl: t("live.laneSys"), sub: t("live.laneSysSub"), bars: sysBars, warn: t("live.laneSysWarn") },
+    both: { cls: "mic", lbl: t("live.laneBoth"), sub: "", bars: micBars, warn: t("live.laneBothWarn") },
   };
 
   const mm = String(Math.floor(elapsed / 60000)).padStart(2, "0");
@@ -143,32 +153,32 @@ export function ScreenLive({ source, title = "", onTitleChange, context = "", on
         <div className="vk-live-topl">
           <div className="vk-rec-lbl">
             <span className="vk-rec-dot"></span>
-            <span className="st">{paused ? "IN PAUSA" : "REGISTRAZIONE"}</span>
+            <span className="st">{paused ? t("live.paused") : t("live.recording")}</span>
             <input
               className="vk-rec-title" value={title} onChange={(e) => onTitleChange?.(e.target.value)}
-              placeholder="Sessione senza titolo" aria-label="Titolo sessione" spellCheck={false} />
+              placeholder={t("live.titlePlaceholder")} aria-label={t("live.titleAria")} spellCheck={false} />
           </div>
           <div className="vk-ctx-wrap">
-            <div className="vk-ctx-lbl">di cosa parla? <span>—</span> aiuta l'AI a cogliere lo scopo</div>
+            <div className="vk-ctx-lbl">{t("live.ctxLblPre")}<span>—</span>{t("live.ctxLblPost")}</div>
             <input
               className="vk-ctx" value={context} onChange={(e) => onContextChange?.(e.currentTarget.value)}
-              placeholder="es. scorte, turni e resa M2" aria-label="Di cosa parla" spellCheck={false} />
+              placeholder={t("live.ctxPlaceholder")} aria-label={t("live.ctxAria")} spellCheck={false} />
           </div>
         </div>
         {/* Indicatore di sorgente (scelta in Home, non modificabile qui): status INERTE. */}
         <div className="vk-src" aria-hidden="true">
           <div className={"s" + (source === "mic" ? " on" : "")}>
-            <VkIcon.mic /><div><div className="nm">Microfono</div><div className="ds">la tua voce</div></div></div>
+            <VkIcon.mic /><div><div className="nm">{t("live.micName")}</div><div className="ds">{t("live.micDesc")}</div></div></div>
           <div className={"s" + (source === "system" ? " on" : "")}>
-            <VkIcon.speaker /><div><div className="nm">Sistema</div><div className="ds">call &amp; video</div></div></div>
+            <VkIcon.speaker /><div><div className="nm">{t("live.sysName")}</div><div className="ds">{t("live.callVideo")}</div></div></div>
           <div className={"s" + (source === "both" ? " on" : "")}>
-            <VkIcon.both /><div><div className="nm">Entrambi</div><div className="ds">{source === "both" ? "attiva" : "mic + sistema"}</div></div></div>
+            <VkIcon.both /><div><div className="nm">{t("live.bothName")}</div><div className="ds">{source === "both" ? t("live.bothActive") : t("live.bothInactive")}</div></div></div>
         </div>
       </div>
 
       <div className="vk-timer-wrap">
         <div className="vk-timer"><span>{mm}</span><span className="cln">:</span><span>{ss}</span></div>
-        {paused && <div className="vk-pausetag">● IN PAUSA</div>}
+        {paused && <div className="vk-pausetag">{t("live.pausedTag")}</div>}
       </div>
 
       <div className="vk-meters" aria-hidden="true">
@@ -193,11 +203,11 @@ export function ScreenLive({ source, title = "", onTitleChange, context = "", on
           alcun live_transcript e il riquadro resterebbe "In ascolto…" per sempre. */}
       {livePreviewActive && (
         <div className="vk-live-transcript">
-          <div className="vk-lt-head">dettatura grezza · anteprima<small>bozza in tempo reale · la trascrizione definitiva avviene a fine registrazione</small></div>
+          <div className="vk-lt-head">{t("live.previewHead")}<small>{t("live.previewSub")}</small></div>
           <div className={"vk-lt-body" + (liveText ? " live" : "")}>
             {liveText
               ? <span>{liveText}<span className="cur"></span></span>
-              : <span className="vk-lt-empty">In ascolto… il testo comparirà tra qualche secondo.</span>}
+              : <span className="vk-lt-empty">{t("live.previewEmpty")}</span>}
           </div>
         </div>
       )}
@@ -205,33 +215,46 @@ export function ScreenLive({ source, title = "", onTitleChange, context = "", on
       <div className="vk-bm-wrap">
         {flash && <span className="vk-bm-flash show">{flash}</span>}
         <button className="vk-bm" onClick={() => void addMarker()}>
-          <VkIcon.flag />segnalibro <kbd>M</kbd>{markers.length > 0 && <span className="ct">{markers.length}</span>}
+          <VkIcon.flag />{t("live.bookmark")} <kbd>M</kbd>{markers.length > 0 && <span className="ct">{markers.length}</span>}
         </button>
       </div>
 
       {markers.length > 0 && (
-        <div className="vk-bm-line" aria-hidden="true">
-          <div className="vk-bm-track">
+        <div className="vk-bm-line">
+          <div className="vk-bm-track" aria-hidden="true">
             {markers.map((mk, i) => <i key={i} style={{ left: Math.min(98, (mk.tMs / Math.max(elapsed, 1)) * 100) + "%" }}></i>)}
           </div>
           <div className="vk-bm-list">
-            {markers.length} {markers.length === 1 ? "segnalibro" : "segnalibri"} · {markers.map((mk) => mk.t).join(" · ")}
+            {markers.map((mk, i) => (
+              <span className="vk-bm-item" key={i}>
+                <span className="vk-bm-t">{mk.t}</span>
+                <input
+                  className="vk-bm-edit"
+                  value={mk.label}
+                  aria-label={t("live.markerLabel", { n: i + 1 })}
+                  onChange={(e) => renameMarker(i, e.currentTarget.value)}
+                  onBlur={(e) => commitMarker(i, e.currentTarget.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                  spellCheck={false}
+                />
+              </span>
+            ))}
           </div>
         </div>
       )}
 
-      <div className="vk-kbd-hint"><kbd>Spazio</kbd> pausa · <kbd>M</kbd> segnalibro · <kbd>Esc</kbd> annulla</div>
+      <div className="vk-kbd-hint"><kbd>{t("live.kbdSpace")}</kbd> {t("live.kbdPause")} · <kbd>M</kbd> {t("live.kbdBookmark")} · <kbd>{t("live.kbdEsc")}</kbd> {t("live.kbdCancel")}</div>
 
       <div className="vk-live-ctrl">
-        <button className="vk-cbtn ghost" onClick={() => void handleCancelClick()}>Annulla</button>
-        <button className="vk-cbtn pause" onClick={() => void togglePause()}><VkIcon.pause />{paused ? "Riprendi" : "Pausa"}</button>
-        <button className="vk-cbtn stop" onClick={() => onStop?.(source)}><VkIcon.stop />Stop e trascrivi</button>
+        <button className="vk-cbtn ghost" onClick={() => void handleCancelClick()}>{t("live.cancel")}</button>
+        <button className="vk-cbtn pause" onClick={() => void togglePause()}><VkIcon.pause />{paused ? t("live.resume") : t("live.pause")}</button>
+        <button className="vk-cbtn stop" onClick={() => onStop?.(source)}><VkIcon.stop />{t("live.stop")}</button>
       </div>
 
       <div className="vk-live-foot">
-        <span className="ok"><span className="dot"></span>locale · offline · privato</span>
-        <span>l'audio non lascia il dispositivo</span>
-        <span className="model">{whisperModel || "large-v3-turbo"} · pronto</span>
+        <span className="ok"><span className="dot"></span>{t("live.footLocal")}</span>
+        <span>{t("live.footPrivacy")}</span>
+        <span className="model">{whisperModel || "large-v3-turbo"} · {t("live.ready")}</span>
       </div>
     </div>
   );
