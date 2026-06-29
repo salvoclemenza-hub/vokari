@@ -48,6 +48,7 @@ export interface VokariSettings {
   onboarded: boolean;
   lastSeenVersion: string;
   appLanguage: string; // lingua app (it|en): UI + output AI + template
+  userContext: string; // contesto utente (dominio, ruolo, termini) → iniettato nell'analisi
   hasApiKey: boolean;
 }
 
@@ -57,8 +58,8 @@ export const DEFAULT_SETTINGS = {
   brain: "claude", ollamaEndpoint: "http://localhost:11434", ollamaModel: "qwen2.5:7b",
   whisperModel: "large-v3-turbo", claudeModel: "claude-sonnet-4-6",
   briefingDir: "", obsidianVault: "", defaultMode: "solo",
-  transcriptionLanguage: "it", livePreview: true, liveModel: "base", onboarded: false,
-  lastSeenVersion: "", appLanguage: "it", hasApiKey: false,
+  transcriptionLanguage: "auto", livePreview: true, liveModel: "base", onboarded: false,
+  lastSeenVersion: "", appLanguage: "it", userContext: "", hasApiKey: false,
 } satisfies VokariSettings;
 
 export interface ModelEntry {
@@ -74,7 +75,7 @@ export interface ModelEntry {
 
 export type JobStatus =
   | "queued" | "transcribing" | "analyzing" | "rendering"
-  | "awaiting_interview" | "ready" | "error" | "cancelled";
+  | "awaiting_edit" | "awaiting_interview" | "awaiting_fit_decision" | "ready" | "error" | "cancelled";
 
 export interface Question {
   id: string;
@@ -100,6 +101,7 @@ export interface JobView {
   questions: Question[];
   markers: { t_ms: number; label: string }[];
   briefingMd: string;
+  draftBriefing: string; // L04: bozza briefing pre-intervista mostrata a fianco delle domande
   briefingPath: string;
   error: string;
 }
@@ -214,10 +216,12 @@ interface VokariApi {
   rename_job(jobId: string, title: string): Promise<{ ok: boolean }>;
   get_active_job(): Promise<JobView | null>;
   resume_job(jobId: string): Promise<JobView | null>;
+  update_transcript(jobId: string, newText: string): Promise<{ success?: boolean; error?: string }>; // N1: salva l'edit al gate awaiting_edit
   cancel_job(jobId: string): Promise<JobView | null>;
   invalidate_transcript_cache(jobId: string): Promise<{ ok: boolean; error?: string }>;
   get_questions(jobId: string): Promise<Question[]>;
-  generate(jobId: string, answers: Record<string, string>, skipped: string[]): Promise<JobView | null>;
+  generate(jobId: string, answers: Record<string, string>, skipped: string[], extraContext?: string): Promise<JobView | null>;
+  resolve_fit(jobId: string, decision: string): Promise<JobView | null>; // L08: decisione al gate riassunto lossy
   get_artifacts(jobId: string): Promise<Artifacts | null>;
   open_folder(path: string): Promise<{ ok: boolean }>;
   browse_audio_file(): Promise<{ path: string }>;
@@ -391,12 +395,16 @@ export const bridge = {
   renameJob: (jobId: string, title: string) => withApi((a) => a.rename_job(jobId, title), { ok: false }),
   getActiveJob: () => withApi<JobView | null>((a) => a.get_active_job(), null),
   resumeJob: (jobId: string) => withApi<JobView | null>((a) => a.resume_job(jobId), null),
+  updateTranscript: (jobId: string, newText: string) =>
+    withApi<{ success?: boolean; error?: string }>((a) => a.update_transcript(jobId, newText), { error: "no api" }),
   cancelJob: (jobId: string) => withApi<JobView | null>((a) => a.cancel_job(jobId), null),
   invalidateTranscriptCache: (jobId: string) =>
     withApi((a) => a.invalidate_transcript_cache(jobId), { ok: false }),
   getQuestions: (jobId: string) => withApi<Question[]>((a) => a.get_questions(jobId), []),
-  generate: (jobId: string, answers: Record<string, string>, skipped: string[]) =>
-    withApi((a) => a.generate(jobId, answers, skipped), null as JobView | null),
+  generate: (jobId: string, answers: Record<string, string>, skipped: string[], extraContext = "") =>
+    withApi((a) => a.generate(jobId, answers, skipped, extraContext), null as JobView | null),
+  resolveFit: (jobId: string, decision: "proceed" | "cancel") =>
+    withApi<JobView | null>((a) => a.resolve_fit(jobId, decision), null),
   getArtifacts: (jobId: string) => withApi((a) => a.get_artifacts(jobId), null as Artifacts | null),
   openFolder: (path: string) => withApi((a) => a.open_folder(path), { ok: false }),
   browseAudioFile: () => withApi((a) => a.browse_audio_file(), { path: "" }),

@@ -551,3 +551,50 @@ def test_real_mic_capture_produces_16k_mono(tmp_path):
     _, rate, ch = capture._read_wav_int16(str(out))
     assert rate == 16000 and ch == 1
     assert 0.5 < res.duration_s < 2.0
+
+
+# --- L14: preflight spazio disco (puro, niente hardware) ---
+
+
+def test_recording_minutes_left_scales_with_source(monkeypatch):
+    """'both' scrive 2 lane native insieme → a parità di spazio, metà dei minuti di 'mic'."""
+    monkeypatch.setattr(capture, "disk_free_bytes", lambda path=None: 1_000_000_000)
+    both = capture.recording_minutes_left("both")
+    mic = capture.recording_minutes_left("mic")
+    assert both == pytest.approx(mic / 2)
+    assert mic > 0
+
+
+def test_disk_preflight_critical_when_space_for_one_minute(monkeypatch):
+    """Spazio per ~1 min (sotto la soglia critica di 2 min) → 'critical' (blocco)."""
+    one_min = capture._capture_byte_rate("mic") * 60
+    monkeypatch.setattr(capture, "disk_free_bytes", lambda path=None: one_min)
+    sev, mins = capture.disk_preflight("mic")
+    assert sev == "critical"
+    assert mins < capture._DISK_CRITICAL_MINUTES
+
+
+def test_disk_preflight_low_when_space_limited(monkeypatch):
+    """Spazio per ~10 min (tra critico e basso) → 'low' (avviso, registrazione consentita)."""
+    ten_min = capture._capture_byte_rate("mic") * 60 * 10
+    monkeypatch.setattr(capture, "disk_free_bytes", lambda path=None: ten_min)
+    sev, mins = capture.disk_preflight("mic")
+    assert sev == "low"
+    assert capture._DISK_CRITICAL_MINUTES <= mins < capture._DISK_LOW_MINUTES
+
+
+def test_disk_preflight_ok_when_plenty(monkeypatch):
+    monkeypatch.setattr(capture, "disk_free_bytes", lambda path=None: 50 * 1024**3)  # 50 GB
+    sev, _mins = capture.disk_preflight("both")
+    assert sev == "ok"
+
+
+def test_disk_preflight_tolerates_read_error(monkeypatch):
+    """Un check disco fallito NON deve mai bloccare la registrazione → 'ok'."""
+
+    def _boom(path=None):
+        raise OSError("disco non leggibile")
+
+    monkeypatch.setattr(capture, "disk_free_bytes", _boom)
+    sev, _mins = capture.disk_preflight("mic")
+    assert sev == "ok"

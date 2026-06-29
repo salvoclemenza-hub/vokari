@@ -17,7 +17,7 @@ const ROT_KEYS = ["proc.rot0", "proc.rot1", "proc.rot2", "proc.rot3", "proc.rot4
 export function ScreenProcessing({
   status = "transcribing", pct = 0, partialText = "", model,
   title, onRenameTitle, onCancel, fromCache, onRielabora,
-  analyzeStep, analysisPreview, analysisFit,
+  analyzeStep, analysisPreview, analysisFit, onResolveFit, onOpenSettings,
 }: {
   status?: JobStatus; pct?: number; partialText?: string; model?: string;
   title?: string; onRenameTitle?: (t: string) => void; onCancel?: () => void;
@@ -25,6 +25,8 @@ export function ScreenProcessing({
   analyzeStep?: { step: string; label: string } | null;
   analysisPreview?: string;
   analysisFit?: AnalysisFit | null;
+  onResolveFit?: (decision: "proceed" | "cancel") => void;
+  onOpenSettings?: () => void;
 }) {
   const { t, i18n } = useTranslation();
   const numLocale = i18n.language === "en" ? "en-US" : "it-IT";
@@ -169,6 +171,44 @@ export function ScreenProcessing({
     const el = logRef.current;
     if (el && stickRef.current) el.scrollTop = el.scrollHeight;
   }, [displayed, displayedPreview]);
+
+  if (status === "awaiting_fit_decision") {
+    const over = analysisFit?.level === "over_even_summarized";
+    return (
+      <div className="vk-proc">
+        <div className="vk-proc-card" data-testid="vk-fit-gate">
+          <div className="vk-proc-head">
+            <div className="vk-proc-kick">{t("proc.gateKicker")}</div>
+            <h2 className="vk-proc-title">{over ? t("proc.fitTitleOver") : t("proc.fitTitleWide")}</h2>
+            <div className="vk-proc-sub">
+              {over ? t("proc.gateExplainOver") : t("proc.gateExplainSummarize")}
+            </div>
+          </div>
+          {analysisFit && (
+            <div className="vk-fit-meta" style={{ margin: "4px 0 12px" }}>
+              ~{analysisFit.tokensEst.toLocaleString(numLocale)}{t("proc.fitMetaMid")}
+              {analysisFit.ctxMax.toLocaleString(numLocale)}
+              {analysisFit.nChunks > 1 && t("proc.fitChunks", { n: analysisFit.nChunks })}
+            </div>
+          )}
+          <p style={{ fontSize: 13, color: "var(--mut, #6b6358)", lineHeight: 1.5, margin: "0 0 16px" }}>
+            {t("proc.gateGuide")}
+          </p>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <button className="vk-btn-g" data-testid="vk-gate-proceed" onClick={() => onResolveFit?.("proceed")}>
+              {t("proc.gateProceed")}
+            </button>
+            <button className="vk-btn-gh" data-testid="vk-gate-settings" onClick={() => onOpenSettings?.()}>
+              {t("proc.gateOpenSettings")}
+            </button>
+            <button className="vk-exit" data-testid="vk-gate-cancel" onClick={() => onResolveFit?.("cancel")}>
+              {t("proc.cancelBtn")}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="vk-proc">

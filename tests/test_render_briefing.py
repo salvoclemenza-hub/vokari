@@ -140,14 +140,22 @@ def test_frontmatter_omits_language_when_not_provided():
     assert "language:" not in md
 
 
-def test_session_instruction_mentions_domain_terminology():
+def test_session_instruction_is_present_and_domain_neutral():
+    import re
+
     from vokari.analyze.schema import Analysis
 
     a = Analysis()
     md = briefing.render_briefing(a)
-    domain_terms = ["HACCP", "VMM", "tracciabilità", "MAC"]
-    found = [t for t in domain_terms if t in md]
-    assert found, f"session_instruction deve citare il dominio alimentare, cercati: {domain_terms}"
+    m = re.search(r"<session_instruction>(.*?)</session_instruction>", md, re.DOTALL)
+    assert m, "session_instruction deve essere presente nel briefing"
+    instr = m.group(1).strip()
+    assert instr, "session_instruction non deve essere vuota"
+    # verifica che l'istruzione neutra contenga termini del template (non del dominio)
+    assert "open_questions" in instr, "session_instruction deve citare open_questions"
+    # verifica che non contenga più gergo aziendale
+    for term in ("HACCP", "VMM", "MAC processing", "magazzino", "food warehouse"):
+        assert term not in instr, f"session_instruction non deve contenere dominio: {term}"
 
 
 def test_session_instruction_differs_by_meta_type():

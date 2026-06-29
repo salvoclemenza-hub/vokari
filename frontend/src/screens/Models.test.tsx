@@ -20,6 +20,7 @@ const FAKE_SETTINGS: VokariSettings = {
   onboarded: true,
   lastSeenVersion: "",
   appLanguage: "it",
+  userContext: "",
   hasApiKey: false,
 };
 

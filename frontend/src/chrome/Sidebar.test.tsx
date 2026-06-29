@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Sidebar } from "./Sidebar";
 import type { SessionItem } from "../bridge";
+import { notifySessionsChanged } from "../sessionsBus";
 
 // Mock del bridge: controlliamo cosa ritorna listSessions.
 const listSessions = vi.fn<() => Promise<SessionItem[]>>();
@@ -53,5 +54,29 @@ describe("Sidebar — Recenti reali (F5)", () => {
     // i vecchi dati finti hardcoded non devono comparire
     expect(screen.queryByText("Riunione prodotto Q3")).not.toBeInTheDocument();
     expect(screen.queryByText("Brainstorm naming")).not.toBeInTheDocument();
+  });
+
+  // Guardia anti-regressione bug #4: dopo notifySessionsChanged la sidebar ricarica da disco
+  // e riflette la lista aggiornata (es. sessione eliminata sparisce).
+  it("rimuove la voce dai recenti dopo notifySessionsChanged (#4 anti-regressione)", async () => {
+    const sA = sess({ id: "a", title: "Sessione A" });
+    const sB = sess({ id: "b", title: "Sessione B" });
+    // Prima chiamata (mount): A+B. Seconda chiamata (reload da bus): solo B.
+    listSessions
+      .mockResolvedValueOnce([sA, sB])
+      .mockResolvedValueOnce([sB]);
+
+    render(<Sidebar active="Registra" onNavigate={() => {}} onOpenSession={() => {}} />);
+
+    // Entrambe le sessioni compaiono al caricamento iniziale.
+    expect(await screen.findByText("Sessione A")).toBeInTheDocument();
+    expect(screen.getByText("Sessione B")).toBeInTheDocument();
+
+    // Simula il commit del delete reale: il bus segnala che la libreria è cambiata.
+    notifySessionsChanged();
+
+    // La sidebar ricarica da disco (mock: solo B) → A non deve più comparire.
+    await waitFor(() => expect(screen.queryByText("Sessione A")).not.toBeInTheDocument());
+    expect(screen.getByText("Sessione B")).toBeInTheDocument();
   });
 });

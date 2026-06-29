@@ -115,3 +115,19 @@ def test_app_language_roundtrip():
     s.app_language = "en"
     st.save(s)
     assert st.load().app_language == "en"
+
+
+def test_user_context_roundtrip(tmp_path, monkeypatch):
+    monkeypatch.setenv("VOKARI_HOME", str(tmp_path))
+    s = st.load()
+    assert s.user_context == ""
+    s.user_context = "Magazzino alimentare B2B: lotti VMM, MAC, HACCP"
+    st.save(s)
+    assert st.load().user_context == "Magazzino alimentare B2B: lotti VMM, MAC, HACCP"
+
+
+def test_default_transcription_language_is_auto(tmp_path, monkeypatch):
+    monkeypatch.setenv("VOKARI_HOME", str(tmp_path))
+    from vokari import settings as S
+
+    assert S.Settings().transcription_language == "auto"

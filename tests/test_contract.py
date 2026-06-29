@@ -37,6 +37,7 @@ JOB_VIEW_KEYS = {
     "questions",
     "markers",
     "briefingMd",
+    "draftBriefing",
     "briefingPath",
     "error",
 }
@@ -56,6 +57,7 @@ SETTINGS_KEYS = {
     "onboarded",
     "lastSeenVersion",
     "appLanguage",
+    "userContext",
 }
 ARTIFACTS_KEYS = {
     "title",
@@ -88,7 +90,9 @@ JOB_STATUSES = {
     "transcribing",
     "analyzing",
     "rendering",
+    "awaiting_edit",
     "awaiting_interview",
+    "awaiting_fit_decision",
     "ready",
     "error",
     "cancelled",

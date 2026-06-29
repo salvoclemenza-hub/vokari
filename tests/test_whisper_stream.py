@@ -28,7 +28,9 @@ def test_transcribe_stream_emits_progress_and_caches(home, tmp_path, monkeypatch
         {"start": 0.0, "end": 0.5, "text": "ciao"},
         {"start": 0.5, "end": 1.0, "text": "mondo"},
     ]
-    monkeypatch.setattr(W, "_iter_transcribe", lambda audio, m, lang, should_cancel=None: iter(fake_segments))
+    monkeypatch.setattr(
+        W, "_iter_transcribe", lambda audio, m, lang, should_cancel=None, initial_prompt="": iter(fake_segments)
+    )
 
     events: list[tuple[float, str, str]] = []
     result = W.transcribe_stream(
@@ -49,7 +51,7 @@ def test_transcribe_stream_cache_hit_emits_once_full(home, tmp_path, monkeypatch
     src = tmp_path / "b.wav"
     _silent_wav(src, seconds=1.0)
     fake = [{"start": 0.0, "end": 1.0, "text": "uno due"}]
-    monkeypatch.setattr(W, "_iter_transcribe", lambda audio, m, lang, should_cancel=None: iter(fake))
+    monkeypatch.setattr(W, "_iter_transcribe", lambda audio, m, lang, should_cancel=None, initial_prompt="": iter(fake))
     W.transcribe_stream(str(src), model="small", language="it")  # popola cache
 
     def boom(*a, **k):
@@ -70,7 +72,7 @@ def test_transcribe_stream_cancel_does_not_cache(home, tmp_path, monkeypatch):
     src = tmp_path / "c.wav"
     _silent_wav(src, seconds=1.0)
     fake = [{"start": 0.0, "end": 0.5, "text": "a"}, {"start": 0.5, "end": 1.0, "text": "b"}]
-    monkeypatch.setattr(W, "_iter_transcribe", lambda audio, m, lang, should_cancel=None: iter(fake))
+    monkeypatch.setattr(W, "_iter_transcribe", lambda audio, m, lang, should_cancel=None, initial_prompt="": iter(fake))
 
     out = W.transcribe_stream(str(src), model="small", language="it", should_cancel=lambda: True)
 

@@ -73,6 +73,7 @@ def analyze(
     on_progress=None,
     on_step=None,
     language: str = "it",
+    user_context: str = "",
 ) -> Analysis:
     text = transcript
     if _needs_summary(transcript, provider):
@@ -83,9 +84,16 @@ def analyze(
     # (es. fake nei test). On_progress riceve il testo grezzo accumulato.
     if hasattr(provider, "chat_json_stream") and on_progress:
         raw = provider.chat_json_stream(
-            prompts.build_system(language),
+            prompts.build_system(language, user_context),
             prompts.build_user(
-                text, mode=mode, meta=meta, refinement=refinement, context=context, markers=markers, language=language
+                text,
+                mode=mode,
+                meta=meta,
+                refinement=refinement,
+                context=context,
+                markers=markers,
+                language=language,
+                user_context=user_context,
             ),
             json_schema=Analysis.model_json_schema(),
             on_delta=on_progress,
@@ -93,9 +101,16 @@ def analyze(
         )
     else:
         raw = provider.chat_json(
-            prompts.build_system(language),
+            prompts.build_system(language, user_context),
             prompts.build_user(
-                text, mode=mode, meta=meta, refinement=refinement, context=context, markers=markers, language=language
+                text,
+                mode=mode,
+                meta=meta,
+                refinement=refinement,
+                context=context,
+                markers=markers,
+                language=language,
+                user_context=user_context,
             ),
             json_schema=Analysis.model_json_schema(),
         )
@@ -119,6 +134,7 @@ def analyze(
             provider=provider,
             should_cancel=should_cancel,
             language=language,
+            user_context=user_context,
         )
     return analysis
 
@@ -130,15 +146,25 @@ def _coverage_needed(analysis: Analysis, mode: str) -> bool:
 
 
 def _verify_coverage(
-    text: str, analysis: Analysis, *, mode, context, provider, should_cancel=None, language: str = "it"
+    text: str,
+    analysis: Analysis,
+    *,
+    mode,
+    context,
+    provider,
+    should_cancel=None,
+    language: str = "it",
+    user_context: str = "",
 ) -> Analysis:
     """Rilegge la trascrizione e corregge purpose + voci mancanti. Tollerante: su cancel o
     risposta inattesa tiene la prima analisi (non peggiora mai)."""
     if should_cancel and should_cancel():
         return analysis
     raw = provider.chat_json(
-        prompts.build_verify_system(language),
-        prompts.build_verify_user(text, analysis, mode=mode, context=context, language=language),
+        prompts.build_verify_system(language, user_context),
+        prompts.build_verify_user(
+            text, analysis, mode=mode, context=context, language=language, user_context=user_context
+        ),
         json_schema=Analysis.model_json_schema(),
     )
     if not isinstance(raw, dict):

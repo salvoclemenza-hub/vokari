@@ -12,6 +12,7 @@ import type { NavItem } from "./chrome/Sidebar";
 import { ScreenHome } from "./screens/Home";
 import { ScreenLive } from "./screens/Live";
 import { ScreenProcessing } from "./screens/Processing";
+import { ScreenTranscriptReview } from "./screens/TranscriptReview";
 import { ScreenInterview } from "./screens/Interview";
 import { ScreenArtifacts } from "./screens/Artifacts";
 import { ScreenSettings } from "./screens/Settings";
@@ -22,11 +23,12 @@ import { ScreenOnboarding } from "./screens/Onboarding";
 import i18n from "./i18n";
 
 type Screen =
-  | "home" | "live" | "processing" | "interview" | "artifacts"
+  | "home" | "live" | "processing" | "transcript_review" | "interview" | "artifacts"
   | "settings" | "sessions" | "models" | "error" | "onboarding";
 
 const NAV_FOR: Record<Screen, NavItem> = {
-  home: "Registra", live: "Registra", processing: "Registra", interview: "Registra", error: "Registra",
+  home: "Registra", live: "Registra", processing: "Registra", transcript_review: "Registra",
+  interview: "Registra", error: "Registra",
   onboarding: "Registra",
   artifacts: "Sessioni", sessions: "Sessioni",
   models: "Modelli AI", settings: "Impostazioni",
@@ -213,8 +215,15 @@ export default function App() {
           setScreen("home");
           return;
         }
-        bridge.getJob(jobIdRef.current).then((j) => j && setJob(j));
+        bridge.getJob(jobIdRef.current).then((j) => {
+          if (j) setJob(j);
+          // N1: naviga alla revisione DOPO aver caricato il job (getJob è async) così la textarea
+          // monta con il transcript GIÀ presente — navigando prima mostrerebbe la box vuota fino
+          // alla risoluzione (race documentata in CLAUDE.md). Il sync nel componente è la difesa.
+          if (status === "awaiting_edit") setScreen("transcript_review");
+        });
         if (status === "awaiting_interview") setScreen("interview");
+        if (status === "awaiting_fit_decision") setScreen("processing");
         if (status === "ready") {
           notifyComplete("VOKARI", "Briefing pronto ✓");
           if (document.hidden) void bridge.flashTaskbar();
@@ -229,6 +238,7 @@ export default function App() {
   useEffect(() => {
     const names: Record<Screen, string> = {
       home: "Registra", live: "Registrazione", processing: "Elaborazione",
+      transcript_review: "Revisione trascrizione",
       interview: "Rifinitura", artifacts: artifacts?.title || "Sessione",
       settings: "Impostazioni", sessions: "Sessioni", models: "Modelli AI", error: "Errore",
       onboarding: "Benvenuto",
@@ -341,7 +351,7 @@ export default function App() {
         jobId: res.jobId, title: sessionTitle || "", status: "queued", pct: 0,
         source: recSource, mode: recMode, model: recWhisper, language: "",
         partialText: "", transcript: "", durationS: 0, questions: [], markers: [],
-        briefingMd: "", briefingPath: "", error: "",
+        briefingMd: "", briefingPath: "", draftBriefing: "", error: "",
       });
       setScreen("processing");
     } catch (e) {
@@ -352,6 +362,12 @@ export default function App() {
   async function handleCancel() {
     await bridge.cancelRecording();
     setScreen("home");
+  }
+
+  async function handleResolveFit(decision: "proceed" | "cancel") {
+    // proceed → il backend riprende la pipeline ed emette gli status; cancel → emette
+    // status=cancelled (gestito dal listener: azzera job + torna a home). Niente da fare qui.
+    await bridge.resolveFit(jobIdRef.current, decision);
   }
 
   async function handleNavigate(n: NavItem) {
@@ -378,17 +394,44 @@ export default function App() {
     if (id) void bridge.cancelJob(id);
   }
 
-  async function handleGenerate(answers: Record<string, string>, skipped: string[]) {
+  async function handleGenerate(answers: Record<string, string>, skipped: string[], extraContext = "") {
     setScreen("processing");
     try {
       // generate() ora gira off-thread (C1) e ritorna SUBITO il job pre-generazione:
       // le transizioni analyzing→rendering→ready / error arrivano via evento `status`.
-      const j = await bridge.generate(jobIdRef.current, answers, skipped);
+      const j = await bridge.generate(jobIdRef.current, answers, skipped, extraContext);
       if (!j) { fail("Job non trovato: impossibile generare il briefing."); return; }
       setJob(j);
     } catch (e) {
-      fail(String(e), () => void handleGenerate(answers, skipped));
+      fail(String(e), () => void handleGenerate(answers, skipped, extraContext));
     }
+  }
+
+  // N1: l'utente ha corretto la trascrizione e clicca "Procedi" → salva l'edit e riprende la
+  // pipeline (skip_transcribe lato backend) verso l'analisi. Le transizioni arrivano via evento
+  // `status` (analyzing→…→awaiting_interview), come per generate(). Mostriamo subito Processing.
+  async function handleProceedEdit(text: string) {
+    setScreen("processing");
+    try {
+      const res = await bridge.updateTranscript(jobIdRef.current, text);
+      if (res.error) { fail(res.error, () => void handleProceedEdit(text)); return; }
+      await bridge.resumeJob(jobIdRef.current);
+    } catch (e) {
+      fail(String(e), () => void handleProceedEdit(text));
+    }
+  }
+
+  // N1: "Annulla" al gate editing → conferma (l'audio/trascrizione vanno persi) e scarta il job.
+  async function handleCancelEdit() {
+    const ok = await confirmDialog({
+      title: i18n.t("transcriptReview.cancelConfirmTitle"),
+      message: i18n.t("transcriptReview.cancelConfirmMsg"),
+      confirmLabel: i18n.t("transcriptReview.cancelConfirmYes"),
+      cancelLabel: i18n.t("transcriptReview.cancelConfirmNo"),
+      danger: true,
+    });
+    if (!ok) return;
+    handleCancelJob();
   }
 
   function copy(md: string) {
@@ -406,17 +449,19 @@ export default function App() {
     transcribing: { title: "Elaborazione in corso…", screen: "processing" },
     analyzing: { title: "Elaborazione in corso…", screen: "processing" },
     rendering: { title: "Elaborazione in corso…", screen: "processing" },
+    awaiting_edit: { title: "Rivedi la trascrizione", screen: "transcript_review" },
     awaiting_interview: { title: "Completa la rifinitura", screen: "interview" },
+    awaiting_fit_decision: { title: "Decisione richiesta…", screen: "processing" },
   };
   const resume =
-    job && !["processing", "live", "interview"].includes(screen)
+    job && !["processing", "live", "interview", "transcript_review"].includes(screen)
       ? RESUMABLE[job.status]
       : undefined;
 
   // Transizione di schermata direzionale (E1/round 2): avanzare nel flusso entra da
   // destra, tornare da sinistra, cambio di sezione = crossfade. Il movimento È
   // wayfinding nel single-window. prefers-reduced-motion onorato nel CSS.
-  const FLOW_ORDER: Screen[] = ["home", "live", "processing", "interview", "artifacts"];
+  const FLOW_ORDER: Screen[] = ["home", "live", "processing", "transcript_review", "interview", "artifacts"];
   const prevScreen = prevScreenRef.current;
   let transitionDir = "fade";
   if (prevScreen !== screen) {
@@ -444,8 +489,14 @@ export default function App() {
                                   analysisFit={analysisFit}
                                   onRielabora={job ? () => { void bridge.invalidateTranscriptCache(job.jobId); } : undefined}
                                   onRenameTitle={(t) => void bridge.renameJob(jobIdRef.current, t)}
-                                  onCancel={() => handleCancelJob()} />,
-    interview: <ScreenInterview questions={job?.questions ?? []} onGenerate={(a, s) => void handleGenerate(a, s)}
+                                  onCancel={() => handleCancelJob()}
+                                  onResolveFit={(d) => void handleResolveFit(d)}
+                                  onOpenSettings={() => setScreen("settings")} />,
+    transcript_review: <ScreenTranscriptReview transcript={job?.transcript ?? ""}
+                                onProceed={(text) => void handleProceedEdit(text)}
+                                onCancel={() => void handleCancelEdit()} />,
+    interview: <ScreenInterview questions={job?.questions ?? []} draftBriefing={job?.draftBriefing ?? ""}
+                                onGenerate={(a, s, c) => void handleGenerate(a, s, c)}
                                 onCancel={() => handleCancelJob()} />,
     artifacts: <ScreenArtifacts artifacts={artifacts ?? undefined} onCopy={copy}
                                 onOpenFolder={(p) => void bridge.openFolder(p)}

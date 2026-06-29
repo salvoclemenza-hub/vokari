@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 import { ScreenProcessing } from "./Processing";
 
 describe("ScreenProcessing", () => {
@@ -98,5 +99,33 @@ describe("ScreenProcessing — badge idoneità modello", () => {
   it("resta visibile anche in rendering (non solo durante analyzing)", () => {
     render(<ScreenProcessing status="rendering" pct={1} partialText="" analysisFit={fit} />);
     expect(screen.getByTestId("vk-fit-badge")).toBeInTheDocument();
+  });
+});
+
+// Gate riassunto lossy (L08): card-decisione quando status === "awaiting_fit_decision".
+// Le 3 azioni devono chiamare le callback corrette.
+describe("ScreenProcessing — gate riassunto lossy (L08)", () => {
+  it("L08: al gate mostra la card decisione e le 3 azioni cablate", async () => {
+    const onResolveFit = vi.fn();
+    const onOpenSettings = vi.fn();
+    const fit = {
+      jobId: "j1", level: "summarize" as const, tokensEst: 38000, ctxMax: 32768,
+      budget: 30000, nChunks: 9, ctxIsFallback: false, recommendation: "usa un modello più ampio",
+    };
+    render(
+      <ScreenProcessing
+        status="awaiting_fit_decision"
+        analysisFit={fit}
+        onResolveFit={onResolveFit}
+        onOpenSettings={onOpenSettings}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("vk-gate-proceed"));
+    expect(onResolveFit).toHaveBeenCalledWith("proceed");
+    await user.click(screen.getByTestId("vk-gate-cancel"));
+    expect(onResolveFit).toHaveBeenCalledWith("cancel");
+    await user.click(screen.getByTestId("vk-gate-settings"));
+    expect(onOpenSettings).toHaveBeenCalled();
   });
 });

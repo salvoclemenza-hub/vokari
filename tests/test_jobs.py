@@ -125,3 +125,25 @@ def test_active_returns_most_recent_when_multiple_midflight(tmp_path):
     s2 = JobStore(jobs_dir=tmp_path / "jobs")
     active = s2.active()
     assert active is not None and active.id == new.id
+
+
+def test_fit_decision_field_defaults_empty_and_persists(tmp_path):
+    d = tmp_path / "jobs"
+    s1 = JobStore(jobs_dir=d)
+    job = s1.create(Job.new("/tmp/a.wav"))
+    assert job.fit_decision == ""
+    s1.update(job.id, fit_decision="proceed")
+    assert JobStore(jobs_dir=d).get(job.id).fit_decision == "proceed"
+
+
+def test_awaiting_fit_decision_is_midflight_and_abandoned(tmp_path):
+    """awaiting_fit_decision è midflight (active() lo ritrova) e alla chiusura pulita
+    abandon_active() lo marca cancelled (al gate non c'è nulla da perdere)."""
+    d = tmp_path / "jobs"
+    s = JobStore(jobs_dir=d)
+    gate = s.create(Job.new("/tmp/g.wav"))
+    s.update(gate.id, status="awaiting_fit_decision")
+    assert s.active() is not None and s.active().id == gate.id
+    n = s.abandon_active()
+    assert n == 1
+    assert JobStore(jobs_dir=d).get(gate.id).status == "cancelled"

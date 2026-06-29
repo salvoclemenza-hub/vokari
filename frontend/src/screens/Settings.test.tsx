@@ -20,6 +20,7 @@ const FAKE_SETTINGS: VokariSettings = {
   onboarded: true,
   lastSeenVersion: "",
   appLanguage: "it",
+  userContext: "",
   hasApiKey: true,
 };
 
@@ -48,7 +49,7 @@ vi.mock("../bridge", () => ({
     brain: "claude", ollamaEndpoint: "http://localhost:11434", ollamaModel: "gemma2:9b",
     whisperModel: "large-v3-turbo", claudeModel: "claude-opus-4-8", briefingDir: "",
     obsidianVault: "", defaultMode: "solo", transcriptionLanguage: "auto",
-    livePreview: true, liveModel: "base", hasApiKey: false,
+    livePreview: true, liveModel: "base", userContext: "", hasApiKey: false,
   },
   bridge: {
     getSettings: () => mockGetSettings() as Promise<VokariSettings>,
@@ -249,5 +250,28 @@ describe("ScreenSettings — verifica/rimuovi chiave API (SET1/SET2)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Rimuovi" }));
     await waitFor(() => expect(confirmDialog).toHaveBeenCalled());
     expect(mockDeleteApiKey).not.toHaveBeenCalled();
+  });
+});
+
+describe("ScreenSettings — sezione Il tuo contesto", () => {
+  beforeEach(() => {
+    mockGetSettings.mockResolvedValue({ ...FAKE_SETTINGS, userContext: "" });
+    mockSaveSettings.mockResolvedValue({ ...FAKE_SETTINGS, userContext: "magazzino alimentare" });
+    mockListModels.mockResolvedValue([...FAKE_MODELS]);
+    mockLhmStatus.mockResolvedValue({ installed: false, running: false, canInstall: true });
+    mockOnVokariEvent.mockReturnValue(() => {});
+  });
+  afterEach(() => vi.clearAllMocks());
+
+  it("mostra e salva il campo Il tuo contesto", async () => {
+    render(<ScreenSettings />);
+    // Attende la textarea con il placeholder IT verbatim (da i18n lng:"it")
+    const textarea = await screen.findByPlaceholderText(/Magazzino alimentare/);
+    expect(textarea).toBeInTheDocument();
+    fireEvent.change(textarea, { target: { value: "magazzino alimentare" } });
+    fireEvent.blur(textarea);
+    await waitFor(() => {
+      expect(mockSaveSettings).toHaveBeenCalledWith({ userContext: "magazzino alimentare" });
+    });
   });
 });

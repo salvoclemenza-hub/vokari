@@ -12,7 +12,15 @@ from pathlib import Path
 
 from vokari.paths import ensure_dirs
 
-_MIDFLIGHT = {"queued", "transcribing", "analyzing", "rendering", "awaiting_interview"}
+_MIDFLIGHT = {
+    "queued",
+    "transcribing",
+    "analyzing",
+    "rendering",
+    "awaiting_interview",
+    "awaiting_fit_decision",
+    "awaiting_edit",  # N1: gate editing trascrizione (resume-pill da crash + abbandono a chiusura pulita)
+}
 # Stati abbandonati alla chiusura PULITA della finestra (Api.shutdown → abandon_active):
 # TUTTI i midflight, incluso 'awaiting_interview'. Chiudere volontariamente la finestra = "ho
 # finito": non deve lasciare una sessione che alla riapertura nag "elaborazione in corso" e
@@ -31,7 +39,7 @@ _PROGRESS_FLUSH_S = 1.0  # intervallo minimo tra due scritture su disco per soli
 class Job:
     id: str
     audio_path: str
-    title: str = "Sessione senza titolo"
+    title: str = ""
     mode: str = "solo"
     context: str = ""
     source: str = "mic"
@@ -41,12 +49,15 @@ class Job:
     pct: float = 0.0
     partial_text: str = ""
     transcript: str = ""
+    transcript_edited: bool = False  # N1: flag di edit manuale della trascrizione (editing-trascrizione)
     duration_s: float = 0.0
     analysis: dict | None = None
     questions: list[dict] = field(default_factory=list)
     markers: list[dict] = field(default_factory=list)
     da_chiarire: list[str] = field(default_factory=list)  # marcatori [DA CHIARIRE] (export Obsidian completo)
+    fit_decision: str = ""  # L08: consenso al riassunto lossy ("" | "proceed") — gate-once
     briefing_md: str = ""
+    draft_briefing: str = ""  # L04: bozza briefing pre-intervista (render-only, no LLM) a fianco delle domande
     briefing_path: str = ""
     recap_md: str = ""
     obsidian_note: str = ""

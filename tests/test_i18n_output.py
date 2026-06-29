@@ -273,13 +273,13 @@ def test_run_processing_english_output_when_app_language_en(tmp_path, monkeypatc
     store = JobStore(jobs_dir=tmp_path / "jobs")
     monkeypatch.setattr(P.models_mod, "is_downloaded", lambda name: True)
 
-    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None):
+    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None, **_kw):
         if on_segment:
             on_segment(1.0, "spoken text", "spoken text")
         return {"text": "spoken text", "duration_s": 10.0}
 
     monkeypatch.setattr(P.whisper_mod, "transcribe_stream", fake_stream)
-    # 0 domande → genera subito il briefing (render reale). Il fake accetta language (nuovo kwarg).
+    # 0 domande → intervista; l'utente genera il briefing (render reale). Il fake accetta language.
     monkeypatch.setattr(
         P.interview_mod,
         "detect_questions",
@@ -287,11 +287,14 @@ def test_run_processing_english_output_when_app_language_en(tmp_path, monkeypatc
     )
 
     prov = _RecProvider()
+    s = Settings(briefing_dir=str(tmp_path / "out"), app_language="en")
     job = store.create(Job.new(str(tmp_path / "a.wav"), model="small", language="it", mode="solo"))
-    out = P.run_processing(
-        job, store, settings=Settings(briefing_dir=str(tmp_path / "out"), app_language="en"), provider=prov, emit=None
-    )
+    out = P.run_processing(job, store, settings=s, provider=prov, emit=None)
+    assert out.status == "awaiting_interview"  # L04: 0 domande → intervista; la bozza è già in inglese
+    assert "## Context" in out.draft_briefing
 
+    # l'utente genera (senza risposte) → briefing finale in inglese
+    out = P.generate_briefing(out, store, {}, [], settings=s, provider=prov, emit=None)
     assert out.status == "ready"
     # il provider ha ricevuto la direttiva inglese (l'analisi è in inglese)
     assert any("English" in s for s in prov.systems), "il prompt di analisi deve chiedere output in inglese"

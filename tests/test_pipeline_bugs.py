@@ -129,12 +129,14 @@ def test_m3_run_processing_generate_briefing_failure_returns_error_job(tmp_path,
     store = JobStore(jobs_dir=str(tmp_path / "jobs"))
     job = store.create(Job.new(str(tmp_path / "x.wav"), title="T"))
     result = pipeline.run_processing(job, store, settings=s, provider=_FakeProv())
-    assert result.status == "error"
-    assert "render fallito" in (result.error or "")
+    # L04: il render della BOZZA pre-intervista è tollerante (mai bloccante) → un fallimento NON
+    # manda più il job in error: si prosegue all'intervista con la bozza vuota.
+    assert result.status == "awaiting_interview"
+    assert result.draft_briefing == ""
 
 
 def test_m3b_run_processing_generate_briefing_failure_does_not_reraise(tmp_path, monkeypatch):
-    """M3-b: nessun re-raise quando generate_briefing fallisce nel path 0-domande."""
+    """M3-b: nessun re-raise quando il render della bozza fallisce (path 0-domande, L04)."""
     from app import pipeline
     from app.jobs import Job, JobStore
 
@@ -176,6 +178,6 @@ def test_m3b_run_processing_generate_briefing_failure_does_not_reraise(tmp_path,
 
     store = JobStore(jobs_dir=str(tmp_path / "jobs"))
     job = store.create(Job.new(str(tmp_path / "x.wav"), title="T"))
-    # NON deve sollevare eccezione — run_processing ritorna il job in error
+    # NON deve sollevare eccezione — il render bozza fallito è tollerato (draft vuoto), L04
     result = pipeline.run_processing(job, store, settings=s, provider=_FakeProv())
-    assert result.status == "error"
+    assert result.status == "awaiting_interview"

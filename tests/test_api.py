@@ -132,7 +132,7 @@ def test_generate_runs_pipeline_in_thread(api, monkeypatch, sync_threads, tmp_pa
         job.id, transcript="t", analysis={"meta": {"type": "solo"}}, questions=[], status="awaiting_interview"
     )
 
-    def fake_generate(j, store, answers, skipped, *, settings=None, provider=None, emit=None):
+    def fake_generate(j, store, answers, skipped, *, extra_context="", settings=None, provider=None, emit=None):
         return store.update(j.id, status="ready", briefing_md="# B", briefing_path="/x/b.md")
 
     monkeypatch.setattr(api, "_generate_impl", fake_generate)
@@ -322,6 +322,70 @@ def test_start_recording_discards_previous_recording(tmp_path, monkeypatch):
     assert api._live is None
 
 
+def _recording_api(tmp_path, monkeypatch):
+    """Api isolata con Recorder mockato e settings senza anteprima live, per i test L14.
+    Ritorna (api, started) dove started['n'] conta le catture avviate."""
+    import app.api as apimod
+    from app.api import Api
+    from app.jobs import JobStore
+
+    from vokari import settings as settings_mod
+    from vokari.audio import capture
+    from vokari.settings import Settings
+
+    monkeypatch.setenv("VOKARI_HOME", str(tmp_path))
+    monkeypatch.setattr(settings_mod, "load", lambda: Settings(live_preview=False))
+    started = {"n": 0}
+
+    class _Rec:
+        def __init__(self, *a, **k):
+            pass
+
+        def start(self):
+            started["n"] += 1
+
+    monkeypatch.setattr(apimod.capture, "Recorder", _Rec)
+    api = Api(store=JobStore(jobs_dir=str(tmp_path / "jobs")))
+    return api, started, capture
+
+
+def test_start_recording_blocks_when_disk_critical(tmp_path, monkeypatch):
+    """L14: spazio disco insufficiente → start_recording SOLLEVA (App mostra ErrorScreen),
+    la cattura NON parte e i ref restano puliti."""
+    api, started, capture = _recording_api(tmp_path, monkeypatch)
+    monkeypatch.setattr(capture, "disk_preflight", lambda source, path=None: ("critical", 1.0))
+
+    with pytest.raises(RuntimeError):
+        api.start_recording("both")
+    assert started["n"] == 0, "con disco pieno la cattura non deve partire"
+    assert api._rec is None
+
+
+def test_start_recording_warns_when_disk_low(tmp_path, monkeypatch):
+    """Spazio limitato → evento `warning` non bloccante + la registrazione parte comunque."""
+    api, started, capture = _recording_api(tmp_path, monkeypatch)
+    monkeypatch.setattr(capture, "disk_preflight", lambda source, path=None: ("low", 12.0))
+    events: list[tuple[str, dict]] = []
+    monkeypatch.setattr(api, "_emit", lambda ev, payload: events.append((ev, payload)))
+
+    out = api.start_recording("mic")
+    assert out["ok"] is True
+    assert started["n"] == 1
+    assert any(ev == "warning" for ev, _ in events), "spazio basso deve emettere un warning"
+
+
+def test_start_recording_no_warning_when_disk_ok(tmp_path, monkeypatch):
+    api, started, capture = _recording_api(tmp_path, monkeypatch)
+    monkeypatch.setattr(capture, "disk_preflight", lambda source, path=None: ("ok", 999.0))
+    events: list[tuple[str, dict]] = []
+    monkeypatch.setattr(api, "_emit", lambda ev, payload: events.append((ev, payload)))
+
+    out = api.start_recording("mic")
+    assert out["ok"] is True
+    assert started["n"] == 1
+    assert not any(ev == "warning" for ev, _ in events), "con spazio sufficiente niente warning"
+
+
 def test_stop_recording_captures_live_locally(tmp_path, monkeypatch):
     """stop_recording cattura _live in un locale e azzera self._live SUBITO: _finalize ferma
     il live catturato, non self._live (che una nuova start_recording potrebbe riassegnare)."""
@@ -370,7 +434,7 @@ def test_spawn_processing_saves_session_when_pipeline_returns_ready(api, monkeyp
 
     job = api._store.create(Job.new(str(tmp_path / "a.wav"), mode="solo"))
 
-    def fake_run_processing(j, store, emit=None):
+    def fake_run_processing(j, store, emit=None, fit_gate=False, edit_gate=False, skip_transcribe=False):
         return store.update(j.id, status="ready", briefing_md="# B")
 
     monkeypatch.setattr(apimod.pipeline_mod, "run_processing", fake_run_processing)
@@ -394,7 +458,7 @@ def test_spawn_processing_does_not_save_when_awaiting_interview(api, monkeypatch
 
     job = api._store.create(Job.new(str(tmp_path / "a.wav"), mode="solo"))
 
-    def fake_run_processing(j, store, emit=None):
+    def fake_run_processing(j, store, emit=None, fit_gate=False, edit_gate=False, skip_transcribe=False):
         return store.update(j.id, status="awaiting_interview")
 
     monkeypatch.setattr(apimod.pipeline_mod, "run_processing", fake_run_processing)
@@ -470,7 +534,7 @@ def test_save_settings_partial_merge_preserves_other_fields(isolated_api):
     s = isolated_api.get_settings()
     assert s["brain"] == "ollama"
     # transcriptionLanguage deve conservare il valore default
-    assert s["transcriptionLanguage"] == "it"
+    assert s["transcriptionLanguage"] == "auto"
 
 
 def test_set_api_key_stores_in_keyring_not_json(isolated_api):
@@ -678,7 +742,7 @@ def test_generate_saves_session_on_ready(sessions_api, tmp_path, monkeypatch, sy
     """generate() su job ready salva una Session recuperabile via list_sessions."""
     job = _make_ready_job(sessions_api, tmp_path)
 
-    def fake_generate(j, store, answers, skipped, *, settings=None, provider=None, emit=None):
+    def fake_generate(j, store, answers, skipped, *, extra_context="", settings=None, provider=None, emit=None):
         return store.update(
             j.id, status="ready", briefing_md="# B", briefing_path="/x/b.md", recap_md="# Recap", obsidian_note="# Nota"
         )
@@ -698,7 +762,7 @@ def test_generate_saves_session_has_artifacts_flags(sessions_api, tmp_path, monk
     """Le flag hasBriefing/hasRecap/hasObsidian rispecchiano la presenza degli artefatti."""
     job = _make_ready_job(sessions_api, tmp_path, recap_md="# Recap presente", obsidian_note="# Nota presente")
 
-    def fake_generate(j, store, answers, skipped, *, settings=None, provider=None, emit=None):
+    def fake_generate(j, store, answers, skipped, *, extra_context="", settings=None, provider=None, emit=None):
         return store.update(
             j.id,
             status="ready",
@@ -723,7 +787,7 @@ def test_open_session_returns_camelcase_artifacts(sessions_api, tmp_path, monkey
     """open_session(id) ritorna le chiavi camelCase con recapMd e obsidianNote."""
     job = _make_ready_job(sessions_api, tmp_path, recap_md="# Recap", obsidian_note="# Nota")
 
-    def fake_generate(j, store, answers, skipped, *, settings=None, provider=None, emit=None):
+    def fake_generate(j, store, answers, skipped, *, extra_context="", settings=None, provider=None, emit=None):
         return store.update(
             j.id, status="ready", briefing_md="# B", briefing_path="/x/b.md", recap_md="# Recap", obsidian_note="# Nota"
         )
@@ -750,7 +814,7 @@ def test_list_sessions_camelcase_shape(sessions_api, tmp_path, monkeypatch, sync
     """list_sessions ritorna dict con tutte le chiavi camelCase attese."""
     job = _make_ready_job(sessions_api, tmp_path)
 
-    def fake_generate(j, store, answers, skipped, *, settings=None, provider=None, emit=None):
+    def fake_generate(j, store, answers, skipped, *, extra_context="", settings=None, provider=None, emit=None):
         return store.update(
             j.id, status="ready", briefing_md="# B", briefing_path="/x/b.md", recap_md="# R", obsidian_note="# N"
         )
@@ -955,7 +1019,7 @@ def test_search_sessions_filtra_per_query(sessions_api, tmp_path, monkeypatch, s
     """search_sessions con query matching ritorna la sessione; query non matching = vuota."""
     job = _make_ready_job(sessions_api, tmp_path)
 
-    def fake_generate(j, store, answers, skipped, *, settings=None, provider=None, emit=None):
+    def fake_generate(j, store, answers, skipped, *, extra_context="", settings=None, provider=None, emit=None):
         return store.update(
             j.id, status="ready", briefing_md="# B", briefing_path="/x/b.md", recap_md="# R", obsidian_note="# N"
         )
@@ -1005,7 +1069,7 @@ def test_delete_session_removes_from_library(sessions_api, tmp_path, monkeypatch
     """delete_session rimuove la sessione dalla libreria (e il job persistito) (FB-D)."""
     job = _make_ready_job(sessions_api, tmp_path)
 
-    def fake_generate(j, store, answers, skipped, *, settings=None, provider=None, emit=None):
+    def fake_generate(j, store, answers, skipped, *, extra_context="", settings=None, provider=None, emit=None):
         return store.update(
             j.id, status="ready", briefing_md="# B", briefing_path="/x/b.md", recap_md="# R", obsidian_note="# N"
         )
@@ -2019,6 +2083,12 @@ def test_happy_path_import_to_session_real_seams(tmp_path, monkeypatch):
     jid = out["jobId"]
 
     job = api._store.get(jid)
+    # L04: 0 domande → l'intervista compare comunque con la bozza già renderizzata (non più
+    # ready diretto). L'utente "genera" (qui senza risposte) → briefing finale + session salvata.
+    assert job.status == "awaiting_interview", f"atteso awaiting_interview, ottenuto {job.status!r} ({job.error!r})"
+    assert job.draft_briefing  # bozza pronta a fianco del campo contesto
+    api.generate(jid, {}, [])
+    job = api._store.get(jid)
     assert job.status == "ready", f"atteso ready, ottenuto {job.status!r} ({job.error!r})"
     # artefatto REALE su disco (non un mock)
     assert job.briefing_path and Path(job.briefing_path).exists()
@@ -2026,6 +2096,29 @@ def test_happy_path_import_to_session_real_seams(tmp_path, monkeypatch):
     # Session REALMENTE salvata nella libreria
     sessions = api.list_sessions()
     assert len(sessions) == 1 and sessions[0]["id"] == jid
+
+
+def test_api_generate_passes_extra_context(tmp_path, monkeypatch):
+    """L04: il 4° argomento di api.generate (contesto libero) raggiunge generate_briefing."""
+    from app.jobs import Job
+
+    # _spawn_generate lancia un daemon: eseguilo inline per ispezionare la chiamata
+    monkeypatch.setattr(
+        "app.api.threading.Thread", lambda target, daemon=None: type("T", (), {"start": staticmethod(target)})()
+    )
+    captured = {}
+
+    def fake_impl(job, store, answers, skipped, *, extra_context="", emit=None):
+        captured["extra_context"] = extra_context
+        return job
+
+    api = Api(
+        store=JobStore(jobs_dir=str(tmp_path / "jobs")), sessions=SessionsRepo(sessions_dir=str(tmp_path / "sessions"))
+    )
+    api._generate_impl = fake_impl
+    job = api._store.create(Job.new(str(tmp_path / "a.wav")))
+    api.generate(job.id, {}, [], "contesto extra")
+    assert captured.get("extra_context") == "contesto extra"
 
 
 # ---------------------------------------------------------------------------
@@ -2148,3 +2241,153 @@ def test_update_marker_no_active_recording():
     api._rec = None
     out = api.update_marker(0, "x")
     assert out["ok"] is False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# L08 — Api.resolve_fit (gate riassunto lossy)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_resolve_fit_proceed_records_consent_and_respawns(tmp_path):
+    """proceed → registra fit_decision='proceed' e ri-lancia la pipeline (che salterà il gate)."""
+    from app.api import Api
+    from app.jobs import Job, JobStore
+
+    from vokari.store.sessions_repo import SessionsRepo
+
+    api = Api(store=JobStore(jobs_dir=str(tmp_path / "j")), sessions=SessionsRepo(sessions_dir=str(tmp_path / "s")))
+    job = api._store.create(Job.new(str(tmp_path / "a.wav"), status="awaiting_fit_decision"))
+    spawned: dict = {}
+    api._spawn_processing = lambda j, skip_transcribe=False: spawned.update(id=j.id, skip=skip_transcribe)  # type: ignore[method-assign]
+
+    api.resolve_fit(job.id, "proceed")
+    assert api._store.get(job.id).fit_decision == "proceed"
+    assert spawned.get("id") == job.id
+    assert spawned.get("skip") is False  # nessun transcript ancora → ritrascrive (gate al preflight)
+
+
+def test_resolve_fit_proceed_preserves_transcript_skips_transcribe(tmp_path):
+    """N1: se il gate fit scatta DOPO la trascrizione (es. A2 al resume da editing), proceed NON
+    deve ritrascrivere — ricomincerebbe da capo scartando l'edit manuale. skip_transcribe=True."""
+    from app.api import Api
+    from app.jobs import Job, JobStore
+
+    from vokari.store.sessions_repo import SessionsRepo
+
+    api = Api(store=JobStore(jobs_dir=str(tmp_path / "j")), sessions=SessionsRepo(sessions_dir=str(tmp_path / "s")))
+    job = api._store.create(
+        Job.new(
+            str(tmp_path / "a.wav"),
+            status="awaiting_fit_decision",
+            transcript="testo editato",
+            transcript_edited=True,
+        )
+    )
+    spawned: dict = {}
+    api._spawn_processing = lambda j, skip_transcribe=False: spawned.update(id=j.id, skip=skip_transcribe)  # type: ignore[method-assign]
+
+    api.resolve_fit(job.id, "proceed")
+    assert spawned.get("id") == job.id
+    assert spawned.get("skip") is True  # transcript presente → usa il testo (editato), niente ri-trascrizione
+
+
+def test_resolve_fit_cancel_marks_cancelled(tmp_path):
+    from app.api import Api
+    from app.jobs import Job, JobStore
+
+    from vokari.store.sessions_repo import SessionsRepo
+
+    api = Api(store=JobStore(jobs_dir=str(tmp_path / "j")), sessions=SessionsRepo(sessions_dir=str(tmp_path / "s")))
+    job = api._store.create(Job.new(str(tmp_path / "a.wav"), status="awaiting_fit_decision"))
+    api.resolve_fit(job.id, "cancel")
+    assert api._store.get(job.id).status == "cancelled"
+
+
+def test_resolve_fit_noop_when_not_at_gate(tmp_path):
+    from app.api import Api
+    from app.jobs import Job, JobStore
+
+    from vokari.store.sessions_repo import SessionsRepo
+
+    api = Api(store=JobStore(jobs_dir=str(tmp_path / "j")), sessions=SessionsRepo(sessions_dir=str(tmp_path / "s")))
+    job = api._store.create(Job.new(str(tmp_path / "a.wav"), status="transcribing"))
+    api.resolve_fit(job.id, "proceed")
+    assert api._store.get(job.id).status == "transcribing"
+    assert api._store.get(job.id).fit_decision == ""
+
+
+# ===== N1: Transcript Editing =====
+
+
+def test_update_transcript_valid_job(api, tmp_path):
+    """N1: edit valido del transcript; salva su JobStore e setta transcript_edited=True."""
+    job = api._store.create(Job.new(str(tmp_path / "rec.wav"), status="awaiting_edit"))
+    api._store.update(job.id, transcript="trascrizione originale")
+
+    # rileggi per verificare lo stato iniziale
+    initial = api._store.get(job.id)
+    assert initial.transcript == "trascrizione originale"
+    assert initial.transcript_edited is False
+
+    # edit
+    out = api.update_transcript(job.id, "trascrizione editata")
+    assert out["success"] is True
+
+    # verifica: testo salvato e flag settato
+    updated = api._store.get(job.id)
+    assert updated.transcript == "trascrizione editata"
+    assert updated.transcript_edited is True
+
+
+def test_update_transcript_no_change(api, tmp_path):
+    """Se il testo è identico, transcript_edited rimane False."""
+    job = api._store.create(Job.new(str(tmp_path / "rec.wav"), status="awaiting_edit"))
+    api._store.update(job.id, transcript="testo")
+
+    out = api.update_transcript(job.id, "testo")  # testo identico
+    assert out["success"] is True
+    assert api._store.get(job.id).transcript_edited is False
+
+
+def test_update_transcript_invalid_job(api):
+    """Job non esiste → errore."""
+    out = api.update_transcript("nonexistent", "nuovo testo")
+    assert "error" in out
+
+
+def test_update_transcript_wrong_state(api, tmp_path):
+    """Job non in stato awaiting_edit → errore."""
+    job = api._store.create(Job.new(str(tmp_path / "rec.wav"), status="transcribing"))
+    out = api.update_transcript(job.id, "testo")
+    assert "error" in out
+
+
+def test_resume_job_valid(api, tmp_path, monkeypatch, sync_threads):
+    """N1: resume valido porta il job da awaiting_edit a analyzing (via _spawn_processing)."""
+    job = api._store.create(Job.new(str(tmp_path / "rec.wav"), status="awaiting_edit"))
+    api._store.update(job.id, transcript="testo editato", transcript_edited=True)
+
+    spawned = {}
+    monkeypatch.setattr(api, "_spawn_processing", lambda j, skip_transcribe=False: spawned.setdefault("id", j.id))
+
+    out = api.resume_job(job.id)
+    assert out is not None  # _job_view ritorna un dict con i dati del job
+    assert out["jobId"] == job.id
+    assert spawned.get("id") == job.id
+
+
+def test_resume_job_invalid_job(api):
+    """Job non esiste → ritorna None."""
+    out = api.resume_job("nonexistent")
+    assert out is None
+
+
+def test_resume_job_midflight_missing_audio_sets_error(api, tmp_path):
+    """N1 non rompe la ripresa midflight storica: un job `queued` il cui audio non esiste più
+    (chiusura imprevista, file perso) → resume_job lo marca `error` invece di crashare. È il ramo
+    diverso da `awaiting_edit` (che NON tocca l'audio): qui senza file non c'è nulla da riprendere."""
+    job = api._store.create(Job.new(str(tmp_path / "missing.wav"), status="queued", transcript=""))
+    out = api.resume_job(job.id)
+    assert out is not None
+    assert out["status"] == "error"
+    assert api._store.get(job.id).status == "error"

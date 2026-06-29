@@ -128,7 +128,9 @@ export function ScreenSessions({ onOpen, onImport }: {
     e.stopPropagation();
     setSessions((cur) => cur.filter((x) => x.id !== id)); // rimozione ottimistica
     setSelected((cur) => { const n = new Set(cur); n.delete(id); return n; });
-    notifySessionsChanged();
+    // NON notificare il bus qui: la sessione esiste ancora su disco (finestra undo 5s).
+    // Il notify arriva solo dopo il commit reale (bridge.deleteSession sotto) → la sidebar
+    // non può mostrare la sessione "fantasma" rileggendo disco prima che sia eliminata.
     const timer = window.setTimeout(() => {
       undoTimers.current.delete(id);
       setSessions((cur) => cur.filter((x) => x.id !== id)); // idempotente anche dopo un reload

@@ -68,6 +68,56 @@ def mix_wav_16k_mono(path_a: str, path_b: str, out_path: str) -> None:
     write_pcm16_wav(mixed, out_path, samplerate=SAMPLE_RATE, channels=1)
 
 
+# --- L14: preflight spazio disco prima di una registrazione lunga ---
+# La cattura scrive i WAV nativi IN STREAMING nella tempdir (vedi _capture_*_native): se il
+# disco si riempie a metà, la lane finisce in _errors e l'audio si perde allo Stop. Stimiamo
+# in anticipo i minuti registrabili nello spazio libero e avvisiamo/blocchiamo prima di partire.
+#
+# Byte-rate NATIVO per lane (worst-case, PRIMA della normalizzazione a 16k mono): ~48 kHz,
+# 16 bit, fino a 2 canali = 192 KB/s. Stima ALTA di proposito: meglio promettere meno minuti
+# del reale che far perdere una registrazione lunga.
+_NATIVE_BYTES_PER_S_PER_LANE = 48000 * 2 * 2  # 192_000
+
+# Soglie sui minuti di registrazione stimati nello spazio libero.
+_DISK_CRITICAL_MINUTES = 2.0  # sotto: blocca (non basta nemmeno per una registrazione breve)
+_DISK_LOW_MINUTES = 30.0  # sotto (ma >= critico): avvisa, registrazione comunque consentita
+
+
+def _capture_byte_rate(source: str) -> int:
+    """Byte/s stimati scritti su disco durante la cattura nativa. 'both' = mic+system insieme (2 lane)."""
+    lanes = 2 if source == "both" else 1
+    return _NATIVE_BYTES_PER_S_PER_LANE * lanes
+
+
+def disk_free_bytes(path: str | Path | None = None) -> int:
+    """Spazio libero (byte) sul volume di `path` (default: la tempdir, dove la cattura scrive in
+    streaming). Risale all'antenato esistente più vicino se `path` non esiste ancora."""
+    p = Path(path) if path is not None else Path(tempfile.gettempdir())
+    while not p.exists() and p != p.parent:
+        p = p.parent
+    return shutil.disk_usage(str(p)).free
+
+
+def recording_minutes_left(source: str, path: str | Path | None = None) -> float:
+    """Minuti di registrazione stimati nello spazio libero, alla sorgente data (stima conservativa)."""
+    return disk_free_bytes(path) / _capture_byte_rate(source) / 60.0
+
+
+def disk_preflight(source: str, path: str | Path | None = None) -> tuple[str, float]:
+    """Verifica lo spazio disco PRIMA di registrare. Ritorna (severity, minuti_stimati):
+    'critical' (blocca), 'low' (avvisa), 'ok'. Tollerante: un errore di lettura del disco →
+    'ok' (un check fallito non deve MAI impedire una registrazione)."""
+    try:
+        minutes = recording_minutes_left(source, path)
+    except OSError:
+        return "ok", float("inf")
+    if minutes < _DISK_CRITICAL_MINUTES:
+        return "critical", minutes
+    if minutes < _DISK_LOW_MINUTES:
+        return "low", minutes
+    return "ok", minutes
+
+
 _BLOCK = 1024
 _LEVEL_INTERVAL = 0.1  # secondi tra due emissioni di livello (anti-flood verso il JS)
 _STOP_JOIN_TIMEOUT = 4.0  # max attesa per thread di cattura su stop() (evita Stop bloccato)

@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 @dataclass
 class Session:
     id: str
-    title: str = "Sessione senza titolo"
+    title: str = ""
     created_at: str = ""  # ISO 8601 UTC
     mode: str = "solo"  # 'solo' | 'riunione'
     source: str = "mic"  # 'mic' | 'system' | 'both'
@@ -33,7 +33,7 @@ class Session:
     def new(
         cls,
         *,
-        title: str = "Sessione senza titolo",
+        title: str = "",
         mode: str = "solo",
         source: str = "mic",
         model: str = "",
@@ -58,9 +58,7 @@ class Session:
         return cls(**{k: v for k, v in d.items() if k in known})
 
     @classmethod
-    def from_transcript_result(
-        cls, result: dict, *, mode: str = "solo", title: str = "Sessione senza titolo"
-    ) -> "Session":
+    def from_transcript_result(cls, result: dict, *, mode: str = "solo", title: str = "") -> "Session":
         text = result.get("text", "")
         s = cls.new(title=title, mode=mode, model=result.get("model", ""), language=result.get("language", "auto"))
         s.audio_path = result.get("source", "")

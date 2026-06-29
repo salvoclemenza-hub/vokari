@@ -252,6 +252,7 @@ def _job_view(job: Job) -> dict:
         "questions": job.questions,
         "markers": job.markers,
         "briefingMd": job.briefing_md,
+        "draftBriefing": job.draft_briefing,
         "briefingPath": job.briefing_path,
         "error": job.error,
     }
@@ -576,6 +577,7 @@ class Api:
             "onboarded": s.onboarded,
             "lastSeenVersion": s.last_seen_version,
             "appLanguage": s.app_language,
+            "userContext": s.user_context,
             "hasApiKey": bool(settings_mod.get_api_key()),
         }
 
@@ -597,6 +599,7 @@ class Api:
             "onboarded": "onboarded",
             "lastSeenVersion": "last_seen_version",
             "appLanguage": "app_language",
+            "userContext": "user_context",
         }
         s = settings_mod.load()
         for camel, snake in _CAMEL_TO_SNAKE.items():
@@ -1113,6 +1116,16 @@ class Api:
 
     @_traced
     def start_recording(self, source: str, device=None) -> dict:
+        # L14 — preflight spazio disco: la cattura scrive i WAV nativi in streaming nella
+        # tempdir; a disco pieno l'audio si perde allo Stop. Controlliamo PRIMA di scartare la
+        # registrazione precedente e di partire. 'critical' → solleva (App mostra ErrorScreen +
+        # riprova, niente registrazione muta); 'low' → warning non bloccante, si registra.
+        severity, minutes = capture.disk_preflight(source)
+        if severity == "critical":
+            raise RuntimeError(i18n.t("api.disk_full", self._lang(), minutes=max(0, int(minutes))))
+        if severity == "low":
+            self._emit("warning", {"messages": [i18n.t("api.disk_low", self._lang(), minutes=max(1, int(minutes)))]})
+
         # Guard: una registrazione precedente ancora attiva (doppio click sul REC, o
         # navigazione via da Live senza Stop) lascerebbe Recorder/LiveTranscriber orfani
         # (thread, stream WASAPI, modello). La scartiamo in un thread daemon: rec.stop() può
@@ -1254,7 +1267,7 @@ class Api:
         job = self._store.create(
             Job.new(
                 "",
-                title=title or "Sessione senza titolo",
+                title=title or i18n.t("api.untitled_session", i18n.normalize_lang(s.app_language)),
                 mode=mode or s.default_mode,
                 context=context or "",
                 status="queued",
@@ -1332,7 +1345,7 @@ class Api:
     ) -> dict:
         s = settings_mod.load()
         mode = mode or s.default_mode
-        title = title or "Sessione senza titolo"
+        title = title or i18n.t("api.untitled_session", i18n.normalize_lang(s.app_language))
         job = self._store.create(
             Job.new(
                 audio_path,
@@ -1348,10 +1361,20 @@ class Api:
         self._spawn_processing(job)
         return {"jobId": job.id}
 
-    def _spawn_processing(self, job: Job) -> None:
+    def _spawn_processing(self, job: Job, skip_transcribe: bool = False) -> None:
         def run():
             try:
-                result = pipeline_mod.run_processing(job, self._store, emit=self._emit)
+                result = pipeline_mod.run_processing(
+                    job,
+                    self._store,
+                    emit=self._emit,
+                    fit_gate=self._window is not None,
+                    # N1: edit_gate attivo solo con GUI (come fit_gate) → la pipeline si ferma ad
+                    # awaiting_edit per la revisione testo. Headless/test (_window None) proseguono.
+                    # Sul resume skip_transcribe=True il gate non scatta comunque (ramo skip).
+                    edit_gate=self._window is not None,
+                    skip_transcribe=skip_transcribe,
+                )
             except Exception:
                 return
             # Caso 0-domande: la pipeline arriva a "ready" senza passare da generate()
@@ -1382,14 +1405,19 @@ class Api:
     @_traced
     def resume_job(self, job_id: str) -> dict | None:
         job = self._store.get(job_id)
-        if job and job.status in ("queued", "transcribing", "analyzing", "rendering"):
-            if not job.audio_path or not Path(job.audio_path).exists():
-                lang = i18n.normalize_lang(settings_mod.load().app_language)
-                error_msg = i18n.t("api.resume_file_missing", lang, path=job.audio_path or "—")
-                job = self._store.update(job_id, status="error", error=error_msg)
-                self._emit("status", {"jobId": job_id, "status": "error", "error": error_msg})
-            else:
-                self._spawn_processing(job)
+        if job:
+            # N1: awaiting_edit → procedi con analisi (skippa trascrizione)
+            if job.status == "awaiting_edit":
+                self._spawn_processing(job, skip_transcribe=True)
+            # Riprendi job midflight (queued, transcribing, etc.)
+            elif job.status in ("queued", "transcribing", "analyzing", "rendering"):
+                if not job.audio_path or not Path(job.audio_path).exists():
+                    lang = i18n.normalize_lang(settings_mod.load().app_language)
+                    error_msg = i18n.t("api.resume_file_missing", lang, path=job.audio_path or "—")
+                    job = self._store.update(job_id, status="error", error=error_msg)
+                    self._emit("status", {"jobId": job_id, "status": "error", "error": error_msg})
+                else:
+                    self._spawn_processing(job)
         return _job_view(job) if job else None
 
     @_traced
@@ -1397,6 +1425,25 @@ class Api:
         job = self._store.get(job_id)
         if job:
             job = self._store.update(job_id, status="cancelled")
+        return _job_view(job) if job else None
+
+    @_traced
+    def resolve_fit(self, job_id: str, decision: str) -> dict | None:
+        """L08: l'utente ha deciso al gate del riassunto lossy. 'proceed' → registra il consenso
+        e riprende la pipeline (che salta il gate, gate-once); 'cancel' (default difensivo) →
+        annulla. No-op se il job non è fermo al gate (doppio click / stato già cambiato)."""
+        job = self._store.get(job_id)
+        if not job or job.status != "awaiting_fit_decision":
+            return _job_view(job) if job else None
+        if decision == "proceed":
+            job = self._store.update(job_id, fit_decision="proceed", status="queued")
+            # N1: se il transcript è già presente (gate A2 scattato DOPO il gate editing, o comunque
+            # post-trascrizione) NON ritrascrivere — ricomincerebbe da capo scartando l'edit manuale
+            # e ri-mostrando il gate editing. skip_transcribe=True usa il testo (eventualmente editato).
+            self._spawn_processing(job, skip_transcribe=bool(job.transcript))
+        else:
+            job = self._store.update(job_id, status="cancelled")
+            self._emit("status", {"jobId": job_id, "status": "cancelled"})
         return _job_view(job) if job else None
 
     def invalidate_transcript_cache(self, job_id: str) -> dict:
@@ -1413,13 +1460,30 @@ class Api:
         self._store.update(job_id, status="queued", pct=0.0, partial_text="", transcript="", error="")
         return {"ok": True}
 
+    # --- N1: Transcript Editing ----------------------------------------
+
+    @_traced
+    def update_transcript(self, job_id: str, new_text: str) -> dict:
+        """N1: salva il testo della trascrizione corretto a mano nella schermata di revisione e
+        marca `transcript_edited` solo se davvero cambiato. Valido solo se il job è fermo al gate
+        `awaiting_edit`; altri stati → {error} (validazione applicativa, NON una route HTTP). Non
+        riprende la pipeline: la ripresa è esplicita via resume_job (l'utente clicca 'Procedi')."""
+        job = self._store.get(job_id)
+        if job is None:
+            return {"error": i18n.t("api.job_not_found", self._lang(), sid=repr(job_id))}
+        if job.status != "awaiting_edit":
+            return {"error": i18n.t("api.transcript_not_editable", self._lang(), status=job.status)}
+        edited = new_text != job.transcript
+        self._store.update(job_id, transcript=new_text, transcript_edited=edited)
+        return {"success": True}
+
     # --- intervista + briefing ----------------------------------------
     def get_questions(self, job_id: str) -> list:
         job = self._store.get(job_id)
         return [_question_view(q) for q in job.questions] if job else []
 
     @_traced
-    def generate(self, job_id: str, answers: dict, skipped: list) -> dict | None:
+    def generate(self, job_id: str, answers: dict, skipped: list, extra_context: str = "") -> dict | None:
         """Avvia la generazione del briefing in un thread daemon e ritorna SUBITO il job
         corrente (status pre-generazione). La generazione include una chiamata LLM di
         refinement che può durare minuti: eseguirla nel thread js-api di pywebview
@@ -1428,13 +1492,15 @@ class Api:
         job = self._store.get(job_id)
         if not job:
             return None
-        self._spawn_generate(job, answers or {}, skipped or [])
+        self._spawn_generate(job, answers or {}, skipped or [], extra_context or "")
         return _job_view(job)
 
-    def _spawn_generate(self, job: Job, answers: dict, skipped: list) -> None:
+    def _spawn_generate(self, job: Job, answers: dict, skipped: list, extra_context: str = "") -> None:
         def run():
             try:
-                result = self._generate_impl(job, self._store, answers, skipped, emit=self._emit)
+                result = self._generate_impl(
+                    job, self._store, answers, skipped, extra_context=extra_context, emit=self._emit
+                )
             except Exception as e:
                 debuglog.log_exc("generate_error", e, jobId=job.id)
                 self._store.update(job.id, status="error", error=str(e))
@@ -1458,9 +1524,13 @@ class Api:
         if not (job.transcript or "").strip():
             debuglog.log("session_save_skipped", jobId=job.id, reason="empty_transcript")
             return
+        title = job.title or i18n.t(
+            "api.untitled_session",
+            i18n.normalize_lang(settings_mod.load().app_language),
+        )
         session = Session(
             id=job.id,
-            title=job.title,
+            title=title,
             created_at=job.created_at or datetime.now(UTC).isoformat(),
             mode=job.mode,
             source=job.source,

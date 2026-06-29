@@ -9,12 +9,22 @@ from vokari import i18n
 from vokari import markers as markers_mod
 from vokari.analyze.schema import Analysis
 
+# Budget ragionevole per user_context nei prompt (spec §4): evita bloat dei token
+_USER_CONTEXT_MAX_CHARS = 500
+
+
+def _truncate_user_context(uc: str) -> str:
+    """Trunca user_context a lunghezza ragionevole con indicatore visivo se tagliato."""
+    uc = (uc or "").strip()
+    if len(uc) <= _USER_CONTEXT_MAX_CHARS:
+        return uc
+    return uc[: _USER_CONTEXT_MAX_CHARS - 3] + "..."
+
+
 # Base del system prompt SENZA la direttiva di lingua (appesa da build_system in base a `language`).
 _SYSTEM = (
-    "Sei un analista esperto che trasforma trascrizioni vocali di un magazzino alimentare "
-    "B2B in conoscenza strutturata. Conosci la terminologia del dominio: lotti VMM, "
-    "processi MAC (lavorazione), OBB (obbligo), DDT, HACCP, resa, miscelazione, scarti, "
-    "tracciabilità, distinta base. "
+    "Sei un analista esperto che trasforma trascrizioni vocali (riunioni, brainstorming, "
+    "note a voce) in conoscenza strutturata, chiara e azionabile. "
     "Rispondi ESCLUSIVAMENTE con un JSON valido conforme allo schema richiesto: "
     "nessun testo prima o dopo, nessun code fence markdown, nessuna spiegazione."
 )
@@ -36,8 +46,13 @@ _MODE_ALIASES = {"meeting": "meeting", "riunione": "meeting", "solo": "solo"}
 # dettaglio di superficie (es. caso IWA: "calendario di raccolta" invece della decisione landing page).
 _GUIDANCE = (
     "Procedi così: PRIMA individua lo SCOPO/decisione principale della sessione (campo `purpose`, "
-    "1-2 frasi): cosa si doveva decidere o capire, anche se non detto esplicitamente; NON confondere "
-    "lo scopo con un dettaglio di superficie ricorrente. POI estrai decisioni, partecipanti e ruoli, "
+    "1-2 frasi). Chiediti: 'PERCHÉ è avvenuta questa sessione? Qual era la DOMANDA o la DECISIONE "
+    "al centro?' — cerca formulazioni esplicite come 'dobbiamo decidere se...', 'sì o no', "
+    "'la risposta è...', 'vogliamo X o Y?' — spesso compaiono TARDI nella trascrizione. "
+    "ATTENZIONE: l'argomento più MENZIONATO o discusso nel dettaglio (formati, strumenti, "
+    "implementazioni tecniche) è tipicamente un MEZZO che serve la decisione, NON lo scopo stesso. "
+    "NON spacciare un dettaglio tecnico ricorrente per lo scopo principale. "
+    "POI estrai decisioni, partecipanti e ruoli, "
     "action item con responsabile e scadenza, domande aperte e numeri. Per le decisioni e i next step "
     "importanti àncora brevemente al contenuto della trascrizione (parafrasi breve, non citazione "
     "obbligatoria); non gonfiare un dettaglio secondario a scopo principale. "
@@ -65,32 +80,43 @@ def _shape(language: str) -> str:
     return f"Produci ESATTAMENTE questo JSON (chiavi in inglese, {clause}):\n{_SHAPE_BODY}"
 
 
-# Esempio few-shot con terminologia aziendale specifica del dominio.
-# Stabilizza la lingua (italiano) e la granularità dei campi su modelli locali (Ollama).
+# Esempio few-shot generico (nessun dominio aziendale).
+# Stabilizza la lingua e la granularità dei campi su modelli locali (Ollama).
+# NOTA (ADR-057): un secondo few-shot con "decisione sepolta" è stato testato (eval v4) ma ha
+# causato cross-contamination su qwen2.5:7b — il modello pattern-matcha alle surface feature
+# dell'esempio (es. open_question sull'invito) invece di imparare il pattern astratto MEZZO/FINE.
+# Il problema IWA (decisione landing page sepolta dopo 1000 parole di calendario) è un limite
+# del modello 7B — risolto in produzione con context injection dell'utente.
 _FEWSHOT = """
-Esempio di trascrizione e JSON atteso per il tuo dominio:
+Esempio di trascrizione e JSON atteso (per granularità e formato):
 
-TRASCRIZIONE: "Oggi abbiamo ricevuto il lotto VMM-2026-1234 dal fornitore Rossi. Il MAC ha rilevato una non conformità sulla resa delle acciughe: 87% invece del 95% atteso. Decidiamo di bloccare il lotto e avvisare il Responsabile Qualità entro domani. Mario si occupa della segnalazione HACCP."
+TRASCRIZIONE: "Rivediamo il lancio della newsletter mensile. Sara propone una sola uscita al mese, il primo giovedì, ben curata. Decidiamo quattro sezioni fisse e rendiamo l'intervista opzionale. Luca prepara la bozza entro il venti. Resta aperto come gestire le iscrizioni di chi non è ancora membro. Per ora Marco smista le email in arrivo, ma non è sostenibile a lungo."
 
 JSON ATTESO:
 {
-  "meta": {"type": "meeting", "title": "Non conformità lotto VMM-2026-1234", "participants": ["Mario"], "duration_min": 15, "date": ""},
-  "purpose": "Decidere come gestire la non conformità di resa sul lotto VMM-2026-1234: bloccarlo e definire chi avvisa.",
-  "context": "Riunione operativa per gestire una non conformità rilevata dal MAC sul lotto VMM-2026-1234: resa acciughe 87% vs 95% atteso.",
-  "key_ideas": ["Resa MAC sotto soglia: 87% vs 95%", "Lotto bloccato in attesa di verifica Responsabile Qualità"],
-  "decisions": [{"title": "Blocco lotto VMM-2026-1234", "decision": "Il lotto è bloccato fino a verifica", "rationale": "Non conformità resa MAC oltre la tolleranza"}],
-  "open_questions": ["La non conformità richiede segnalazione all'autorità sanitaria?"],
-  "next_steps": [{"task": "Segnalazione HACCP non conformità", "owner": "Mario", "deadline": null}],
+  "meta": {"type": "meeting", "title": "Lancio newsletter mensile", "participants": ["Sara", "Luca", "Marco"], "duration_min": 15, "date": ""},
+  "purpose": "Definire formato, sezioni e responsabilità per il lancio della newsletter mensile.",
+  "context": "Riunione di pianificazione per avviare una newsletter mensile: frequenza, struttura dei contenuti e gestione delle email in arrivo.",
+  "key_ideas": ["Una sola uscita al mese, il primo giovedì, per privilegiare la qualità", "Quattro sezioni fisse con l'intervista resa opzionale per sostenibilità"],
+  "decisions": [{"title": "Cadenza e struttura", "decision": "Newsletter mensile con quattro sezioni fisse, intervista opzionale", "rationale": "Mantenere qualità e ridurre il carico redazionale"}],
+  "open_questions": ["Come gestire le iscrizioni di chi non è ancora membro?"],
+  "next_steps": [{"task": "Preparare la bozza del primo numero", "owner": "Luca", "deadline": null}],
   "entities": [
-    {"name": "VMM-2026-1234", "type": "termine", "note": "lotto bloccato"},
-    {"name": "Mario", "type": "persona", "note": "responsabile segnalazione"},
-    {"name": "MAC", "type": "termine", "note": "processo di lavorazione"}
+    {"name": "Sara", "type": "persona", "note": "propone la cadenza mensile"},
+    {"name": "Marco", "type": "persona", "note": "smista le email in arrivo"}
   ]
 }"""
 
 
-def build_system(language: str = "it") -> str:
-    return _SYSTEM + " " + i18n.t("prompts.content_directive", language)
+def build_system(language: str = "it", user_context: str = "") -> str:
+    base = _SYSTEM + " " + i18n.t("prompts.content_directive", language)
+    uc = _truncate_user_context(user_context)
+    if uc:
+        base += (
+            f" Contesto dell'utente (dominio, ruolo e termini ricorrenti;"
+            f" usalo per interpretare sigle e tecnicismi): {uc}"
+        )
+    return base
 
 
 def build_user(
@@ -102,12 +128,24 @@ def build_user(
     context: str | None = None,
     markers: list[dict] | None = None,
     language: str = "it",
+    user_context: str = "",
 ) -> str:
     parts = [_FOCUS[_MODE_ALIASES.get(mode, "solo")], "", _GUIDANCE, "", _shape(language), _FEWSHOT, ""]
     # Rinforzo della lingua di output vicino al testo (recency): conta su modelli locali (qwen)
     # che, col few-shot in italiano, tenderebbero a ignorare la direttiva del system.
     parts.append(i18n.t("prompts.reinforce", language))
     parts.append("")
+    # user_context è iniettato sia nel system (build_system) che qui vicino alla trascrizione.
+    # Stessa strategia di recency adottata per il rinforzo-lingua: i modelli locali (qwen) tendono
+    # a ignorare le direttive del system prompt e beneficiano di un secondo rinforzo prossimo al testo.
+    uc = _truncate_user_context(user_context)
+    if uc:
+        parts.append(
+            "CONTESTO PERSISTENTE DELL'UTENTE (dominio, ruolo, termini ricorrenti;"
+            " usalo per interpretare sigle e tecnicismi):"
+        )
+        parts.append(uc)
+        parts.append("")
     if context:
         parts.append("CONTESTO FORNITO DALL'UTENTE (usalo per capire lo SCOPO della sessione):")
         parts.append(context)
@@ -145,21 +183,46 @@ _VERIFY_SYSTEM = (
 )
 
 
-def build_verify_system(language: str = "it") -> str:
-    return _VERIFY_SYSTEM + " " + i18n.t("prompts.content_directive", language)
+def build_verify_system(language: str = "it", user_context: str = "") -> str:
+    base = _VERIFY_SYSTEM + " " + i18n.t("prompts.content_directive", language)
+    uc = _truncate_user_context(user_context)
+    if uc:
+        base += f" Contesto dell'utente: {uc}"
+    return base
 
 
 def build_verify_user(
-    transcript: str, analysis: Analysis, *, mode: str = "solo", context: str | None = None, language: str = "it"
+    transcript: str,
+    analysis: Analysis,
+    *,
+    mode: str = "solo",
+    context: str | None = None,
+    language: str = "it",
+    user_context: str = "",
 ) -> str:
     parts = [
-        "Rileggi la TRASCRIZIONE e l'ANALISI CORRENTE qui sotto.",
-        "Qual è il PUNTO PRINCIPALE (lo scopo o la decisione centrale) della sessione?",
-        "Se l'analisi NON lo cattura nel campo `purpose` (vuoto, generico, o un dettaglio di superficie), "
-        "CORREGGILA: valorizza `purpose` con lo scopo vero e aggiungi le decisioni / next step IMPORTANTI "
-        "mancanti. Non rimuovere informazioni corrette già presenti. Ritorna l'oggetto Analysis JSON COMPLETO aggiornato.",
+        "Leggi la TRASCRIZIONE in calce e svolgi questi passi:",
+        "PASSO 1 — Individua INDIPENDENTEMENTE il PUNTO PRINCIPALE della sessione (cosa si doveva "
+        "decidere o capire?). Cerca segnali espliciti come 'dobbiamo decidere se...', 'sì o no', "
+        "'la risposta è...', 'vogliamo X o Y?' — compaiono spesso TARDI nel testo. Non fermarti "
+        "all'argomento più menzionato: quello è spesso un MEZZO, non il FINE.",
+        "PASSO 2 — Confronta il tuo punto principale con il campo `purpose` nell'ANALISI CORRENTE.",
+        "PASSO 3 — Se il purpose attuale è vuoto, troppo generico, o descrive un MEZZO (formato, "
+        "strumento, implementazione) invece della DECISIONE vera: AGGIORNA `purpose` e aggiungi "
+        "le decisioni/next_step IMPORTANTI mancanti. Non rimuovere informazioni già corrette. "
+        "Ritorna l'oggetto Analysis JSON COMPLETO aggiornato.",
         "",
     ]
+    # Stesso rinforzo di recency usato in build_user: i modelli locali beneficiano
+    # del user_context vicino alla trascrizione, non solo nel system prompt.
+    uc = _truncate_user_context(user_context)
+    if uc:
+        parts += [
+            "CONTESTO PERSISTENTE DELL'UTENTE (dominio, ruolo, termini ricorrenti;"
+            " usalo per interpretare sigle e tecnicismi):",
+            uc,
+            "",
+        ]
     if context:
         parts += ["CONTESTO FORNITO DALL'UTENTE (lo scopo dichiarato):", context, ""]
     parts += [
@@ -167,10 +230,10 @@ def build_verify_user(
         "",
         i18n.t("prompts.reinforce", language),
         "",
-        "ANALISI CORRENTE (JSON):",
-        analysis.model_dump_json(),
-        "",
-        "TRASCRIZIONE:",
+        "TRASCRIZIONE (leggi prima questa):",
         transcript,
+        "",
+        "ANALISI CORRENTE (confronta il `purpose` con quanto trovato nella TRASCRIZIONE):",
+        analysis.model_dump_json(),
     ]
     return "\n".join(parts)

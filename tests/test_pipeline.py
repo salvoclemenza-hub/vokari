@@ -23,7 +23,7 @@ def store(tmp_path):
 def _patch_engine(monkeypatch, analysis, questions):
     monkeypatch.setattr(P.models_mod, "is_downloaded", lambda name: True)
 
-    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None):
+    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None, **_kw):
         if on_segment:
             on_segment(1.0, "testo trascritto", "testo trascritto")
         return {"text": "testo trascritto", "duration_s": 12.0}
@@ -58,7 +58,7 @@ def test_transcribe_progress_emits_cumulative_text(store, tmp_path, monkeypatch)
     segmento corrente. Regressione: prima emetteva seg_text → la console frontend lampeggiava."""
     analysis = Analysis(meta=Meta(type="solo", title="X"))
 
-    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None):
+    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None, **_kw):
         if on_segment:
             on_segment(0.5, "ciao", "ciao")  # text_so_far, seg_text
             on_segment(1.0, "ciao mondo", " mondo")  # cumulativo cresce, seg diverso
@@ -85,10 +85,12 @@ def test_transcribe_progress_emits_cumulative_text(store, tmp_path, monkeypatch)
     assert texts[1].startswith(texts[0])
 
 
-def test_run_processing_no_questions_generates_briefing_directly(store, tmp_path, monkeypatch):
-    """0 domande → niente schermata intervista: si genera subito il briefing → ready."""
+def test_zero_questions_goes_to_awaiting_interview_with_draft(store, tmp_path, monkeypatch):
+    """L04: 0 domande NON salta più la schermata — si va ad awaiting_interview con la bozza
+    del briefing già renderizzata (render-only), che la schermata mostra a fianco del campo
+    'aggiungi ulteriore contesto'."""
     analysis = Analysis(meta=Meta(type="solo", title="X"))
-    _patch_engine(monkeypatch, analysis, [])  # detect_questions ritorna lista vuota
+    _patch_engine(monkeypatch, analysis, [])
     job = store.create(Job.new(str(tmp_path / "a.wav"), model="small", language="it", mode="solo"))
 
     events: list[tuple[str, dict]] = []
@@ -97,27 +99,25 @@ def test_run_processing_no_questions_generates_briefing_directly(store, tmp_path
         job, store, settings=s, provider=StubProvider(), emit=lambda ev, payload: events.append((ev, payload))
     )
 
-    assert out.status == "ready"
-    assert out.briefing_md  # briefing generato
-    assert out.briefing_path
-    # nessun evento awaiting_interview emesso
+    assert out.status == "awaiting_interview"
+    assert out.questions == []
+    assert out.draft_briefing  # bozza renderizzata (non vuota); seam reale: render_all_artifacts
     statuses = [p.get("status") for ev, p in events if ev == "status"]
-    assert "awaiting_interview" not in statuses
-    assert "ready" in statuses
-    # niente marcatori DA CHIARIRE (answers/skipped vuoti)
-    assert "DA CHIARIRE" not in out.briefing_md
+    assert "awaiting_interview" in statuses
+    assert "ready" not in statuses
 
 
 def test_run_processing_detect_questions_failure_still_generates_briefing(store, tmp_path, monkeypatch):
     """P1 (anti-perdita): se detect_questions fallisce (es. read-timeout di Ollama su modello
-    lento), l'analisi — il lavoro COSTOSO — NON va persa: il job arriva a 'ready' col briefing,
-    l'analisi è persistita e viene emesso un `warning` (NON `status=error`). Seam reale (no mock
-    della pipeline): solo whisper/analyze finti, detect_questions che solleva davvero."""
+    lento), l'analisi — il lavoro COSTOSO — NON va persa: con L04 il job arriva ad
+    'awaiting_interview' con la BOZZA già renderizzata + un `warning` (NON `status=error`);
+    l'utente genera il briefing dalla schermata. Seam reale (no mock della pipeline): solo
+    whisper/analyze finti, detect_questions che solleva davvero."""
     from vokari.llm.base import LLMError
 
     analysis = Analysis(meta=Meta(type="solo", title="X"))
 
-    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None):
+    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None, **_kw):
         return {"text": "testo reale trascritto", "duration_s": 10.0}
 
     def boom(a, t, *, provider, mode, should_cancel=None):
@@ -133,12 +133,12 @@ def test_run_processing_detect_questions_failure_still_generates_briefing(store,
     s = Settings(briefing_dir=str(tmp_path / "out"))
     out = P.run_processing(job, store, settings=s, provider=StubProvider(), emit=lambda ev, p: events.append((ev, p)))
 
-    assert out.status == "ready", "il fallimento delle domande NON deve dare status=error"
-    assert out.briefing_md and out.briefing_path  # briefing generato malgrado il timeout domande
+    assert out.status == "awaiting_interview", "il fallimento delle domande NON deve dare status=error"
+    assert out.draft_briefing, "la bozza dev'essere renderizzata malgrado il timeout domande (anti-perdita)"
     assert out.analysis, "l'analisi deve essere persistita PRIMA di detect_questions (anti-perdita)"
     statuses = [p.get("status") for ev, p in events if ev == "status"]
-    assert "error" not in statuses and "ready" in statuses
-    assert any(ev == "warning" for ev, _ in events), "deve avvisare che salta l'intervista"
+    assert "error" not in statuses and "awaiting_interview" in statuses
+    assert any(ev == "warning" for ev, _ in events), "deve avvisare che le domande sono saltate"
 
 
 def test_run_processing_emits_analysis_fit_when_transcript_exceeds_budget(store, tmp_path, monkeypatch):
@@ -148,7 +148,7 @@ def test_run_processing_emits_analysis_fit_when_transcript_exceeds_budget(store,
     analysis = Analysis(meta=Meta(type="solo", title="X"))
     long_text = " ".join(["parola"] * 4000)
 
-    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None):
+    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None, **_kw):
         return {"text": long_text, "duration_s": 600.0}
 
     monkeypatch.setattr(P.whisper_mod, "transcribe_stream", fake_stream)
@@ -212,7 +212,7 @@ def test_detect_questions_gets_empty_transcript_when_over_budget(store, tmp_path
     long_text = " ".join(["parola"] * 4000)
     captured: dict = {}
 
-    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None):
+    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None, **_kw):
         return {"text": long_text, "duration_s": 600.0}
 
     def fake_detect(a, t, *, provider, mode, should_cancel=None, **_kw):
@@ -249,7 +249,7 @@ def test_detect_questions_gets_full_transcript_when_ideal(store, tmp_path, monke
     analysis = Analysis(meta=Meta(type="solo", title="X"))
     captured: dict = {}
 
-    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None):
+    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None, **_kw):
         return {"text": "trascrizione breve", "duration_s": 12.0}
 
     def fake_detect(a, t, *, provider, mode, should_cancel=None, **_kw):
@@ -337,14 +337,14 @@ def test_run_processing_empty_transcript_errors(store, tmp_path, monkeypatch):
     """Audio senza parlato → trascrizione vuota: job in error con messaggio chiaro,
     niente briefing vuoto. Analyze NON viene chiamato (E1)."""
 
-    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None):
+    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None, **_kw):
         if on_segment:
             on_segment(1.0, "", "")
         return {"text": "   ", "duration_s": 3.0}  # solo whitespace
 
     analyze_called = {"v": False}
 
-    def fake_analyze(text, *, mode, provider, refinement=None):
+    def fake_analyze(text, *, mode, provider, refinement=None, **_kw):
         analyze_called["v"] = True
         return Analysis(meta=Meta(type="solo"))
 
@@ -387,7 +387,7 @@ def test_run_processing_aborts_when_cancelled_during_transcription(store, monkey
     analysis = Analysis(meta=Meta(type="solo", title="X"))
     job = store.create(Job.new("/tmp/a.wav", model="small", language="it", mode="solo"))
 
-    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None):
+    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None, **_kw):
         store.update(job.id, status="cancelled")  # arriva una cancellazione durante la trascrizione
         if on_segment:
             on_segment(1.0, "t", "t")
@@ -395,7 +395,7 @@ def test_run_processing_aborts_when_cancelled_during_transcription(store, monkey
 
     analyze_called = {"v": False}
 
-    def fake_analyze(text, *, mode, provider, refinement=None):
+    def fake_analyze(text, *, mode, provider, refinement=None, **_kw):
         analyze_called["v"] = True
         return analysis
 
@@ -412,7 +412,7 @@ def test_run_processing_aborts_when_cancelled_during_analysis(store, monkeypatch
     clobberato da awaiting_interview e la sessione non deve proseguire (cancel-ignored)."""
     job = store.create(Job.new("/tmp/a.wav", model="small", language="it", mode="solo"))
 
-    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None):
+    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None, **_kw):
         return {"text": "testo reale trascritto", "duration_s": 10.0}
 
     def fake_analyze(text, *, mode, provider, refinement=None, **_kw):
@@ -541,7 +541,7 @@ def test_run_processing_really_emits_analysis_preview_and_step(store, tmp_path, 
     # throttle a 0 così tutti i delta sintetici (sincroni) passano (in produzione ~120ms)
     monkeypatch.setattr(P, "_PREVIEW_THROTTLE_S", 0.0)
 
-    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None):
+    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None, **_kw):
         if on_segment:
             on_segment(1.0, "testo", "testo")
         return {"text": "testo trascritto reale", "duration_s": 10.0}
@@ -612,7 +612,7 @@ def test_run_processing_downloads_model_when_missing(store, tmp_path, monkeypatc
     assert called["download"] is True
     dl = [p["status"] for ev, p in events if ev == "model_download"]
     assert "start" in dl and "done" in dl
-    assert out.status == "ready"  # dopo il download, la pipeline prosegue normalmente
+    assert out.status == "awaiting_interview"  # dopo il download la pipeline prosegue fino all'intervista (L04)
 
 
 def test_run_processing_model_download_failure_is_terminal(store, tmp_path, monkeypatch):
@@ -645,7 +645,7 @@ def test_run_processing_passes_markers_to_analyze(store, tmp_path, monkeypatch):
     analysis = Analysis(meta=Meta(type="solo", title="X"))
     monkeypatch.setattr(P.models_mod, "is_downloaded", lambda name: True)
 
-    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None):
+    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None, **_kw):
         return {"text": "testo trascritto", "duration_s": 5.0}
 
     monkeypatch.setattr(P.whisper_mod, "transcribe_stream", fake_stream)
@@ -763,8 +763,8 @@ def test_generate_briefing_no_sparse_warning_when_content_present(store, tmp_pat
 
 
 def test_generate_briefing_renders_markers_in_artifacts(store, tmp_path, monkeypatch):
-    """Seam reale end-to-end: job.markers compaiono nel briefing_md (path 0-domande →
-    generate_briefing usa i renderer REALI, solo analyze/whisper sono finti)."""
+    """Seam reale end-to-end: job.markers compaiono nel briefing_md (run_processing → l'utente
+    genera senza risposte → generate_briefing usa i renderer REALI, solo analyze/whisper finti)."""
     analysis = Analysis(meta=Meta(type="solo", title="X"))
     _patch_engine(monkeypatch, analysis, [])  # detect_questions → [] ; analyze → analysis
     job = store.create(
@@ -776,17 +776,84 @@ def test_generate_briefing_renders_markers_in_artifacts(store, tmp_path, monkeyp
             markers=[{"t_ms": 90_000, "label": "Lotto X"}],
         )
     )
-    out = P.run_processing(
-        job,
-        store,
-        settings=Settings(briefing_dir=str(tmp_path / "out")),
-        provider=StubProvider(),
-        emit=lambda ev, payload: None,
-    )
+    s = Settings(briefing_dir=str(tmp_path / "out"))
+    job = P.run_processing(job, store, settings=s, provider=StubProvider(), emit=lambda ev, payload: None)
+    assert job.status == "awaiting_interview"  # L04: 0 domande → intervista; l'utente genera senza risposte
+    out = P.generate_briefing(job, store, {}, [], settings=s, provider=StubProvider(), emit=lambda ev, payload: None)
     assert out.status == "ready"
     assert "Lotto X" in out.briefing_md
     assert "01:30" in out.briefing_md
     assert "## Segnalibri" in out.recap_md
+
+
+# ── L04: contesto libero dell'intervista (extra_context) ─────────────────────
+
+
+def _job_ready_for_generate(store, tmp_path, *, questions=None):
+    job = store.create(Job.new(str(tmp_path / "a.wav"), model="small", language="it", mode="solo"))
+    store.update(
+        job.id,
+        transcript="testo reale",
+        analysis=Analysis(meta=Meta(type="solo", title="X"), key_ideas=["idea"]).model_dump(),
+        questions=questions or [],
+    )
+    return store.get(job.id)
+
+
+def test_generate_briefing_extra_context_triggers_reanalysis(store, tmp_path, monkeypatch):
+    """L04: il solo contesto libero (senza risposte) forza la ri-analisi e arriva ad analyze
+    nel parametro context (fuso con job.context). Seam reale: solo analyze è finto."""
+    seen = {}
+
+    def fake_analyze(
+        transcript,
+        *,
+        mode,
+        context=None,
+        markers=None,
+        provider=None,
+        refinement=None,
+        on_progress=None,
+        on_step=None,
+        language="it",
+        **_kw,
+    ):
+        seen["context"] = context
+        return Analysis(meta=Meta(type="solo", title="X"), key_ideas=["idea"])
+
+    monkeypatch.setattr(P.analyzer_mod, "analyze", fake_analyze)
+    job = _job_ready_for_generate(store, tmp_path)
+    s = Settings(briefing_dir=str(tmp_path / "out"))
+    out = P.generate_briefing(
+        job,
+        store,
+        {},
+        [],
+        extra_context="il budget reale è 730",
+        settings=s,
+        provider=StubProvider(),
+        emit=lambda *a: None,
+    )
+    assert out.status == "ready"
+    assert "730" in (seen.get("context") or "")  # il contesto utente è arrivato ad analyze
+
+
+def test_generate_briefing_no_input_skips_reanalysis(store, tmp_path, monkeypatch):
+    """L04: 0 risposte + 0 contesto → nessuna chiamata LLM (briefing reso dall'analisi esistente)."""
+    called = {"n": 0}
+
+    def fake_analyze(*a, **k):
+        called["n"] += 1
+        return Analysis(meta=Meta(type="solo", title="X"))
+
+    monkeypatch.setattr(P.analyzer_mod, "analyze", fake_analyze)
+    job = _job_ready_for_generate(store, tmp_path)
+    s = Settings(briefing_dir=str(tmp_path / "out"))
+    out = P.generate_briefing(
+        job, store, {}, [], extra_context="", settings=s, provider=StubProvider(), emit=lambda *a: None
+    )
+    assert out.status == "ready"
+    assert called["n"] == 0  # niente LLM: 0 risposte + 0 contesto
 
 
 # ── L09: warning lingua configurata ≠ rilevata ───────────────────────────────
@@ -830,7 +897,7 @@ def test_run_processing_warns_on_language_mismatch(store, tmp_path, monkeypatch)
     """Seam: se la lingua rilevata ≠ configurata (con confidenza), run_processing emette un warning."""
     monkeypatch.setattr(P.models_mod, "is_downloaded", lambda name: True)
 
-    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None):
+    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None, **_kw):
         if on_segment:
             on_segment(1.0, "hello world", "hello world", from_cache=False)
         return {
@@ -865,3 +932,294 @@ def test_run_processing_warns_on_language_mismatch(store, tmp_path, monkeypatch)
     )
     lang_warn = [p for (ev, p) in events if ev == "warning" for m in p.get("messages", []) if "inglese" in m.lower()]
     assert lang_warn, "atteso un warning di lingua sbagliata"
+
+
+# ── L08: gate decisionale riassunto lossy ────────────────────────────────────
+
+
+def test_run_processing_preflight_gate_pauses_before_transcribing(store, tmp_path, monkeypatch):
+    """L08: con fit_gate=True e durata che eccede il contesto, la pipeline si ferma al GATE
+    PRIMA di trascrivere (nessuno status 'transcribing'). Riusa il setup del preflight A1."""
+    analysis = Analysis(meta=Meta(type="solo", title="X"))
+    _patch_engine(monkeypatch, analysis, [])
+    monkeypatch.setattr(P.convert_mod, "probe_duration_s", lambda path: 7840.0)  # ~2h11m
+
+    class _BudgetProv(StubProvider):
+        def context_budget_tokens(self):
+            return 30000
+
+        def model_max_ctx(self):
+            return 32768
+
+    job = store.create(Job.new(str(tmp_path / "a.wav"), model="large-v3-turbo", language="it", mode="solo"))
+    events: list[tuple[str, dict]] = []
+    out = P.run_processing(
+        job,
+        store,
+        settings=Settings(briefing_dir=str(tmp_path / "out")),
+        provider=_BudgetProv(),
+        emit=lambda ev, p: events.append((ev, p)),
+        fit_gate=True,
+    )
+    statuses = [p["status"] for ev, p in events if ev == "status"]
+    assert out.status == "awaiting_fit_decision"
+    assert "awaiting_fit_decision" in statuses
+    assert "transcribing" not in statuses  # gattato PRIMA della trascrizione
+    assert [p for ev, p in events if ev == "analysis_fit"]  # i numeri per la card ci sono
+
+
+def test_run_processing_a2_gate_pauses_before_analyzing_when_duration_unknown(store, tmp_path, monkeypatch):
+    """L08 fallback A2: durata ignota (preflight non gatta) → si trascrive, poi il GATE scatta
+    sui numeri reali PRIMA dell'analisi (analyze non chiamato)."""
+    long_text = " ".join(["parola"] * 4000)
+    analyze_called = {"n": 0}
+
+    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None, vocab="", **_kw):
+        return {"text": long_text, "duration_s": 600.0}
+
+    def fake_analyze(text, *, mode, provider, refinement=None, **_kw):
+        analyze_called["n"] += 1
+        return Analysis(meta=Meta(type="solo", title="X"))
+
+    monkeypatch.setattr(P.whisper_mod, "transcribe_stream", fake_stream)
+    monkeypatch.setattr(P.analyzer_mod, "analyze", fake_analyze)
+    monkeypatch.setattr(P.convert_mod, "probe_duration_s", lambda path: None)  # durata ignota
+
+    class _BudgetProv(StubProvider):
+        def context_budget_tokens(self):
+            return 100
+
+        def model_max_ctx(self):
+            return 8192
+
+    job = store.create(Job.new(str(tmp_path / "a.wav"), model="small", language="it", mode="solo"))
+    events: list[tuple[str, dict]] = []
+    out = P.run_processing(
+        job,
+        store,
+        settings=Settings(briefing_dir=str(tmp_path / "out")),
+        provider=_BudgetProv(),
+        emit=lambda ev, p: events.append((ev, p)),
+        fit_gate=True,
+    )
+    assert out.status == "awaiting_fit_decision"
+    assert analyze_called["n"] == 0  # gattato PRIMA dell'analisi
+
+
+def test_run_processing_skips_gate_when_consent_recorded(store, tmp_path, monkeypatch):
+    """L08 gate-once: con fit_decision='proceed' e fit_gate=True il gate è saltato → la pipeline
+    procede fino ad awaiting_interview (riusa il consenso dato in un giro precedente)."""
+    long_text = " ".join(["parola"] * 4000)
+    analysis = Analysis(meta=Meta(type="solo", title="X"))
+
+    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None, vocab="", **_kw):
+        return {"text": long_text, "duration_s": 600.0}
+
+    monkeypatch.setattr(P.whisper_mod, "transcribe_stream", fake_stream)
+    monkeypatch.setattr(P.analyzer_mod, "analyze", lambda text, *, mode, provider, refinement=None, **_kw: analysis)
+    monkeypatch.setattr(
+        P.interview_mod, "detect_questions", lambda a, t, *, provider, mode, should_cancel=None, **_kw: []
+    )
+    monkeypatch.setattr(P.convert_mod, "probe_duration_s", lambda path: None)
+
+    class _BudgetProv(StubProvider):
+        def context_budget_tokens(self):
+            return 100
+
+        def model_max_ctx(self):
+            return 8192
+
+    job = store.create(
+        Job.new(str(tmp_path / "a.wav"), model="small", language="it", mode="solo", fit_decision="proceed")
+    )
+    out = P.run_processing(
+        job,
+        store,
+        settings=Settings(briefing_dir=str(tmp_path / "out")),
+        provider=_BudgetProv(),
+        emit=None,
+        fit_gate=True,
+    )
+    assert out.status == "awaiting_interview"  # nessun gate: il consenso c'era
+
+
+def test_run_processing_default_no_gate_proceeds(store, tmp_path, monkeypatch):
+    """Default non-bloccante: fit_gate=False (headless/test) → nessun gate anche oltre il budget,
+    la pipeline procede col riassunto fino ad awaiting_interview (comportamento attuale)."""
+    long_text = " ".join(["parola"] * 4000)
+    analysis = Analysis(meta=Meta(type="solo", title="X"))
+
+    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None, vocab="", **_kw):
+        return {"text": long_text, "duration_s": 600.0}
+
+    monkeypatch.setattr(P.whisper_mod, "transcribe_stream", fake_stream)
+    monkeypatch.setattr(P.analyzer_mod, "analyze", lambda text, *, mode, provider, refinement=None, **_kw: analysis)
+    monkeypatch.setattr(
+        P.interview_mod, "detect_questions", lambda a, t, *, provider, mode, should_cancel=None, **_kw: []
+    )
+    monkeypatch.setattr(P.convert_mod, "probe_duration_s", lambda path: None)
+
+    class _BudgetProv(StubProvider):
+        def context_budget_tokens(self):
+            return 100
+
+        def model_max_ctx(self):
+            return 8192
+
+    job = store.create(Job.new(str(tmp_path / "a.wav"), model="small", language="it", mode="solo"))
+    out = P.run_processing(
+        job,
+        store,
+        settings=Settings(briefing_dir=str(tmp_path / "out")),
+        provider=_BudgetProv(),
+        emit=None,
+    )
+    assert out.status == "awaiting_interview"  # default fit_gate=False → nessun gate
+
+
+# ── Task 6: cabla user_context → pipeline → transcribe + analyze ─────────────
+
+
+def test_pipeline_passes_user_context_to_analyzer(store, tmp_path, monkeypatch):
+    """Task 6 seam: la pipeline legge settings.user_context e lo propaga sia ad
+    analyzer.analyze (user_context=) sia a whisper.transcribe_stream (vocab=).
+    Verifica il seam reale: settings → pipeline → analyze/transcribe."""
+    captured: dict = {}
+
+    monkeypatch.setattr(P.models_mod, "is_downloaded", lambda name: True)
+
+    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None, vocab="", **_kw):
+        captured["vocab"] = vocab
+        if on_segment:
+            on_segment(1.0, "testo trascritto", "testo trascritto")
+        return {"text": "testo trascritto", "duration_s": 5.0}
+
+    def fake_analyze(transcript, **kw):
+        captured["user_context"] = kw.get("user_context")
+        return Analysis(meta=Meta())
+
+    monkeypatch.setattr(P.whisper_mod, "transcribe_stream", fake_stream)
+    monkeypatch.setattr(P.analyzer_mod, "analyze", fake_analyze)
+    monkeypatch.setattr(
+        P.interview_mod, "detect_questions", lambda a, t, *, provider, mode, should_cancel=None, **_kw: []
+    )
+
+    job = store.create(Job.new(str(tmp_path / "a.wav"), model="small", language="it", mode="solo"))
+    s = Settings(user_context="X", briefing_dir=str(tmp_path / "out"))
+    P.run_processing(job, store, settings=s, provider=StubProvider(), emit=lambda ev, p: None)
+
+    assert captured.get("user_context") == "X", "user_context non propagato ad analyze"
+    assert captured.get("vocab") == "X", "vocab non propagato a transcribe_stream"
+
+
+# ── N1: gate editing trascrizione (awaiting_edit) ────────────────────────────
+# Questi test esercitano il SEAM REALE di run_processing (non mock della pipeline):
+# la Fase 1 era stata "verde" con i soli test su Api che mockavano _spawn_processing →
+# il gate awaiting_edit non era mai prodotto e il path skip_transcribe crashava su
+# `result`/`_cancelled` non definiti. Lezione ADR-010 applicata.
+
+
+def test_run_processing_edit_gate_pauses_at_awaiting_edit(store, tmp_path, monkeypatch):
+    """N1: con edit_gate=True la pipeline si ferma ad awaiting_edit DOPO la trascrizione e
+    PRIMA dell'analisi — l'utente deve poter correggere il testo. analyze NON viene chiamato."""
+    analysis = Analysis(meta=Meta(type="solo", title="X"))
+    calls = {"analyze": 0}
+
+    def fake_stream(path, *, model, language, on_segment=None, should_cancel=None, **_kw):
+        return {"text": "testo grezzo", "duration_s": 8.0}
+
+    def fake_analyze(text, *, mode, provider, refinement=None, **_kw):
+        calls["analyze"] += 1
+        return analysis
+
+    monkeypatch.setattr(P.models_mod, "is_downloaded", lambda name: True)
+    monkeypatch.setattr(P.whisper_mod, "transcribe_stream", fake_stream)
+    monkeypatch.setattr(P.analyzer_mod, "analyze", fake_analyze)
+    monkeypatch.setattr(P.interview_mod, "detect_questions", lambda *a, **k: [])
+    job = store.create(Job.new(str(tmp_path / "a.wav"), model="small", language="it", mode="solo"))
+
+    events: list[tuple[str, dict]] = []
+    out = P.run_processing(
+        job,
+        store,
+        settings=Settings(briefing_dir=str(tmp_path / "out")),
+        provider=StubProvider(),
+        emit=lambda ev, p: events.append((ev, p)),
+        edit_gate=True,
+    )
+
+    assert out.status == "awaiting_edit"
+    assert out.transcript == "testo grezzo"  # testo salvato → disponibile alla schermata di revisione
+    assert calls["analyze"] == 0  # l'analisi NON parte finché l'utente non procede
+    statuses = [p.get("status") for ev, p in events if ev == "status"]
+    assert "awaiting_edit" in statuses and "analyzing" not in statuses
+
+
+def test_run_processing_edit_gate_off_flows_through(store, tmp_path, monkeypatch):
+    """Regressione: senza edit_gate (default — headless/CLI/e2e) NON ci si ferma ad awaiting_edit."""
+    analysis = Analysis(meta=Meta(type="solo", title="X"))
+    _patch_engine(monkeypatch, analysis, [])
+    job = store.create(Job.new(str(tmp_path / "a.wav"), model="small", language="it", mode="solo"))
+    out = P.run_processing(
+        job,
+        store,
+        settings=Settings(briefing_dir=str(tmp_path / "out")),
+        provider=StubProvider(),
+        emit=lambda *a: None,
+    )
+    assert out.status == "awaiting_interview"
+
+
+def test_run_processing_skip_transcribe_analyzes_job_transcript(store, tmp_path, monkeypatch):
+    """N1: con skip_transcribe=True NON si ritrascrive — l'analisi riceve il transcript (EDITATO)
+    già nel job. È il path REALE del resume da awaiting_edit, che prima crashava su `result` non
+    definito (mai esercitato perché i test su Api mockavano _spawn_processing — ADR-010)."""
+    analysis = Analysis(meta=Meta(type="solo", title="X"))
+    seen: dict = {}
+
+    def boom_stream(*a, **k):
+        raise AssertionError("transcribe_stream non deve essere chiamato con skip_transcribe=True")
+
+    def fake_analyze(text, *, mode, provider, refinement=None, **_kw):
+        seen["text"] = text
+        return analysis
+
+    monkeypatch.setattr(P.models_mod, "is_downloaded", lambda name: True)
+    monkeypatch.setattr(P.whisper_mod, "transcribe_stream", boom_stream)
+    monkeypatch.setattr(P.analyzer_mod, "analyze", fake_analyze)
+    monkeypatch.setattr(P.interview_mod, "detect_questions", lambda *a, **k: [])
+    job = store.create(Job.new(str(tmp_path / "a.wav"), model="small", language="it", mode="solo"))
+    store.update(job.id, status="awaiting_edit", transcript="testo CORRETTO a mano", transcript_edited=True)
+
+    out = P.run_processing(
+        job,
+        store,
+        settings=Settings(briefing_dir=str(tmp_path / "out")),
+        provider=StubProvider(),
+        emit=lambda *a: None,
+        skip_transcribe=True,
+    )
+
+    assert seen["text"] == "testo CORRETTO a mano"  # l'analisi ha ricevuto il testo EDITATO
+    assert out.status == "awaiting_interview"
+
+
+def test_run_processing_skip_transcribe_empty_transcript_errors(store, tmp_path, monkeypatch):
+    """N1: skip_transcribe con transcript svuotato dall'utente → error (niente analisi su nulla)."""
+
+    def boom_analyze(*a, **k):
+        raise AssertionError("analyze non deve girare su trascrizione vuota")
+
+    monkeypatch.setattr(P.analyzer_mod, "analyze", boom_analyze)
+    job = store.create(Job.new(str(tmp_path / "a.wav"), model="small", language="it", mode="solo"))
+    store.update(job.id, status="awaiting_edit", transcript="   ")
+
+    out = P.run_processing(
+        job,
+        store,
+        settings=Settings(),
+        provider=StubProvider(),
+        emit=lambda *a: None,
+        skip_transcribe=True,
+    )
+    assert out.status == "error"

@@ -6,11 +6,12 @@ import type { NavItem } from "./Sidebar";
 
 // Passi del flusso lineare (id schermata): il breadcrumb di wayfinding traduce le etichette
 // via chiave `titlebar.flow.<screen>`.
-const FLOW_SCREENS = ["home", "live", "processing", "interview", "artifacts"] as const;
+const FLOW_SCREENS = ["home", "live", "processing", "transcript_review", "interview", "artifacts"] as const;
 
 // Schermate con un titolo proprio (fuori dal flusso): etichetta via `titlebar.titles.<screen>`.
 const TITLE_SCREENS = new Set([
-  "home", "sessions", "models", "settings", "artifacts", "error", "live", "processing", "interview",
+  "home", "sessions", "models", "settings", "artifacts", "error", "live", "processing",
+  "transcript_review", "interview",
 ]);
 
 export function Titlebar({
@@ -32,7 +33,8 @@ export function Titlebar({
   // Breadcrumb solo nelle schermate transitorie del flusso: su artefatti (raggiungibile
   // anche aprendo una sessione dalla libreria) un breadcrumb implicherebbe un flusso che
   // non è sempre vero → lì titolo semplice.
-  const inFlow = screen === "live" || screen === "processing" || screen === "interview";
+  const inFlow =
+    screen === "live" || screen === "processing" || screen === "transcript_review" || screen === "interview";
   const activeIdx = FLOW_SCREENS.indexOf(screen as (typeof FLOW_SCREENS)[number]);
 
   return (

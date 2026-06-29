@@ -74,11 +74,19 @@ class TestBriefingStructure:
             assert f"<{tag}>" in md, f"Sezione XML <{tag}> mancante nel briefing"
             assert f"</{tag}>" in md, f"Chiusura XML </{tag}> mancante nel briefing"
 
-    def test_session_instruction_mentions_domain(self):
+    def test_briefing_preserves_fixture_domain_data(self):
+        """Verifica che il briefing preservi i dati domain-specifici della fixture.
+
+        NOTA: dopo la neutralizzazione (Task 2), la session_instruction non è più
+        domain-specific. Questo test asserisce che i dati di dominio provenienti
+        dalla fixture (e dal transcript) sono preservati nel briefing, non che
+        l'istruzione li menziona.
+        """
         md = render_briefing(_REALISTIC_ANALYSIS)
+        # Questi termini vengono dai dati della fixture, non dall'istruzione
         domain_terms = ["HACCP", "VMM", "tracciabilità", "MAC"]
         found = [t for t in domain_terms if t in md]
-        assert found, f"session_instruction deve citare il dominio alimentare. Cercati: {domain_terms}"
+        assert found, f"Briefing deve preservare dati fixture. Cercati: {domain_terms}"
 
     def test_open_questions_appear_once(self):
         # B2 (ADR-039): rimossa la ripetizione in coda (recency) — confondeva e sembrava un bug.

@@ -396,6 +396,36 @@ kbd{font-family:var(--mono);font-size:11px;font-weight:500;}
 .vk-iv-note{font-size:12.5px;color:var(--mut);display:flex;align-items:center;gap:7px;}
 .vk-iv-note .dot{width:7px;height:7px;border-radius:50%;background:var(--amber);}
 .vk-btn-g .ct{font-family:var(--mono);font-size:11px;font-weight:500;opacity:.85;}
+/* L04: schermata intervista a due colonne (domande + bozza briefing). */
+.vk-iv-cols{width:min(1200px,100%);flex:1 1 auto;min-height:0;display:flex;gap:22px;align-items:stretch;}
+.vk-iv-cols > .vk-iv-inner{width:auto;flex:1 1 56%;min-width:0;}
+.vk-iv-draft{flex:1 1 44%;min-width:0;display:flex;flex-direction:column;min-height:0;border-left:1px solid var(--line);padding-left:22px;}
+.vk-iv-draft-h{font-family:var(--mono);font-size:11px;letter-spacing:.04em;color:var(--faint);text-transform:uppercase;margin-bottom:10px;flex:0 0 auto;}
+.vk-iv-draft-body{flex:1 1 auto;min-height:0;overflow-y:auto;padding-right:6px;scrollbar-width:thin;scrollbar-color:var(--line2) transparent;}
+.vk-iv-ctx{margin-top:14px;display:flex;flex-direction:column;gap:6px;flex:0 0 auto;}
+.vk-iv-ctx textarea{resize:vertical;min-height:64px;}
+.vk-iv-noq{padding:10px 0 4px;flex:0 0 auto;}
+.vk-iv-noq h2{font-family:var(--disp);font-size:20px;font-weight:600;color:var(--ink);margin:0 0 6px;}
+.vk-iv-noq p{font-size:14px;color:var(--mut);margin:0;line-height:1.5;}
+@media (max-width:980px){
+  .vk-iv-cols{flex-direction:column;gap:14px;}
+  .vk-iv-cols > .vk-iv-inner{flex:1 1 auto;}
+  .vk-iv-draft{border-left:none;padding-left:0;border-top:1px solid var(--line);padding-top:14px;max-height:34vh;flex:0 0 auto;}
+}
+
+/* ════════ N1 — REVISIONE TRASCRIZIONE (gate awaiting_edit) ════════ */
+.vk-tr{flex:1 1 auto;min-height:0;overflow:hidden;display:flex;flex-direction:column;align-items:center;}
+.vk-tr-inner{width:min(960px,100%);display:flex;flex-direction:column;min-height:0;}
+.vk-tr-head{margin-bottom:14px;flex:0 0 auto;}
+.vk-tr-head h1{font-family:var(--disp);font-size:27px;font-weight:600;letter-spacing:-.02em;margin:6px 0 6px;color:var(--ink);}
+.vk-tr-head p{font-size:14px;color:var(--mut);margin:0;line-height:1.5;max-width:64ch;}
+.vk-tr-ta{flex:1 1 auto;min-height:0;width:100%;resize:none;font-family:var(--mono);font-size:13.5px;line-height:1.7;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px;outline:none;transition:border-color .14s,box-shadow .14s;scrollbar-width:thin;scrollbar-color:var(--line2) transparent;}
+.vk-tr-ta:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(31,143,91,.12);}
+.vk-tr-act{display:flex;align-items:center;margin-top:14px;flex:0 0 auto;gap:12px;flex-wrap:wrap;}
+.vk-tr-act .grow{flex:1;}
+.vk-tr-count{font-family:var(--mono);font-size:12px;color:var(--mut);}
+.vk-tr-note{font-size:12.5px;color:var(--mut);display:flex;align-items:center;gap:7px;}
+.vk-tr-note .dot{width:7px;height:7px;border-radius:50%;background:var(--amber);}
 
 /* ════════ SCHERMATA 4 — DETTAGLIO / ARTEFATTI ════════ */
 .vk-art-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:14px;flex:0 0 auto;}

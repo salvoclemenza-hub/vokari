@@ -48,3 +48,4 @@ evals/interview/baseline.jsonl
 # packaging cache e temp files (downloads, build artifacts — never commit)
 packaging/.cache/
 tmp/
+.worktrees/

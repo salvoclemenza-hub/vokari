@@ -24,6 +24,7 @@
       "home": "Registra",
       "live": "Live",
       "processing": "Elaborazione",
+      "transcript_review": "Revisione",
       "interview": "Rifinitura",
       "artifacts": "Artefatti"
     },
@@ -36,6 +37,7 @@
       "error": "Errore",
       "live": "Registrazione",
       "processing": "Elaborazione",
+      "transcript_review": "Revisione trascrizione",
       "interview": "Rifinitura"
     }
   },
@@ -145,7 +147,10 @@
     "downloading": "Scaricando…",
     "downloadNow": "Scarica ora",
     "liveModelHelp": "tiny = quasi istantaneo ma impreciso · base = buon compromesso (default) · small = più accurato, ~3–5 s di ritardo",
-    "privacyFooter": "L'audio non lascia mai il dispositivo. Nessun account obbligatorio: solo il testo viene inviato all'AI scelta."
+    "privacyFooter": "L'audio non lascia mai il dispositivo. Nessun account obbligatorio: solo il testo viene inviato all'AI scelta.",
+    "userContextLabel": "Il tuo contesto",
+    "userContextHint": "Descrivi il tuo dominio, ruolo e termini ricorrenti: l'AI li userà per capire meglio le tue sessioni e trascrivere bene i termini tecnici. Opzionale.",
+    "userContextPlaceholder": "es. Magazzino alimentare B2B: lotti, tracciabilità, HACCP, DDT…"
   },
   "home": {
     "kicker": "~/nuova-sessione",
@@ -238,7 +243,29 @@
     "skipAllGenerate": "Salta tutto e genera",
     "generate": "Genera briefing",
     "answerSingular": "risposta",
-    "answerPlural": "risposte"
+    "answerPlural": "risposte",
+    "contextLabel": "Aggiungi ulteriore contesto",
+    "contextPlaceholder": "Qualcosa che l'AI non ti ha chiesto, una correzione, uno sfondo che conosci tu…",
+    "draftTitle": "Anteprima briefing",
+    "draftEmpty": "Anteprima non disponibile.",
+    "noQuestionsTitle": "Nessuna domanda",
+    "noQuestionsLead": "L'analisi non ha trovato lacune. Puoi aggiungere del contesto e generare, oppure generare così com'è."
+  },
+  "transcriptReview": {
+    "kicker": "~/revisione · opzionale",
+    "title": "Rileggi la trascrizione",
+    "lead": "Correggi eventuali errori di riconoscimento (nomi, omofoni) prima di procedere — un testo pulito dà un briefing migliore.",
+    "ariaLabel": "Testo della trascrizione",
+    "wordsOne": "{{count}} parola",
+    "wordsMany": "{{count}} parole",
+    "cancel": "Annulla",
+    "proceed": "Procedi",
+    "kbdHint": "{{key}} per procedere",
+    "note": "Mai bloccante — il testo va all'AI solo dopo che procedi.",
+    "cancelConfirmTitle": "Annullare la sessione?",
+    "cancelConfirmMsg": "La trascrizione verrà scartata e non sarà recuperabile.",
+    "cancelConfirmYes": "Sì, annulla",
+    "cancelConfirmNo": "Continua a modificare"
   },
   "live": {
     "recording": "REGISTRAZIONE",
@@ -331,7 +358,13 @@
     "chipReasoning": "ragionamento",
     "reasoning": "∴ ragiono",
     "waitKick": "Mentre aspetti",
-    "cancelBtn": "Annulla elaborazione"
+    "cancelBtn": "Annulla elaborazione",
+    "gateKicker": "Decisione richiesta",
+    "gateExplainSummarize": "La registrazione è lunga: prima dell'analisi verrà riassunta a tratti, perdendo un po' di dettaglio.",
+    "gateExplainOver": "La registrazione è troppo lunga anche se riassunta: l'analisi perderà molto dettaglio.",
+    "gateGuide": "Per la massima fedeltà scegli un modello con contesto più ampio in Impostazioni, oppure dividi la registrazione in parti più corte. La trascrizione resta in cache: ri-processare è veloce.",
+    "gateProceed": "Procedi comunque",
+    "gateOpenSettings": "Apri Impostazioni"
   },
   "art": {
     "empty": "vuoto",

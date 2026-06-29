@@ -14,14 +14,14 @@ describe("ScreenInterview", () => {
     render(<ScreenInterview questions={QS} onGenerate={onGenerate} />);
     fireEvent.click(screen.getByText("10k"));
     fireEvent.click(screen.getByRole("button", { name: /Genera briefing/i }));
-    expect(onGenerate).toHaveBeenCalledWith({ q1: "10k" }, ["q2"]);
+    expect(onGenerate).toHaveBeenCalledWith({ q1: "10k" }, ["q2"], "");
   });
 
   it("'Salta tutto e genera' manda tutte le domande come skipped", () => {
     const onGenerate = vi.fn();
     render(<ScreenInterview questions={QS} onGenerate={onGenerate} />);
     fireEvent.click(screen.getByRole("button", { name: /Salta tutto e genera/i }));
-    expect(onGenerate).toHaveBeenCalledWith({}, ["q1", "q2"]);
+    expect(onGenerate).toHaveBeenCalledWith({}, ["q1", "q2"], "");
   });
 
   it("'Annulla' chiama onCancel quando fornita", () => {
@@ -57,5 +57,24 @@ describe("ScreenInterview", () => {
     // la barra azioni NON è dentro lo scroll → sempre raggiungibile
     expect(scroll!.querySelector(".vk-iv-act")).toBeNull();
     expect(container.querySelector(".vk-iv-act")).not.toBeNull();
+  });
+
+  it("mostra la bozza del briefing nel pannello e passa il contesto a onGenerate (L04)", () => {
+    const onGenerate = vi.fn();
+    render(<ScreenInterview questions={QS} draftBriefing={"# Briefing\n\nRiga di prova"} onGenerate={onGenerate} />);
+    expect(screen.getByText(/Riga di prova/)).toBeInTheDocument();          // bozza renderizzata (MarkdownDoc)
+    fireEvent.change(screen.getByPlaceholderText(/Qualcosa che l'AI/), { target: { value: "contesto mio" } });
+    fireEvent.click(screen.getByRole("button", { name: /Genera briefing/i }));
+    expect(onGenerate).toHaveBeenCalledWith({}, ["q1", "q2"], "contesto mio");
+  });
+
+  it("con 0 domande mostra solo il campo contesto (niente lista) e genera (L04)", () => {
+    const onGenerate = vi.fn();
+    const { container } = render(<ScreenInterview questions={[]} draftBriefing={"# B"} onGenerate={onGenerate} />);
+    expect(container.querySelectorAll(".vk-q").length).toBe(0);             // nessuna card domanda
+    expect(screen.getByText(/Nessuna domanda/)).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText(/Qualcosa che l'AI/), { target: { value: "ciao" } });
+    fireEvent.click(screen.getByRole("button", { name: /Genera briefing/i }));
+    expect(onGenerate).toHaveBeenCalledWith({}, [], "ciao");
   });
 });

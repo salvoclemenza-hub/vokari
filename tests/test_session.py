@@ -12,7 +12,7 @@ def test_new_generates_id_and_timestamp():
 
 def test_defaults_match_spec():
     s = Session.new()
-    assert s.title == "Sessione senza titolo"
+    assert s.title == ""
     assert s.mode == "solo"
     assert s.language == "auto"
 

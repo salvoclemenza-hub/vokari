@@ -8,7 +8,7 @@
 ![Platform: Windows 10/11](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6.svg)
 
 <p align="center">
-  <img src="screenshots/home.png" alt="VOKARI — schermata Home" width="820">
+  <img src="screenshots/01-home.png" alt="VOKARI — Home screen: choose session type (solo / meeting) and source (mic / system / both), large record button, sidebar with recent sessions" width="820">
 </p>
 
 **VOKARI** is a local-first Windows desktop app: record or import audio, transcribe it on-device with [faster-whisper](https://github.com/SYSTRAN/faster-whisper), analyze the text with Claude or a local Ollama model, and get clean Markdown artifacts — a `briefing.md` optimized for LLMs, a human-readable recap (+PDF), and atomic Obsidian notes.
@@ -22,7 +22,7 @@
 - 🔐 **Privacy-first** — audio stays on your device; secrets live in the OS keyring ([Privacy policy](PRIVACY.md))
 - 🌍 **Fully bilingual** — switch the whole app between **English** and **Italian**: not just the UI, but the AI-generated output too (briefing, recap, Obsidian notes, messages)
 
-**Status:** v1 — the full flow works and is CI-gated (650+ automated tests: ~490 backend with pytest, ~170 frontend with vitest).
+**Status:** v0.2.0 — the full flow works and is CI-gated (720+ automated tests: ~549 backend with pytest, ~173 frontend with vitest).
 
 ---
 
@@ -42,7 +42,7 @@ AI models (faster-whisper — and Ollama, if you pick it) download automatically
 
 > ⚠️ **Windows 11 Smart App Control (SAC).** On a *minority* of PCs (clean installs of Windows 11) SAC is ON and blocks files downloaded from the internet — **including scripts** — with no "Run anyway" button. If you hit that block, either **unblock the ZIP before extracting** (step 2) or temporarily turn SAC off: *Windows Security → App & browser control → Smart App Control → Off*, install, then turn it back on. Most PCs (upgrades from Windows 10) have SAC **off** and just work.
 >
-> 🎯 **Coming next — one-click install via the Microsoft Store.** A signed MSIX that installs with **zero warnings** (Microsoft re-signs Store packages and SAC trusts them by design). The Store developer account is now free, so this is the planned frictionless path — no unblocking needed.
+> 🎯 **Microsoft Store — submitted & in certification.** The **v0.2.0** MSIX package has been submitted to the Microsoft Store and is currently going through certification. Once published it installs with **zero warnings** — Microsoft re-signs Store packages and SAC trusts them by design — so no unblocking is needed. (Not live yet; this is the frictionless path coming as soon as certification clears.)
 
 ### 🛠 Developer setup (works today)
 
@@ -78,9 +78,19 @@ ffmpeg on Windows: `winget install ffmpeg` (or `choco install ffmpeg`).
 
 ## 📸 Screenshots
 
-| Briefing artifacts (`briefing.md`) | AI models |
+| Live recording | Processing |
 | :---: | :---: |
-| ![Artifacts view — briefing.md with structured sections](screenshots/artifacts.png) | ![AI models — Claude / Ollama management](screenshots/models.png) |
+| ![Live recording — audio waveform and real-time transcription preview](screenshots/02-live.png) | ![Processing — streaming transcription console with typewriter effect](screenshots/03-processing.png) |
+
+| Artifacts — `briefing.md` | Artifacts — recap |
+| :---: | :---: |
+| ![Artifacts — briefing.md with structured sections](screenshots/04-artifacts.png) | ![Artifacts — human-readable recap view](screenshots/04b-artifacts-recap.png) |
+
+| Settings | |
+| :---: | :---: |
+| ![Settings — app language, LLM brain, model, folders](screenshots/05-settings.png) | |
+
+> 🌍 English-language screenshots are available in [`screenshots/en/`](screenshots/en/) (same file names).
 
 ---
 
@@ -90,15 +100,21 @@ ffmpeg on Windows: `winget install ffmpeg` (or `choco install ffmpeg`).
 
 **Processing** — streaming transcription with faster-whisper on CPU (works on AMD too); automatic model download (`large-v3-turbo` by default — fast; switch to `large-v3` for maximum accuracy); hash-based cache, so re-processing the same audio is instant.
 
+**Long-audio handling** — long recordings are split into **overlapping chunks with dedup**, so sentences are never cut at segment boundaries. A **disk-space preflight** runs before recording to make sure there's room to capture.
+
+**Transcript review & editing** — before the analysis runs, you can review and correct the transcript (fix mis-heard names or domain terms) so the briefing starts from clean text.
+
+**Smart model-fit gate** — if the transcript is too long for the model's context window, VOKARI warns you and asks for confirmation **before** summarizing it in a lossy way, instead of silently truncating.
+
 **Analysis & artifacts**
 - **`briefing.md`** — YAML frontmatter (date, session ID, type, duration, LLM model), context · decisions · summary · open questions, the raw transcript for ground truth, `[TO CLARIFY: ...]` markers for skipped interview questions, and a next-steps checklist.
 - **`recap.md`** — human-readable summary · **PDF export** for sharing · **Obsidian export** — atomic notes for your vault.
 
-**Interview (optional)** — auto-detects 3–5 key questions from the transcript; skip or answer; responses are merged back into the briefing.
+**Interview with live draft** — auto-detects 3–5 key questions from the transcript; skip or answer. While you do, a **live draft of the briefing** forms alongside the questions, and an "add more context" free-text field lets you feed extra guidance to the analysis. Responses and context are merged back into the final briefing.
 
 **App language** — switch the entire app between **English** and **Italian** from Settings; it drives the UI *and* the AI-generated output (the LLM writes in the chosen language regardless of the spoken audio). Separate from the transcription language.
 
-**Settings** — app language (English / Italian), LLM brain (Claude / Ollama), API key in OS keyring, default session type (*solo* brainstorm / *riunione* meeting), briefing folder, Obsidian vault, Whisper model + download progress, transcription language (auto / IT / EN).
+**Settings** — app language (English / Italian), LLM brain (Claude / Ollama), API key in OS keyring, default session type (*solo* brainstorm / *riunione* meeting), briefing folder, Obsidian vault, Whisper model + download progress, transcription language (auto / IT / EN), and a **"your context"** field where you describe your domain/context — used to guide the analysis and improve transcription.
 
 **Sessions library** — persistent storage, full-text search, filtering by type.
 
@@ -164,7 +180,8 @@ uv run python scripts/e2e_smoke.py your-audio.m4a
 ## 🗺 Roadmap
 
 - ✅ **v1** — local transcription + briefing + recap + Obsidian export (done)
-- 📦 **v1.x** — packaged Windows release (ZIP/setup) + code-signed build
+- ✅ **v0.2.0** — packaged Windows release (ZIP/setup), full EN/IT i18n, transcript editing, interview live draft, model-fit gate, long-audio handling (done)
+- 📦 **Microsoft Store** — MSIX **submitted & in certification**; zero-warning install once published
 - 📋 **v2** — macOS/Linux system-audio capture · speaker attribution · RAG over your vault · batch / watch-folder
 - 🤖 **v3** — sentiment analysis, action-item extraction, multi-LLM comparison
 

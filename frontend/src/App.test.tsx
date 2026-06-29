@@ -25,6 +25,7 @@ vi.mock("./bridge", async (importOriginal) => {
         defaultMode: "solo", transcriptionLanguage: "auto", livePreview: true, liveModel: "base", onboarded: true, lastSeenVersion: "", appLanguage: "it", hasApiKey: false,
       }),
       resumeJob: vi.fn().mockResolvedValue(null),
+      updateTranscript: vi.fn().mockResolvedValue({ success: true }),
       getJob: vi.fn().mockResolvedValue(null),
       getArtifacts: vi.fn().mockResolvedValue(null),
       stopRecording: vi.fn().mockResolvedValue({ jobId: "job-1" }),
@@ -170,6 +171,53 @@ describe("App — macchina a stati", () => {
 
     expect(await screen.findByText("Annulla elaborazione")).toBeInTheDocument();
     expect(await screen.findByText("35%")).toBeInTheDocument();
+  });
+
+  it("evento status=awaiting_edit → TranscriptReview visibile con la trascrizione (N1)", async () => {
+    const { bridge } = await import("./bridge");
+    (bridge.getJob as ReturnType<typeof vi.fn>).mockResolvedValue({
+      jobId: "job-1", status: "awaiting_edit", pct: 1, partialText: "",
+      title: "T", source: "mic", mode: "solo", model: "large-v3-turbo",
+      language: "it", transcript: "testo da rivedere", durationS: 0, questions: [],
+      markers: [], briefingMd: "", briefingPath: "", draftBriefing: "", error: "",
+    });
+
+    render(<App />);
+    await goToLive();
+    await userEvent.click(await screen.findByText("Stop e trascrivi"));
+
+    await act(async () => {
+      emit("status", { jobId: "job-1", status: "awaiting_edit" });
+    });
+
+    expect(await screen.findByText("Rileggi la trascrizione")).toBeInTheDocument();
+    const ta = (await screen.findByLabelText(/Testo della trascrizione/i)) as HTMLTextAreaElement;
+    expect(ta.value).toBe("testo da rivedere");
+  });
+
+  it("Procedi dalla revisione salva l'edit e riprende il job (N1: updateTranscript + resumeJob)", async () => {
+    const { bridge } = await import("./bridge");
+    (bridge.getJob as ReturnType<typeof vi.fn>).mockResolvedValue({
+      jobId: "job-1", status: "awaiting_edit", pct: 1, partialText: "",
+      title: "T", source: "mic", mode: "solo", model: "large-v3-turbo",
+      language: "it", transcript: "testo grezzo", durationS: 0, questions: [],
+      markers: [], briefingMd: "", briefingPath: "", draftBriefing: "", error: "",
+    });
+
+    render(<App />);
+    await goToLive();
+    await userEvent.click(await screen.findByText("Stop e trascrivi"));
+    await act(async () => {
+      emit("status", { jobId: "job-1", status: "awaiting_edit" });
+    });
+
+    const ta = await screen.findByLabelText(/Testo della trascrizione/i);
+    await userEvent.clear(ta);
+    await userEvent.type(ta, "testo corretto");
+    await userEvent.click(screen.getByRole("button", { name: /Procedi/i }));
+
+    await waitFor(() => expect(bridge.updateTranscript).toHaveBeenCalledWith("job-1", "testo corretto"));
+    await waitFor(() => expect(bridge.resumeJob).toHaveBeenCalledWith("job-1"));
   });
 
   it("evento status=awaiting_interview → Interview visibile con domande", async () => {

@@ -1,6 +1,6 @@
 [project]
 name = "vokari"
-version = "0.1.2"
+version = "0.2.0"
 description = "Voce -> conoscenza strutturata, 100% in locale."
 requires-python = ">=3.12"
 license = { text = "MIT" }

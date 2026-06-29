@@ -24,6 +24,7 @@
       "home": "Record",
       "live": "Live",
       "processing": "Processing",
+      "transcript_review": "Review",
       "interview": "Refine",
       "artifacts": "Artifacts"
     },
@@ -36,6 +37,7 @@
       "error": "Error",
       "live": "Recording",
       "processing": "Processing",
+      "transcript_review": "Transcript review",
       "interview": "Refine"
     }
   },
@@ -145,7 +147,10 @@
     "downloading": "Downloading…",
     "downloadNow": "Download now",
     "liveModelHelp": "tiny = almost instant but imprecise · base = good compromise (default) · small = more accurate, ~3–5 s delay",
-    "privacyFooter": "The audio never leaves the device. No mandatory account: only the text is sent to the chosen AI."
+    "privacyFooter": "The audio never leaves the device. No mandatory account: only the text is sent to the chosen AI.",
+    "userContextLabel": "Your context",
+    "userContextHint": "Describe your domain, role and recurring terms: the AI will use them to better understand your sessions and transcribe technical terms correctly. Optional.",
+    "userContextPlaceholder": "e.g. B2B food warehouse: lots, traceability, HACCP, DDT…"
   },
   "home": {
     "kicker": "~/new-session",
@@ -238,7 +243,29 @@
     "skipAllGenerate": "Skip all and generate",
     "generate": "Generate briefing",
     "answerSingular": "answer",
-    "answerPlural": "answers"
+    "answerPlural": "answers",
+    "contextLabel": "Add more context",
+    "contextPlaceholder": "Something the AI didn't ask, a correction, background you know…",
+    "draftTitle": "Briefing preview",
+    "draftEmpty": "Preview not available.",
+    "noQuestionsTitle": "No questions",
+    "noQuestionsLead": "The analysis found no gaps. You can add context and generate, or generate as is."
+  },
+  "transcriptReview": {
+    "kicker": "~/review · optional",
+    "title": "Review the transcript",
+    "lead": "Fix any recognition errors (names, homophones) before proceeding — clean text gives a better briefing.",
+    "ariaLabel": "Transcript text",
+    "wordsOne": "{{count}} word",
+    "wordsMany": "{{count}} words",
+    "cancel": "Cancel",
+    "proceed": "Proceed",
+    "kbdHint": "{{key}} to proceed",
+    "note": "Never blocking — text goes to the AI only after you proceed.",
+    "cancelConfirmTitle": "Cancel this session?",
+    "cancelConfirmMsg": "The transcript will be discarded and cannot be recovered.",
+    "cancelConfirmYes": "Yes, cancel",
+    "cancelConfirmNo": "Keep editing"
   },
   "live": {
     "recording": "RECORDING",
@@ -331,7 +358,13 @@
     "chipReasoning": "reasoning",
     "reasoning": "∴ reasoning",
     "waitKick": "While you wait",
-    "cancelBtn": "Cancel processing"
+    "cancelBtn": "Cancel processing",
+    "gateKicker": "Decision needed",
+    "gateExplainSummarize": "The recording is long: before analysis it will be summarized in parts, losing some detail.",
+    "gateExplainOver": "The recording is too long even when summarized: the analysis will lose a lot of detail.",
+    "gateGuide": "For maximum fidelity, pick a model with a wider context in Settings, or split the recording into shorter parts. The transcription stays cached, so re-processing is fast.",
+    "gateProceed": "Proceed anyway",
+    "gateOpenSettings": "Open Settings"
   },
   "art": {
     "empty": "empty",

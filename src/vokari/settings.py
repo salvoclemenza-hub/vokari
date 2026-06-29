@@ -23,12 +23,13 @@ class Settings:
     briefing_dir: str = ""
     obsidian_vault: str = ""
     default_mode: str = "solo"  # 'solo' | 'riunione'
-    transcription_language: str = "it"  # IT fisso evita latenza language-detection
+    transcription_language: str = "auto"  # "auto" = rileva la lingua parlata (ADR-050); ~30s detection sul 1° segmento
     live_preview: bool = True  # anteprima trascrizione durante la registrazione
     live_model: str = "base"  # modello piccolo per l'anteprima live
     onboarded: bool = False  # primo avvio completato (wizard di benvenuto visto)
     last_seen_version: str = ""  # ultima versione di cui l'utente ha visto le novità (popup changelog)
     app_language: str = "it"  # lingua dell'app: UI + output AI + template (it|en). Audio = transcription_language
+    user_context: str = ""  # contesto persistente dell'utente (dominio/ruolo/termini): analisi + vocab Whisper
 
 
 def _settings_path() -> Path:

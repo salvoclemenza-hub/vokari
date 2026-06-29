@@ -19,13 +19,18 @@ from vokari.transcribe import chunking
 _DEVICE = "cpu"  # spec §6: CTranslate2 non accelera su AMD -> solo CPU
 _COMPUTE_TYPE = "int8"
 
-# Vocabolario aziendale: riduce il WER del 10-20% sui termini di settore (tracciabilità
-# alimentare) che Whisper general-purpose trascrive spesso in modo errato o abbreviato.
-_INITIAL_PROMPT = (
-    "Riunione aziendale in italiano. "
-    "Settore alimentare: tracciabilità, lotti, DDT, VMM, HACCP, "
-    "distinta base, scarti di lavorazione, resa, miscelazione, MAC, OBB."
-)
+# initial_prompt base (neutro): orienta Whisper su parlato generico. Il vocabolario di
+# dominio dell'utente (settings.user_context) viene aggiunto da build_initial_prompt.
+_INITIAL_PROMPT_BASE = "Trascrizione di una conversazione: riunione, brainstorming o nota a voce."
+
+
+def build_initial_prompt(vocab: str = "") -> str:
+    """initial_prompt per faster-whisper: base neutra + eventuale vocabolario utente
+    (troncato per non sforare il contesto del modello di trascrizione)."""
+    vocab = (vocab or "").strip()
+    if not vocab:
+        return _INITIAL_PROMPT_BASE
+    return f"{_INITIAL_PROMPT_BASE} Termini ricorrenti: {vocab[:400]}"
 
 
 def _is_wav_16k_mono(path: str) -> bool:
@@ -87,7 +92,7 @@ def _safe_detect_language(wav_path: str, model_name: str) -> tuple[str, float]:
         return "", 0.0
 
 
-def _transcribe_audio(audio, model_name: str, language: str) -> list[dict]:
+def _transcribe_audio(audio, model_name: str, language: str, initial_prompt: str = "") -> list[dict]:
     """Inferenza reale su un audio (path o file-like). Ritorna [{start,end,text}]."""
     model = _load_model(model_name)
     lang = None if language == "auto" else language
@@ -95,7 +100,7 @@ def _transcribe_audio(audio, model_name: str, language: str) -> list[dict]:
         audio,
         language=lang,
         beam_size=5,
-        initial_prompt=_INITIAL_PROMPT,
+        initial_prompt=initial_prompt or _INITIAL_PROMPT_BASE,
         # VAD: salta i tratti non-parlato (silenzi/musica/rumore). Senza, su file lunghi
         # faster-whisper macina i silenzi LENTISSIMO e ALLUCINA ("Grazie per la visione!",
         # "Sottotitoli a cura di…") → percepito come "trascrizione bloccata a metà".
@@ -113,7 +118,7 @@ def _cache_path(key: str) -> Path:
     return d / f"{key}.json"
 
 
-def _iter_transcribe(audio, model_name: str, language: str, should_cancel=None):
+def _iter_transcribe(audio, model_name: str, language: str, should_cancel=None, initial_prompt: str = ""):
     """Come _transcribe_audio ma yield-a i segmenti man mano (per lo streaming).
     Se `should_cancel()` diventa vero, interrompe subito (chiude il generatore faster-whisper)."""
     model = _load_model(model_name)
@@ -122,7 +127,7 @@ def _iter_transcribe(audio, model_name: str, language: str, should_cancel=None):
         audio,
         language=lang,
         beam_size=5,
-        initial_prompt=_INITIAL_PROMPT,
+        initial_prompt=initial_prompt or _INITIAL_PROMPT_BASE,
         # VAD: salta i tratti non-parlato (silenzi/musica/rumore). Senza, su file lunghi
         # faster-whisper macina i silenzi LENTISSIMO e ALLUCINA ("Grazie per la visione!",
         # "Sottotitoli a cura di…") → percepito come "trascrizione bloccata a metà".
@@ -136,7 +141,9 @@ def _iter_transcribe(audio, model_name: str, language: str, should_cancel=None):
             yield {"start": round(s.start, 3), "end": round(s.end, 3), "text": s.text.strip()}
 
 
-def transcribe_stream(source_path: str, *, model: str, language: str, on_segment=None, should_cancel=None) -> dict:
+def transcribe_stream(
+    source_path: str, *, model: str, language: str, on_segment=None, should_cancel=None, vocab: str = ""
+) -> dict:
     """Come transcribe ma invoca on_segment(pct, text_so_far, segment_text) ad ogni
     segmento. `should_cancel` (callable→bool) interrompe la trascrizione tra un segmento
     e l'altro. Cache identica a transcribe; su cache hit emette un singolo evento al 100%.
@@ -150,6 +157,7 @@ def transcribe_stream(source_path: str, *, model: str, language: str, on_segment
         result["from_cache"] = True
         return result
 
+    initial_prompt = build_initial_prompt(vocab)
     detected_language: str = ""
     language_probability: float = 0.0
     with tempfile.TemporaryDirectory() as td:
@@ -168,15 +176,23 @@ def transcribe_stream(source_path: str, *, model: str, language: str, on_segment
                 on_segment(pct, build_text(segments), seg["text"])
 
         if duration <= chunking.CHUNK_DURATION_S:
-            for seg in _iter_transcribe(wav, model, language, should_cancel=should_cancel):
+            for seg in _iter_transcribe(
+                wav, model, language, should_cancel=should_cancel, initial_prompt=initial_prompt
+            ):
                 segments.append(seg)
                 _emit(seg)
         else:
-            for raw, offset_s in chunking.split_wav(wav, chunking.CHUNK_DURATION_S):
+            for chunk in chunking.split_wav(wav, chunking.CHUNK_DURATION_S):
                 if should_cancel is not None and should_cancel():
                     break
-                for seg in _iter_transcribe(io.BytesIO(raw), model, language, should_cancel=should_cancel):
-                    seg = chunking.apply_offset([seg], offset_s)[0]
+                for seg in _iter_transcribe(
+                    io.BytesIO(chunk.data), model, language, should_cancel=should_cancel, initial_prompt=initial_prompt
+                ):
+                    seg = chunking.apply_offset([seg], chunk.offset_s)[0]
+                    # Dedup overlap (L17): tieni il segmento solo se cade nella finestra di
+                    # questo chunk; la zona di sovrapposizione appartiene a un solo chunk.
+                    if not (chunk.accept_lo <= seg["start"] < chunk.accept_hi):
+                        continue
                     segments.append(seg)
                     _emit(seg)
 
@@ -207,7 +223,7 @@ def transcribe_stream(source_path: str, *, model: str, language: str, on_segment
     return result
 
 
-def transcribe(source_path: str, *, model: str, language: str) -> dict:
+def transcribe(source_path: str, *, model: str, language: str, vocab: str = "") -> dict:
     """Trascrive `source_path`. Cache su (hash, model, language). Ritorna il dict risultato."""
     key = f"{audio_hash(source_path)}-{model}-{language}"
     cache = _cache_path(key)
@@ -215,6 +231,7 @@ def transcribe(source_path: str, *, model: str, language: str) -> dict:
         return json.loads(cache.read_text(encoding="utf-8"))
 
     # Normalizza a WAV 16k mono in un file temporaneo (salta se già 16k mono, R4)
+    initial_prompt = build_initial_prompt(vocab)
     detected_language: str = ""
     language_probability: float = 0.0
     with tempfile.TemporaryDirectory() as td:
@@ -228,11 +245,15 @@ def transcribe(source_path: str, *, model: str, language: str) -> dict:
 
         segments: list[dict] = []
         if duration <= chunking.CHUNK_DURATION_S:
-            segments = _transcribe_audio(wav, model, language)  # path diretto (R3)
+            segments = _transcribe_audio(wav, model, language, initial_prompt=initial_prompt)  # path diretto (R3)
         else:
-            for raw, offset_s in chunking.split_wav(wav, chunking.CHUNK_DURATION_S):
-                segs = _transcribe_audio(io.BytesIO(raw), model, language)
-                segments.extend(chunking.apply_offset(segs, offset_s))
+            for chunk in chunking.split_wav(wav, chunking.CHUNK_DURATION_S):
+                segs = chunking.apply_offset(
+                    _transcribe_audio(io.BytesIO(chunk.data), model, language, initial_prompt=initial_prompt),
+                    chunk.offset_s,
+                )
+                # Dedup overlap (L17): la zona di sovrapposizione appartiene a un solo chunk.
+                segments.extend(s for s in segs if chunk.accept_lo <= s["start"] < chunk.accept_hi)
 
     result = {
         "source": source_path,

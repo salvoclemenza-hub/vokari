@@ -601,6 +601,29 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
             </div>
           </div>
 
+          {/* Il tuo contesto */}
+          <div className="vk-sc">
+            <div className="vk-sc-h">
+              <span className="ico">
+                <VkIcon.gear />
+              </span>
+              {t("settings.userContextLabel")}
+            </div>
+            <div className="vk-sc-sub">{t("settings.userContextHint")}</div>
+
+            <div className="vk-field" style={{ marginBottom: 0 }}>
+              <textarea
+                className="vk-input"
+                rows={4}
+                value={settings.userContext}
+                placeholder={t("settings.userContextPlaceholder")}
+                onChange={(e) => setSettings((s) => ({ ...s, userContext: e.target.value }))}
+                onBlur={() => void savePatch({ userContext: settings.userContext })}
+                style={{ resize: "vertical", fontFamily: "inherit", fontSize: 13 }}
+              />
+            </div>
+          </div>
+
           <div className="vk-set-priv">
             <VkIcon.lock />
             {t("settings.privacyFooter")}

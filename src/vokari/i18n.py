@@ -49,26 +49,22 @@ _CATALOG: dict[str, dict[str, str]] = {
     },
     "briefing.instr_meeting": {
         "it": (
-            "Briefing di una riunione aziendale. Parti dalle decisioni prese e dalle open_questions; "
-            "usa context e next_steps per coordinare i follow-up. "
-            "Dominio: magazzino alimentare B2B (tracciabilità lotti, HACCP, DDT, VMM, lavorazioni MAC)."
+            "Briefing di una riunione. Parti dalle decisioni prese e dalle open_questions; "
+            "usa context e next_steps per coordinare i follow-up."
         ),
         "en": (
-            "Briefing of a company meeting. Start from the decisions made and the open_questions; "
-            "use context and next_steps to coordinate the follow-ups. "
-            "Domain: B2B food warehouse (lot traceability, HACCP, DDT, VMM, MAC processing)."
+            "Briefing of a meeting. Start from the decisions made and the open_questions; "
+            "use context and next_steps to coordinate the follow-ups."
         ),
     },
     "briefing.instr_solo": {
         "it": (
             "Briefing di un brainstorm individuale. Parti dalle key_ideas e dalle open_questions; "
-            "usa next_steps come lista d'azione personale. "
-            "Dominio: magazzino alimentare B2B (tracciabilità lotti, HACCP, DDT, VMM, lavorazioni MAC)."
+            "usa next_steps come lista d'azione personale."
         ),
         "en": (
             "Briefing of a solo brainstorm. Start from the key_ideas and the open_questions; "
-            "use next_steps as a personal action list. "
-            "Domain: B2B food warehouse (lot traceability, HACCP, DDT, VMM, MAC processing)."
+            "use next_steps as a personal action list."
         ),
     },
     # ── recap.md ──
@@ -301,6 +297,10 @@ _CATALOG: dict[str, dict[str, str]] = {
     },
     "api.session_not_found": {"it": "sessione {sid} non trovata", "en": "session {sid} not found"},
     "api.job_not_found": {"it": "job {sid} non trovato", "en": "job {sid} not found"},
+    "api.transcript_not_editable": {
+        "it": "trascrizione non più modificabile (stato: {status})",
+        "en": "transcript no longer editable (status: {status})",
+    },
     "api.untitled_session": {"it": "Sessione senza titolo", "en": "Untitled session"},
     "api.vault_not_configured": {
         "it": "vault Obsidian non configurato (Impostazioni)",
@@ -317,6 +317,14 @@ _CATALOG: dict[str, dict[str, str]] = {
     "api.audio_file_missing": {
         "it": "file audio non trovato (spostato o eliminato)",
         "en": "audio file not found (moved or deleted)",
+    },
+    "api.disk_full": {
+        "it": "Spazio su disco insufficiente per registrare (~{minutes} min disponibili). Libera spazio e riprova.",
+        "en": "Not enough disk space to record (~{minutes} min available). Free up some space and try again.",
+    },
+    "api.disk_low": {
+        "it": "Spazio su disco quasi esaurito: circa {minutes} min di registrazione disponibili.",
+        "en": "Disk space almost full: about {minutes} min of recording available.",
     },
     # ── catalogo modelli (descrizioni + tag mostrati nelle card "Modelli AI") ──
     "models.off_desc": {

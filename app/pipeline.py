@@ -159,7 +159,49 @@ def render_all_artifacts(
     }
 
 
-def run_processing(job: Job, store: JobStore, *, settings=None, provider=None, emit=None) -> Job:
+def _render_draft_briefing(analysis, *, job, settings, app_lang, transcript) -> str:
+    """L04: bozza del briefing PRIMA dell'intervista (render-only, zero LLM) — il "prima" che
+    l'utente migliora rispondendo, mostrata a fianco delle domande. Mai bloccante: su errore
+    ritorna "" (le domande restano usabili)."""
+    try:
+        rendered = render_all_artifacts(
+            analysis,
+            title=job.title,
+            source_name=Path(job.audio_path).name,
+            transcription_model=job.model,
+            llm_model=llm_label(settings),
+            session_id=job.id,
+            transcript=transcript,
+            da_chiarire=[],
+            markers=job.markers,
+            language=("" if job.language in ("", "auto") else job.language),
+            word_count=len(transcript.split()),
+            app_lang=app_lang,
+        )
+        return rendered["briefing_md"]
+    except Exception as e:
+        debuglog.log_exc("draft_briefing_failed", e, jobId=job.id)
+        return ""
+
+
+def _combined_context(job_context: str, extra_context: str) -> str | None:
+    """L04: fonde il contesto d'import (job.context) e il contesto libero dell'intervista.
+    Ritorna None se entrambi vuoti (così analyze non riceve un context fittizio)."""
+    parts = [p.strip() for p in (job_context or "", extra_context or "") if p and p.strip()]
+    return "\n\n".join(parts) if parts else None
+
+
+def run_processing(
+    job: Job,
+    store: JobStore,
+    *,
+    settings=None,
+    provider=None,
+    emit=None,
+    fit_gate: bool = False,
+    edit_gate: bool = False,
+    skip_transcribe: bool = False,
+) -> Job:
     s = settings or settings_mod.load()
     lang = i18n.normalize_lang(s.app_language)  # lingua di TUTTO l'output AI (prompt, artefatti, messaggi)
 
@@ -251,49 +293,93 @@ def run_processing(job: Job, store: JobStore, *, settings=None, provider=None, e
                             "recommendation": pre.recommendation,
                         },
                     )
+                    # L08: GATE decisionale PRIMA di trascrivere. Se la GUI può chiedere (fit_gate)
+                    # e l'utente non ha già acconsentito, fermati e attendi la scelta (resolve_fit):
+                    # così non si sprecano ore di trascrizione su un riassunto lossy non voluto.
+                    if fit_gate and store.get(job.id).fit_decision != "proceed":
+                        store.update(job.id, status="awaiting_fit_decision")
+                        _emit("status", {"jobId": job.id, "status": "awaiting_fit_decision"})
+                        return store.get(job.id)
                     _emit("warning", {"messages": [f"{pre.reason} {pre.recommendation}".strip()]})
                     preflight_warned = True
             except Exception as e:  # diagnostica, mai fatale per la trascrizione
                 debuglog.log_exc("analysis_fit_preflight_failed", e, jobId=job.id)
 
-        store.update(job.id, status="transcribing", pct=0.0)
-        _emit("status", {"jobId": job.id, "status": "transcribing"})
-
-        def on_seg(pct: float, text_so_far: str, seg_text: str, from_cache: bool = False) -> None:
-            store.update(job.id, pct=pct, partial_text=text_so_far)
-            # CONTRATTO: `text` è il testo CUMULATIVO (text_so_far), NON il segmento corrente.
-            # Il frontend (App.tsx, Processing.tsx) tratta payload.text come cumulativo e lo usa
-            # come prefisso del typewriter; emettere il solo segmento faceva lampeggiare/azzerare
-            # la console a ogni frase. Coerente con partial_text salvato nello store (resume).
-            # NB: dict letterale inline (non variabile) → il backbone test_contract.py lo verifica via regex.
-            _emit("transcribe_progress", {"jobId": job.id, "pct": pct, "text": text_so_far, "fromCache": from_cache})
-
+        # Definito FUORI dai rami: serve anche nel path skip_transcribe (analyze/detect_questions
+        # ricevono should_cancel=_cancelled). Prima era dentro `if not skip_transcribe` → NameError
+        # sul resume da awaiting_edit.
         def _cancelled() -> bool:
             return store.get(job.id).status == "cancelled"
 
-        result = whisper_mod.transcribe_stream(
-            job.audio_path, model=job.model, language=job.language, on_segment=on_seg, should_cancel=_cancelled
-        )
+        # N1: skip_transcribe salta la trascrizione (il testo, eventualmente EDITATO a mano in
+        # awaiting_edit, è già nel job). `transcript_text` è la fonte unica del testo a valle:
+        # da result (trascrizione fresca) o dal job (resume/edit) — mai più `result[...]` diretto.
+        if not skip_transcribe:
+            store.update(job.id, status="transcribing", pct=0.0)
+            _emit("status", {"jobId": job.id, "status": "transcribing"})
 
-        if _cancelled() or result.get("cancelled"):
-            _emit("status", {"jobId": job.id, "status": "cancelled"})
-            return store.get(job.id)
+            def on_seg(pct: float, text_so_far: str, seg_text: str, from_cache: bool = False) -> None:
+                store.update(job.id, pct=pct, partial_text=text_so_far)
+                # CONTRATTO: `text` è il testo CUMULATIVO (text_so_far), NON il segmento corrente.
+                # Il frontend (App.tsx, Processing.tsx) tratta payload.text come cumulativo e lo usa
+                # come prefisso del typewriter; emettere il solo segmento faceva lampeggiare/azzerare
+                # la console a ogni frase. Coerente con partial_text salvato nello store (resume).
+                # NB: dict letterale inline (non variabile) → il backbone test_contract.py lo verifica via regex.
+                _emit(
+                    "transcribe_progress", {"jobId": job.id, "pct": pct, "text": text_so_far, "fromCache": from_cache}
+                )
 
-        # Audio senza parlato / registrazione di 0s → trascrizione vuota: fermati con un
-        # messaggio chiaro invece di generare un briefing vuoto pieno di placeholder (E1).
-        if not result["text"].strip():
-            msg = i18n.t("pipeline.empty_transcript", lang)
-            store.update(job.id, transcript="", duration_s=result["duration_s"], status="error", error=msg)
-            _emit("status", {"jobId": job.id, "status": "error", "error": msg})
-            return store.get(job.id)
+            result = whisper_mod.transcribe_stream(
+                job.audio_path,
+                model=job.model,
+                language=job.language,
+                on_segment=on_seg,
+                should_cancel=_cancelled,
+                vocab=s.user_context,
+            )
 
-        lang_msg = _language_warning(
-            job.language, result.get("detected_language", ""), result.get("language_probability", 0.0), lang
-        )
-        if lang_msg:
-            _emit("warning", {"messages": [lang_msg]})
+            if _cancelled() or result.get("cancelled"):
+                _emit("status", {"jobId": job.id, "status": "cancelled"})
+                return store.get(job.id)
 
-        store.update(job.id, transcript=result["text"], duration_s=result["duration_s"], pct=1.0, status="analyzing")
+            # Audio senza parlato / registrazione di 0s → trascrizione vuota: fermati con un
+            # messaggio chiaro invece di generare un briefing vuoto pieno di placeholder (E1).
+            if not result["text"].strip():
+                msg = i18n.t("pipeline.empty_transcript", lang)
+                store.update(job.id, transcript="", duration_s=result["duration_s"], status="error", error=msg)
+                _emit("status", {"jobId": job.id, "status": "error", "error": msg})
+                return store.get(job.id)
+
+            lang_msg = _language_warning(
+                job.language, result.get("detected_language", ""), result.get("language_probability", 0.0), lang
+            )
+            if lang_msg:
+                _emit("warning", {"messages": [lang_msg]})
+
+            transcript_text = result["text"]
+            store.update(job.id, transcript=transcript_text, duration_s=result["duration_s"], pct=1.0)
+
+            # N1: GATE editing trascrizione — pausa per la correzione manuale del testo PRIMA
+            # dell'analisi (errori di riconoscimento — omofoni, nomi propri — degradano il briefing).
+            # Gattato solo se la GUI può chiedere (edit_gate, speculare a fit_gate) → headless/CLI/
+            # e2e_smoke proseguono dritti. Gate-once naturale: la ripresa (resume_job) rientra con
+            # skip_transcribe=True e NON ripassa di qui. La finestra di idoneità fit (A2) gira DOPO,
+            # sul testo EDITATO (al resume) — è giusto: i token dipendono dal testo finale.
+            if edit_gate and not _cancelled():
+                store.update(job.id, status="awaiting_edit")
+                _emit("status", {"jobId": job.id, "status": "awaiting_edit"})
+                return store.get(job.id)
+        else:
+            # N1: skip_transcribe → riprendi il testo (eventualmente editato) dal job.
+            transcript_text = store.get(job.id).transcript or ""
+            if not transcript_text.strip():
+                # L'utente ha svuotato la trascrizione e poi proceduto: niente da analizzare.
+                msg = i18n.t("pipeline.empty_transcript", lang)
+                store.update(job.id, status="error", error=msg)
+                _emit("status", {"jobId": job.id, "status": "error", "error": msg})
+                return store.get(job.id)
+
+        store.update(job.id, status="analyzing", pct=1.0)
         _emit("status", {"jobId": job.id, "status": "analyzing"})
 
         # A2 (check idoneità, piano timeout-robustezza): conferma con i NUMERI REALI della
@@ -302,7 +388,7 @@ def run_processing(job: Job, store: JobStore, *, settings=None, provider=None, e
         # passato a detect_questions. Il warning leggibile NON si ripete se A1 ha già avvisato.
         fit_report = None
         try:
-            report = fit_mod.assess_fit(result["text"], prov, lang=lang)
+            report = fit_mod.assess_fit(transcript_text, prov, lang=lang)
             fit_report = report
             if report.level != "ideal":
                 _emit(
@@ -318,6 +404,12 @@ def run_processing(job: Job, store: JobStore, *, settings=None, provider=None, e
                         "recommendation": report.recommendation,
                     },
                 )
+                # L08: GATE (fallback A2) se il preflight non ha gattato (durata ignota o stima
+                # 'ideal' ma numeri reali no). Il transcript è già salvato → la ripresa è economica.
+                if fit_gate and store.get(job.id).fit_decision != "proceed":
+                    store.update(job.id, status="awaiting_fit_decision")
+                    _emit("status", {"jobId": job.id, "status": "awaiting_fit_decision"})
+                    return store.get(job.id)
                 if not preflight_warned:
                     _emit("warning", {"messages": [f"{report.reason} {report.recommendation}".strip()]})
         except Exception as e:  # diagnostica, mai fatale per l'analisi
@@ -349,7 +441,7 @@ def run_processing(job: Job, store: JobStore, *, settings=None, provider=None, e
         # verify=True attiva il check di copertura "ho colto il punto?" (Task 8); l'analyzer lo
         # esegue solo se serve (purpose debole o mode=riunione) per non raddoppiare i tempi su CPU.
         analysis = analyzer_mod.analyze(
-            result["text"],
+            transcript_text,
             mode=job.mode,
             context=job.context or None,
             markers=job.markers,
@@ -360,6 +452,7 @@ def run_processing(job: Job, store: JobStore, *, settings=None, provider=None, e
             on_progress=_emit_analysis_preview,
             on_step=_emit_analyze_step,
             language=lang,
+            user_context=s.user_context,
         )
         # P1 (anti-perdita, piano timeout-robustezza): persisti l'analisi — il risultato COSTOSO
         # (minuti su CPU) — PRIMA di detect_questions. detect_questions è uno step OPZIONALE (0
@@ -371,7 +464,7 @@ def run_processing(job: Job, store: JobStore, *, settings=None, provider=None, e
         # chiamata più pesante di tutte (re-incollava ~98k char IGNORANDO il riassunto già fatto
         # dall'analyzer → read-timeout sull'ultimo step). L'analisi JSON è già un riassunto
         # strutturato: passiamo il transcript SOLO se è ideale per il modello, altrimenti "".
-        q_transcript = result["text"] if (fit_report is None or fit_report.level == "ideal") else ""
+        q_transcript = transcript_text if (fit_report is None or fit_report.level == "ideal") else ""
 
         _emit_analyze_step("questions")
         try:
@@ -395,17 +488,13 @@ def run_processing(job: Job, store: JobStore, *, settings=None, provider=None, e
             return store.get(job.id)
         store.update(job.id, questions=[q.model_dump() for q in questions])
 
-        # 0 domande → niente schermata intervista: genera subito il briefing (→ ready).
-        # answers/skipped vuoti ⇒ build_refinement vuoto (niente ri-analisi) e nessun marcatore.
-        if not questions:
-            try:
-                return generate_briefing(store.get(job.id), store, {}, [], settings=s, provider=prov, emit=emit)
-            except Exception as e:
-                debuglog.log_exc("pipeline_error", e, jobId=job.id, phase="generate_briefing")
-                store.update(job.id, status="error", error=str(e))
-                _emit("status", {"jobId": job.id, "status": "error", "error": str(e)})
-                return store.get(job.id)
+        # L04: bozza del briefing pre-intervista, mostrata a fianco delle domande (e UNICO
+        # contenuto quando non ci sono domande). Render-only, zero LLM.
+        draft = _render_draft_briefing(analysis, job=job, settings=s, app_lang=lang, transcript=transcript_text)
+        store.update(job.id, draft_briefing=draft)
 
+        # L04: si passa SEMPRE all'intervista, anche con 0 domande — la schermata mostra la bozza
+        # + il campo "aggiungi ulteriore contesto" (prima 0 domande saltava la schermata).
         store.update(job.id, status="awaiting_interview")
         _emit("status", {"jobId": job.id, "status": "awaiting_interview"})
         return store.get(job.id)
@@ -417,7 +506,15 @@ def run_processing(job: Job, store: JobStore, *, settings=None, provider=None, e
 
 
 def generate_briefing(
-    job: Job, store: JobStore, answers: dict, skipped: list, *, settings=None, provider=None, emit=None
+    job: Job,
+    store: JobStore,
+    answers: dict,
+    skipped: list,
+    *,
+    extra_context: str = "",
+    settings=None,
+    provider=None,
+    emit=None,
 ) -> Job:
     s = settings or settings_mod.load()
     lang = i18n.normalize_lang(s.app_language)
@@ -435,7 +532,7 @@ def generate_briefing(
     markers = interview_mod.da_chiarire_markers(questions, answers, skipped, language=lang)
 
     analysis = Analysis.model_validate(job.analysis) if job.analysis else Analysis(meta=Meta())
-    if refinement:
+    if refinement or extra_context.strip():
         store.update(job.id, status="analyzing")
         _emit("status", {"jobId": job.id, "status": "analyzing"})
         prov = provider or make_provider(s)
@@ -460,13 +557,14 @@ def generate_briefing(
         analysis = analyzer_mod.analyze(
             job.transcript,
             mode=job.mode,
-            context=job.context or None,
+            context=_combined_context(job.context, extra_context),
             markers=job.markers,
             provider=prov,
             refinement=refinement,
             on_progress=_emit_analysis_preview_refinement,
             on_step=_emit_analyze_step_refinement,
             language=lang,
+            user_context=s.user_context,
         )
 
     # Annulla durante il refinement (chiamata LLM lunga): non scrivere il briefing né

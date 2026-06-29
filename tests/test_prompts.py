@@ -35,14 +35,20 @@ def test_user_injects_known_meta():
     assert "Roadmap Q3" in u and "Ada" in u
 
 
-def test_build_user_contains_fewshot_with_vmm_terminology():
-    """Il prompt utente include un esempio con terminologia VMM/MAC/HACCP."""
+def test_build_user_contains_fewshot_generic():
+    """Il prompt utente include un esempio few-shot generico (nessun dominio aziendale)
+    con tutti i campi JSON popolati per stabilizzare la granularità su Ollama."""
     from vokari.analyze.prompts import build_user
 
     prompt = build_user("qualsiasi trascrizione", mode="riunione")
-    assert "VMM" in prompt, "Esempio few-shot deve contenere terminologia VMM"
-    assert "MAC" in prompt, "Esempio few-shot deve contenere terminologia MAC"
-    assert "HACCP" in prompt, "Esempio few-shot deve contenere terminologia HACCP"
+    # Il few-shot è presente e usa esempio generico (newsletter/Sara)
+    assert "Sara" in prompt, "Esempio few-shot deve contenere il marker generico 'Sara'"
+    assert "newsletter" in prompt, "Esempio few-shot deve contenere 'newsletter'"
+    # Tutti i campi strutturali devono essere presenti nel few-shot
+    assert '"decisions"' in prompt, "Esempio few-shot deve mostrare il campo 'decisions'"
+    assert '"next_steps"' in prompt, "Esempio few-shot deve mostrare il campo 'next_steps'"
+    assert '"entities"' in prompt, "Esempio few-shot deve mostrare il campo 'entities'"
+    assert '"purpose"' in prompt, "Esempio few-shot deve mostrare il campo 'purpose'"
 
 
 def test_build_user_fewshot_shows_expected_json_structure():
@@ -87,3 +93,60 @@ def test_user_injects_markers():
 def test_user_no_markers_block_when_empty():
     u = prompts.build_user("t", mode="solo")
     assert "SEGNALIBRI" not in u.upper()
+
+
+# --- Test per build_verify_user (struttura PASSO 1/2/3, ADR comprensione-prima) ----
+
+
+def _make_analysis():
+    from vokari.analyze.schema import Analysis
+
+    return Analysis(purpose="scopo sbagliato", context="ctx")
+
+
+def test_verify_user_has_passo_steps():
+    """Il verify prompt ha i 3 passi espliciti per lettura indipendente prima del confronto."""
+    v = prompts.build_verify_user("trascrizione test", _make_analysis(), mode="riunione")
+    assert "PASSO 1" in v
+    assert "PASSO 2" in v
+    assert "PASSO 3" in v
+
+
+def test_verify_user_independent_first():
+    """PASSO 1 invita a individuare il punto INDIPENDENTEMENTE (senza guardare l'analisi)."""
+    v = prompts.build_verify_user("trascrizione test", _make_analysis(), mode="riunione")
+    assert "INDIPENDENTEMENTE" in v
+
+
+def test_verify_user_transcript_before_analysis():
+    """TRASCRIZIONE deve comparire PRIMA della sezione ANALISI CORRENTE nel testo del prompt
+    (forza la lettura indipendente prima di vedere la potenziale analisi sbagliata).
+    Nota: 'ANALISI CORRENTE' compare anche all'interno di PASSO 2 come citazione — il marcatore
+    usato qui è l'intestazione di sezione, che è più specifica e unica nel prompt."""
+    v = prompts.build_verify_user("TESTO_UNICO_123", _make_analysis(), mode="riunione")
+    pos_transcript = v.index("TESTO_UNICO_123")
+    # Usa l'intestazione di sezione completa (non la menzione in PASSO 2)
+    section_header = "ANALISI CORRENTE (confronta"
+    pos_analysis_section = v.index(section_header)
+    assert pos_transcript < pos_analysis_section, (
+        "Il testo della TRASCRIZIONE deve apparire prima della sezione ANALISI CORRENTE"
+    )
+
+
+def test_verify_user_mezzo_vs_fine_hint():
+    """Il verify prompt include il concetto MEZZO vs FINE per guidare la discriminazione."""
+    v = prompts.build_verify_user("t", _make_analysis(), mode="riunione")
+    assert "MEZZO" in v and "FINE" in v
+
+
+def test_verify_user_injects_context():
+    """Se context è fornito, viene iniettato nel verify prompt."""
+    v = prompts.build_verify_user("t", _make_analysis(), mode="riunione", context="landing page Kamil")
+    assert "landing page Kamil" in v
+
+
+def test_verify_user_contains_full_analysis_json():
+    """Il verify prompt include l'Analysis JSON completo (per confronto con PASSO 2)."""
+    a = _make_analysis()
+    v = prompts.build_verify_user("t", a, mode="riunione")
+    assert a.model_dump_json() in v

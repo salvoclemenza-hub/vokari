@@ -124,6 +124,7 @@ export const sampleSettings: VokariSettings = {
   onboarded: true,
   lastSeenVersion: "0.1.2",
   appLanguage: "it",
+  userContext: "",
   hasApiKey: true,
 };
 
@@ -211,7 +212,7 @@ export function jobView(over: Partial<JobView> = {}): JobView {
     status: "transcribing", pct: 0, source: "both", mode: "riunione",
     model: "large-v3-turbo", language: "it", partialText: "", transcript: "",
     durationS: 27 * 60 + 41, questions: sampleQuestions, markers: [],
-    briefingMd: SAMPLE_BRIEFING_MD, briefingPath: sampleArtifacts.briefingPath, error: "",
+    briefingMd: SAMPLE_BRIEFING_MD, draftBriefing: SAMPLE_BRIEFING_MD, briefingPath: sampleArtifacts.briefingPath, error: "",
     ...over,
   };
 }
