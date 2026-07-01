@@ -30,6 +30,7 @@ export function ScreenHome({
   onContextChange,
   onOpenSettings,
   onOpenModels,
+  systemAudioSupported = true,
 }: {
   onStart: (source: Source, context?: string) => void;
   onImport: () => void;
@@ -43,9 +44,17 @@ export function ScreenHome({
   onContextChange?: (context: string) => void;
   onOpenSettings?: () => void;
   onOpenModels?: () => void;
+  systemAudioSupported?: boolean;
 }) {
   const { t } = useTranslation();
-  const [source, setSource] = useState<Source>("both");
+  // Senza loopback (macOS/Linux: pyaudiowpatch è Windows-only) resta solo il microfono.
+  const sources: Source[] = systemAudioSupported ? SRC : ["mic"];
+  const [source, setSource] = useState<Source>(systemAudioSupported ? "both" : "mic");
+  // appInfo arriva async (App parte da fallback systemAudioSupported=true): se poi si scopre
+  // che il loopback non c'è, riallinea la sorgente attiva al microfono.
+  useEffect(() => {
+    if (!systemAudioSupported && source !== "mic") setSource("mic");
+  }, [systemAudioSupported, source]);
   const [tab, setTab] = useState<"briefing.md" | "recap.md" | "obsidian/">("briefing.md");
   // ⌘ è il tasto modificatore su macOS; su Windows/Linux (VOKARI è desktop Windows) è Ctrl.
   const modKey = /Mac|iPhone|iPad/i.test(navigator.platform) ? "⌘" : "Ctrl";
@@ -65,6 +74,8 @@ export function ScreenHome({
   }, [source, context, onStart]);
 
   const hasBriefing = Boolean(lastArtifacts?.briefingMd);
+  // Chiave del modo selezionato per la caption dinamica (solo/riunione → testo diverso).
+  const modeKey = mode === "riunione" ? "riunione" : "solo";
 
   // Passi onboarding (no briefing): il passo 2 ha testo in grassetto (Ctrl R) → composto in JSX.
   const onbSteps: { tt: string; dd: React.ReactNode }[] = [
@@ -116,7 +127,7 @@ export function ScreenHome({
             <div className="vk-seg-row">
               <span className="vk-src-lbl">{t("home.sourceLabel")}</span>
               <div className="vk-src" role="group" aria-label={t("home.sourceGroup")}>
-                {SRC.map((s) => (
+                {sources.map((s) => (
                   <button key={s} className={source === s ? "on" : ""} onClick={() => setSource(s)}>
                     {t("home.source." + s)}
                   </button>
@@ -125,27 +136,26 @@ export function ScreenHome({
             </div>
           </div>
 
-          {/* B2: riga d'aiuto sul tipo sessione (solo UX, nessuna logica) */}
-          <div style={{ padding: "6px 12px 0", fontSize: 11, color: "rgba(255,255,255,0.5)", lineHeight: 1.4 }}>
-            <b>{t("home.meetingHintBold")}</b> {t("home.meetingHintRest")}
+          {/* Caption del TIPO selezionato: dinamica per modo (spiega cosa cercherà l'analisi),
+              allineata sotto i selettori → è chiaramente subordinata a TIPO/SORGENTE, non al
+              campo contesto sotto. */}
+          <div className="vk-mode-hint">
+            <b>{t("home.mode." + modeKey)}</b> {t("home.modeHint." + modeKey)}
           </div>
 
-          {/* Context/Scope optional input — leggibile sulla console scura */}
-          <div style={{ padding: "8px 12px 4px", borderTop: "1px solid rgba(255,255,255,0.10)" }}>
-            <label style={{ display: "block", fontSize: 11, color: "rgba(255,255,255,0.55)", marginBottom: 4 }}>
-              {t("home.contextLabel")} <span style={{ opacity: 0.7 }}>{t("home.contextHint")}</span>
+          {/* Contesto/scopo (opzionale): sezione DISTINTA, separata dalla caption del TIPO da
+              un divisore + spaziatura → non si legge più "allo stesso livello" dell'hint. */}
+          <div className="vk-ctx-field">
+            <label className="vk-ctx-q" htmlFor="vk-home-ctx">
+              {t("home.contextLabel")} <span className="opt">{t("home.contextHint")}</span>
             </label>
             <input
+              id="vk-home-ctx"
+              className="vk-ctx-in"
               type="text"
               placeholder={t("home.contextPlaceholder")}
               value={context}
               onChange={(e) => onContextChange?.(e.currentTarget.value)}
-              style={{
-                width: "100%", padding: "8px 10px", fontSize: 13,
-                border: "1px solid rgba(255,255,255,0.22)", borderRadius: 6,
-                background: "rgba(255,255,255,0.06)", color: "#f1ede5",
-                fontFamily: "inherit", boxSizing: "border-box", outline: "none",
-              }}
             />
           </div>
 

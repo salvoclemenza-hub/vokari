@@ -2,6 +2,8 @@ export interface AppInfo {
   version: string;
   license: string;
   githubStars: number;
+  platform: string; // "windows" | "macos" | "linux"
+  systemAudioSupported: boolean; // cattura audio di sistema (loopback): solo Windows finora
 }
 
 /** Una voce del changelog (Tema 2): cosa è cambiato in una versione. `kind` colora/etichetta
@@ -146,6 +148,7 @@ export interface LhmStatus {
   installed: boolean;
   running: boolean;
   canInstall: boolean;  // l'app sa scaricarlo+avviarlo da sé (Windows non-MSIX); in MSIX guida l'install manuale
+  supported: boolean;   // true solo su Windows; false su Linux/macOS → la sezione LHM viene nascosta
 }
 
 export interface OllamaModelEntry {
@@ -297,7 +300,7 @@ declare global {
   }
 }
 
-const FALLBACK: AppInfo = { version: "dev", license: "MIT", githubStars: 0 };
+const FALLBACK: AppInfo = { version: "dev", license: "MIT", githubStars: 0, platform: "windows", systemAudioSupported: true };
 
 /** Timeout oltre il quale assumiamo di girare SENZA pywebview (browser/dev/test)
  *  e usiamo i fallback. In-app pywebview inietta l'api entro ~1s. */
@@ -461,7 +464,7 @@ export const bridge = {
   ollamaStop: () => withApi((a) => a.ollama_stop(), { ok: false }),
   ollamaInstall: () => withApi((a) => a.ollama_install(), { ok: false }),
   // I — LibreHardwareMonitor
-  lhmStatus: () => withApi<LhmStatus>((a) => a.lhm_status(), { installed: false, running: false, canInstall: false }),
+  lhmStatus: () => withApi<LhmStatus>((a) => a.lhm_status(), { installed: false, running: false, canInstall: false, supported: true }),
   lhmInstall: () => withApi((a) => a.lhm_install(), { ok: false }),
   lhmStart: () => withApi((a) => a.lhm_start(), { ok: false }),
   lhmStop: () => withApi((a) => a.lhm_stop(), { ok: false }),

@@ -49,3 +49,5 @@ evals/interview/baseline.jsonl
 packaging/.cache/
 tmp/
 .worktrees/
+# iconset macOS generato da packaging/macos/make_icns.py (rigenerabile; l'.icns finale sì in app/assets/)
+packaging/macos/vokari.iconset/

@@ -39,6 +39,15 @@ def _vokari_version() -> str:
         return "0.1.2"
 
 
+def _platform_name() -> str:
+    """Nome piattaforma normalizzato per la UI: 'windows' | 'macos' | 'linux'."""
+    if sys.platform.startswith("win"):
+        return "windows"
+    if sys.platform == "darwin":
+        return "macos"
+    return "linux"
+
+
 _GITHUB_REPO = "salvoclemenza-hub/vokari"
 _stars_cache: dict[str, int | None] = {"value": None}
 
@@ -327,7 +336,13 @@ class Api:
 
     # --- chrome (M5) --------------------------------------------------
     def get_app_info(self) -> dict:
-        return {"version": _vokari_version(), "license": "MIT", "githubStars": _github_stars()}
+        return {
+            "version": _vokari_version(),
+            "license": "MIT",
+            "githubStars": _github_stars(),
+            "platform": _platform_name(),
+            "systemAudioSupported": capture.system_audio_supported(),
+        }
 
     @_traced
     def get_changelog(self, since: str = "") -> dict:
@@ -1016,7 +1031,7 @@ class Api:
 
     # --- LibreHardwareMonitor (telemetria temperatura) ----------------
     def lhm_status(self) -> dict:
-        """Ritorna {installed, running, canInstall}: usato dalla sezione LHM in Impostazioni.
+        """Ritorna {installed, running, canInstall, supported}: usato dalla sezione LHM in Impostazioni.
         canInstall=False in MSIX (build Store) → la UI guida all'install manuale (ADR-046)."""
         from app import lhm_manager
 
@@ -1025,6 +1040,7 @@ class Api:
             "installed": lhm_manager.is_installed(data_dir),
             "running": lhm_manager.is_running(),
             "canInstall": lhm_manager.can_auto_install(),
+            "supported": sys.platform.startswith("win"),
         }
 
     def lhm_install(self) -> dict:
@@ -1108,14 +1124,27 @@ class Api:
             mics = capture.list_input_devices()
         except RuntimeError:
             mics = []
-        try:
-            loop = capture.list_loopback_devices()
-        except RuntimeError:
-            loop = []
-        return {"mic": mics, "system": loop}
+        if sys.platform.startswith("win"):
+            try:
+                system = capture.list_loopback_devices()
+            except RuntimeError:
+                system = []
+        else:
+            # Linux/altro: l'audio di sistema è un device 'monitor' (Pulse/PipeWire)
+            try:
+                system = capture.list_monitor_devices()
+            except RuntimeError:
+                system = []
+        return {"mic": mics, "system": system}
 
     @_traced
     def start_recording(self, source: str, device=None) -> dict:
+        # macOS/Linux: il loopback (audio di sistema) non è disponibile (pyaudiowpatch è Windows-only).
+        # Degradiamo a microfono con un warning, invece di far fallire la cattura allo Stop (norm vuoto).
+        if source in ("system", "both") and not capture.system_audio_supported():
+            self._emit("warning", {"messages": [i18n.t("api.system_audio_unsupported", self._lang())]})
+            source = "mic"
+
         # L14 — preflight spazio disco: la cattura scrive i WAV nativi in streaming nella
         # tempdir; a disco pieno l'audio si perde allo Stop. Controlliamo PRIMA di scartare la
         # registrazione precedente e di partire. 'critical' → solleva (App mostra ErrorScreen +
@@ -1417,6 +1446,16 @@ class Api:
                     job = self._store.update(job_id, status="error", error=error_msg)
                     self._emit("status", {"jobId": job_id, "status": "error", "error": error_msg})
                 else:
+                    self._spawn_processing(job)
+            # Riprova DOPO un errore SENZA re-importare: la trascrizione è salvata sul job
+            # (pipeline la persiste PRIMA dell'analisi) e il contesto resta sul job. Se c'è la
+            # trascrizione riparti dall'analisi (skip_transcribe); altrimenti l'errore era in
+            # trascrizione → ri-trascrivi dall'audio (cache whisper per hash → veloce). Senza
+            # né testo né audio non è recuperabile: resta in errore.
+            elif job.status == "error":
+                if (job.transcript or "").strip():
+                    self._spawn_processing(job, skip_transcribe=True)
+                elif job.audio_path and Path(job.audio_path).exists():
                     self._spawn_processing(job)
         return _job_view(job) if job else None
 

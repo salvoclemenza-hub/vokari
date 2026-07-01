@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AppFrame } from "../chrome/AppFrame";
 
-const INFO = { version: "0.1.0", license: "MIT", githubStars: 2400 };
+const INFO = { version: "0.1.0", license: "MIT", githubStars: 2400, platform: "windows", systemAudioSupported: true };
 
 describe("AppFrame chrome", () => {
   it("evidenzia la voce attiva e mostra version (license rimossa da T3)", () => {
@@ -67,7 +67,7 @@ describe("AppFrame chrome", () => {
 
   it("NON rende il contatore stelle quando githubStars === 0", () => {
     render(
-      <AppFrame active="Registra" onNavigate={() => {}} appInfo={{ version: "0.1.0", license: "MIT", githubStars: 0 }}>
+      <AppFrame active="Registra" onNavigate={() => {}} appInfo={{ version: "0.1.0", license: "MIT", githubStars: 0, platform: "windows", systemAudioSupported: true }}>
         x
       </AppFrame>,
     );

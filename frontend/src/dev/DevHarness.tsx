@@ -18,6 +18,7 @@ import { ScreenHome } from "../screens/Home";
 import { ScreenLive } from "../screens/Live";
 import { ScreenProcessing } from "../screens/Processing";
 import { ScreenInterview } from "../screens/Interview";
+import { ScreenTranscriptReview } from "../screens/TranscriptReview";
 import { ScreenArtifacts } from "../screens/Artifacts";
 import { ScreenSettings } from "../screens/Settings";
 import { ScreenSessions } from "../screens/Sessions";
@@ -55,13 +56,13 @@ const DEV_CHANGELOG: ChangelogEntry[] = [
 // sono overlay/eventi da mostrare SOPRA una schermata reale (dove avvengono davvero).
 type RealScreen =
   | "home" | "live" | "processing" | "interview" | "artifacts"
-  | "settings" | "sessions" | "models" | "error" | "onboarding";
+  | "settings" | "sessions" | "models" | "error" | "onboarding" | "transcript_review";
 type Screen = RealScreen | "pills" | "feedback" | "whatsnew";
 
 const NAV_FOR: Record<Screen, NavItem> = {
   home: "Registra", live: "Registra", processing: "Registra", interview: "Registra",
   error: "Registra", pills: "Registra", feedback: "Registra", onboarding: "Registra",
-  whatsnew: "Registra",
+  whatsnew: "Registra", transcript_review: "Registra",
   artifacts: "Sessioni", sessions: "Sessioni",
   models: "Modelli AI", settings: "Impostazioni",
 };
@@ -97,6 +98,7 @@ const CATALOG: { screen: Screen; states: string[]; note?: string }[] = [
   { screen: "artifacts", states: ["default", "vuoto"] },
   { screen: "sessions", states: ["list", "empty"] },
   { screen: "interview", states: ["default"] },
+  { screen: "transcript_review", states: ["default"], note: "rileggi/correggi la trascrizione (N1)" },
   { screen: "live", states: ["both", "mic"] },
   { screen: "models", states: ["default"] },
   { screen: "settings", states: ["default"] },
@@ -171,6 +173,8 @@ function renderBody(screen: RealScreen, state: string): ReactNode {
     }
     case "interview":
       return <ScreenInterview questions={fx.sampleQuestions} onGenerate={noop} onCancel={noop} />;
+    case "transcript_review":
+      return <ScreenTranscriptReview transcript={fx.SAMPLE_TRANSCRIPT} onProceed={noop} onCancel={noop} />;
     case "artifacts": {
       // "vuoto": recap/obsidian assenti → tab recap disabilitato + invito Obsidian.
       const art = state === "vuoto"

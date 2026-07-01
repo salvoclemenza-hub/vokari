@@ -342,85 +342,87 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
               </div>
             </div>
 
-            {/* Temperatura CPU (LHM) */}
-            <div className="vk-sc">
-              <div className="vk-sc-h">
-                <span className="ico"><VkIcon.cpu /></span>
-                {t("settings.cpuTempTitle")}
-              </div>
-              <div className="vk-sc-sub">
-                {t("settings.cpuTempSub")}
-              </div>
-              {lhmStatus === null ? (
-                <div className="vk-hlp">{t("settings.loadingState")}</div>
-              ) : (
-                <div className="vk-field" style={{ marginBottom: 0 }}>
-                  <div style={{ fontSize: 13, marginBottom: 10, opacity: 0.8 }}>
-                    {!lhmStatus.installed
-                      ? t("settings.lhmNotInstalled")
-                      : lhmStatus.running
-                      ? t("settings.lhmActive")
-                      : t("settings.lhmInstalledNotRunning")}
-                  </div>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {!lhmStatus.installed ? (
-                      lhmStatus.canInstall ? (
-                        <button
-                          className="vk-mini"
-                          disabled={lhmInstalling}
-                          onClick={() => void handleLhmInstall()}
-                        >
-                          {lhmInstalling ? t("settings.installing") : t("settings.install")}
-                        </button>
-                      ) : (
-                        <span style={{ fontSize: 12, opacity: 0.78, maxWidth: 360 }}>
-                          {t("settings.msixPre")}
-                          <span
-                            className="mono"
-                            style={{ cursor: "pointer", textDecoration: "underline" }}
-                            onClick={() =>
-                              void bridge.openUrl(
-                                "https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases",
-                              )
-                            }
-                          >
-                            LibreHardwareMonitor
-                          </span>
-                          {t("settings.msixPost")}
-                        </span>
-                      )
-                    ) : (
-                      <>
-                        {!lhmStatus.running && (
-                          <button className="vk-mini" onClick={() => void handleLhmStart()}>
-                            {t("settings.start")}
-                          </button>
-                        )}
-                        {lhmStatus.running && (
-                          <button className="vk-mini" onClick={() => void handleLhmStop()}>
-                            {t("settings.stop")}
-                          </button>
-                        )}
-                        <button
-                          className="vk-mini"
-                          style={{ opacity: 0.6 }}
-                          onClick={() => void handleLhmUninstall()}
-                        >
-                          {t("settings.remove")}
-                        </button>
-                      </>
-                    )}
-                    <button
-                      className="vk-mini"
-                      style={{ opacity: 0.6 }}
-                      onClick={() => bridge.lhmStatus().then(setLhmStatus)}
-                    >
-                      {t("settings.refreshState")}
-                    </button>
-                  </div>
+            {/* Temperatura CPU (LHM) — solo Windows (supported=false su Linux/macOS) */}
+            {lhmStatus?.supported !== false && (
+              <div className="vk-sc">
+                <div className="vk-sc-h">
+                  <span className="ico"><VkIcon.cpu /></span>
+                  {t("settings.cpuTempTitle")}
                 </div>
-              )}
-            </div>
+                <div className="vk-sc-sub">
+                  {t("settings.cpuTempSub")}
+                </div>
+                {lhmStatus === null ? (
+                  <div className="vk-hlp">{t("settings.loadingState")}</div>
+                ) : (
+                  <div className="vk-field" style={{ marginBottom: 0 }}>
+                    <div style={{ fontSize: 13, marginBottom: 10, opacity: 0.8 }}>
+                      {!lhmStatus.installed
+                        ? t("settings.lhmNotInstalled")
+                        : lhmStatus.running
+                        ? t("settings.lhmActive")
+                        : t("settings.lhmInstalledNotRunning")}
+                    </div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {!lhmStatus.installed ? (
+                        lhmStatus.canInstall ? (
+                          <button
+                            className="vk-mini"
+                            disabled={lhmInstalling}
+                            onClick={() => void handleLhmInstall()}
+                          >
+                            {lhmInstalling ? t("settings.installing") : t("settings.install")}
+                          </button>
+                        ) : (
+                          <span style={{ fontSize: 12, opacity: 0.78, maxWidth: 360 }}>
+                            {t("settings.msixPre")}
+                            <span
+                              className="mono"
+                              style={{ cursor: "pointer", textDecoration: "underline" }}
+                              onClick={() =>
+                                void bridge.openUrl(
+                                  "https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases",
+                                )
+                              }
+                            >
+                              LibreHardwareMonitor
+                            </span>
+                            {t("settings.msixPost")}
+                          </span>
+                        )
+                      ) : (
+                        <>
+                          {!lhmStatus.running && (
+                            <button className="vk-mini" onClick={() => void handleLhmStart()}>
+                              {t("settings.start")}
+                            </button>
+                          )}
+                          {lhmStatus.running && (
+                            <button className="vk-mini" onClick={() => void handleLhmStop()}>
+                              {t("settings.stop")}
+                            </button>
+                          )}
+                          <button
+                            className="vk-mini"
+                            style={{ opacity: 0.6 }}
+                            onClick={() => void handleLhmUninstall()}
+                          >
+                            {t("settings.remove")}
+                          </button>
+                        </>
+                      )}
+                      <button
+                        className="vk-mini"
+                        style={{ opacity: 0.6 }}
+                        onClick={() => bridge.lhmStatus().then(setLhmStatus)}
+                      >
+                        {t("settings.refreshState")}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* colonna destra: Output & integrazioni · Generale */}

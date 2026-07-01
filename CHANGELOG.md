@@ -1,6 +1,6 @@
 # Changelog
 
-User-facing changelog for **VOKARI** — the local-first Windows app that turns a voice
+User-facing changelog for **VOKARI** — the local-first app that turns a voice
 recording into structured Markdown (transcription, AI analysis, and second-brain notes),
 all on your own machine. Items here describe what changed for *you*, not the code.
 
@@ -9,9 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Work completed after 0.2.0 but not yet shipped in a numbered release.
+## [0.2.1] - 2026-07-01
+
+Cross-platform release — VOKARI now runs on **macOS** (Apple Silicon) and **Linux**, in
+addition to Windows.
 
 ### Added
+- **macOS support (Apple Silicon).** A native macOS build, shipped as an unsigned `.dmg` —
+  record, transcribe, and generate briefings entirely on your Mac. Recording is
+  microphone-only for now (system-audio capture stays Windows-only).
+- **Linux support.** VOKARI runs on Linux from source, with microphone-only recording.
 - **Review and edit the transcript before analysis.** A new step lets you correct the
   transcribed text (fix names, terms, typos) before VOKARI sends it to the AI, so the
   briefing is built from exactly what you intended. Includes a live word count and a
@@ -33,6 +40,9 @@ Work completed after 0.2.0 but not yet shipped in a numbered release.
   your own domain, so the analysis fits how *you* work rather than any preset use case.
 
 ### Changed
+- **The app adapts to your platform.** On macOS and Linux the source picker shows the
+  microphone only, and the Windows-only "CPU temperature" panel is hidden — no dead
+  controls for features a platform doesn't have.
 - **Cleaner handling of long audio.** Long recordings are now split into overlapping
   chunks with automatic de-duplication, so sentences are no longer cut in half (or
   repeated) at the 10-minute boundaries — more accurate transcripts for long sessions.
@@ -104,6 +114,7 @@ First public release.
   text is sent to the AI, and even that stays local if you choose Ollama. API keys are
   stored in the OS keyring, never in files. No telemetry.
 
-[Unreleased]: https://github.com/salvoclemenza-hub/vokari/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/salvoclemenza-hub/vokari/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/salvoclemenza-hub/vokari/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/salvoclemenza-hub/vokari/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/salvoclemenza-hub/vokari/releases/tag/v0.1.1

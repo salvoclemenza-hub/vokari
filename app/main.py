@@ -8,7 +8,28 @@ import webview
 
 from app.api import Api
 
-_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist" / "index.html"
+
+def _find_dist() -> Path:
+    """index.html del frontend buildato. In sviluppo: ../frontend/dist/ accanto al repo.
+    Installato (wheel pip / Homebrew): app/_webdist/ accanto a questo modulo
+    (force-include in pyproject [tool.hatch.build.targets.wheel.force-include]).
+    Bundle PyInstaller (.app): i datas finiscono in sys._MEIPASS come dist/ (sotto zip il
+    __file__ non è un path reale → la risoluzione relativa non basta)."""
+    here = Path(__file__).resolve()
+    candidates = []
+    meipass = getattr(sys, "_MEIPASS", None)  # PyInstaller: dir dei datas raccolti
+    if meipass:
+        candidates.append(Path(meipass) / "dist" / "index.html")  # bundle .app (PyInstaller)
+    candidates += [
+        here.parent.parent / "frontend" / "dist" / "index.html",  # sviluppo (repo)
+        here.parent / "_webdist" / "index.html",  # installato (wheel/Homebrew)
+    ]
+    for c in candidates:
+        if c.exists():
+            return c
+    return candidates[0]  # fallback: l'errore è gestito in main()
+
+
 _ASSETS = Path(__file__).resolve().parent / "assets"
 
 
@@ -20,8 +41,20 @@ def _icon_path() -> str | None:
 
 
 def main() -> None:
-    if not _DIST.exists():
-        sys.exit(f"Frontend non buildato: {_DIST} mancante.\nEsegui:  cd frontend && pnpm install && pnpm build")
+    import argparse  # import differito: usato solo all'avvio
+
+    parser = argparse.ArgumentParser(prog="vokari-app")
+    parser.add_argument("--install-desktop", action="store_true", help="Installa la voce di menu .desktop (Linux)")
+    args = parser.parse_args()
+    if args.install_desktop:
+        from app.desktop_entry import install_desktop_entry
+
+        dest = install_desktop_entry()
+        print(f"Voce di menu installata: {dest}")
+        return
+    dist = _find_dist()
+    if not dist.exists():
+        sys.exit(f"Frontend non buildato: {dist} mancante.\nEsegui:  cd frontend && pnpm install && pnpm build")
     # Pacchetto distribuibile: rende visibile l'ffmpeg bundlato (no-op in sviluppo → ffmpeg di sistema).
     # Va fatto PRIMA di qualunque uso di ffmpeg (conversione audio) così shutil.which lo trova.
     try:
@@ -30,6 +63,11 @@ def main() -> None:
         ffmpeg_manager.add_bundled_to_path()
     except Exception:  # noqa: S110 — best-effort: in sviluppo si usa l'ffmpeg di sistema
         pass
+    from app import preflight
+
+    missing = preflight.missing_prereqs()
+    if missing:
+        sys.exit(preflight.install_hint(missing))
     # Pulizia all'avvio: rimuove le registrazioni temporanee non finalizzate da un crash
     # precedente (dir 'vokari-rec-*' più vecchie di 2h; il filtro età non tocca cattura in corso).
     from vokari.audio import capture as _capture
@@ -49,7 +87,7 @@ def main() -> None:
     api = Api()
     window = webview.create_window(
         "VOKARI",
-        url=str(_DIST),
+        url=str(dist),
         js_api=api,
         width=1200,
         height=820,

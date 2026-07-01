@@ -415,7 +415,11 @@ kbd{font-family:var(--mono);font-size:11px;font-weight:500;}
 
 /* ════════ N1 — REVISIONE TRASCRIZIONE (gate awaiting_edit) ════════ */
 .vk-tr{flex:1 1 auto;min-height:0;overflow:hidden;display:flex;flex-direction:column;align-items:center;}
-.vk-tr-inner{width:min(960px,100%);display:flex;flex-direction:column;min-height:0;}
+/* flex:1 1 auto è ciò che rende RESPONSIVE la textarea: senza, l'inner prende altezza
+   contenuto e la .vk-tr-ta (flex:1) non ha spazio verticale → resta alta ~3 righe con un
+   vuoto sotto (bug review 2026-06-30). Con flex:1 riempie l'altezza e la textarea cresce/
+   si restringe con la finestra (act bar sempre visibile, la textarea scrolla internamente). */
+.vk-tr-inner{width:min(960px,100%);display:flex;flex-direction:column;min-height:0;flex:1 1 auto;}
 .vk-tr-head{margin-bottom:14px;flex:0 0 auto;}
 .vk-tr-head h1{font-family:var(--disp);font-size:27px;font-weight:600;letter-spacing:-.02em;margin:6px 0 6px;color:var(--ink);}
 .vk-tr-head p{font-size:14px;color:var(--mut);margin:0;line-height:1.5;max-width:64ch;}
@@ -877,6 +881,19 @@ kbd{font-family:var(--mono);font-size:11px;font-weight:500;}
 .vk-cap-rows{display:flex;flex-direction:column;gap:8px;margin-top:12px;flex:0 0 auto;}
 .vk-seg-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
 .vk-seg-row .vk-src-lbl{width:64px;flex:0 0 auto;}
+/* Caption del TIPO sessione (dinamica per modo): indentata sotto i selettori (lbl 64 + gap 12)
+   → legata visivamente a TIPO/SORGENTE, non al campo contesto sotto. Il modo in phosphor. */
+.vk-mode-hint{flex:0 0 auto;margin:8px 12px 0;padding-left:76px;font-size:11px;line-height:1.4;color:var(--con-dim);}
+.vk-mode-hint b{color:var(--phos);font-weight:600;}
+/* Campo "Di cosa parla?": sezione DISTINTA dall'hint — divisore + spaziatura + label più marcata. */
+.vk-ctx-field{flex:0 0 auto;margin-top:14px;padding:13px 12px 2px;border-top:1px solid rgba(255,255,255,.10);}
+.vk-ctx-q{display:block;font-size:12px;color:var(--con-ink);font-weight:600;margin-bottom:6px;}
+.vk-ctx-q .opt{color:var(--con-dim);font-weight:400;}
+.vk-ctx-in{width:100%;padding:8px 10px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;
+  border:1px solid rgba(255,255,255,.22);border-radius:6px;background:rgba(255,255,255,.06);color:#f1ede5;}
+.vk-ctx-in::placeholder{color:var(--con-dim);}
+.vk-ctx-in:focus-visible{border-color:rgba(95,217,143,.4);box-shadow:0 0 0 3px var(--green-ring);}
+@media (max-width:1000px){.vk-mode-hint{padding-left:0;}}
 
 .vk-stage{flex:1 1 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
   padding:14px 0 6px;min-height:0;}
@@ -1196,4 +1213,42 @@ button:disabled,[disabled]{opacity:.5;cursor:not-allowed;}
   /* Live: lane più compatte, sublabel nascosta. */
   .vk-lane-lbl{flex-basis:104px;}
   .vk-lane-lbl .lt small{display:none;}
+}
+
+/* ════════ RESPONSIVE — finestra BASSA (poca ALTEZZA, qualsiasi larghezza) ════════
+   Bug (review 2026-06-30): a finestra larga ma bassa NESSUN breakpoint di larghezza
+   scattava → .vk-main (overflow:hidden) comprimeva la console Home e lo .vk-stage
+   (REC, flex:1) si sovrapponeva al campo contesto/drop; la Live restava schiacciata
+   dal timer gigante. Soluzione: il main scrolla in verticale e la griglia Home ha un
+   PAVIMENTO d'altezza pari al contenuto naturale della console, così nulla si accavalla.
+   overflow-x resta hidden per non far comparire la scrollbar orizzontale durante le
+   transizioni di schermata (translateX). */
+
+/* Soglia 820: la Home naturale (header + griglia) sta in ~800px; sotto, la console
+   inizierebbe a comprimersi → qui il main scrolla e la griglia non scende sotto 600px
+   (= contenuto console). Sopra 820 resta il comportamento stretch originale (invariato). */
+@media (max-height:820px){
+  .vk-main{overflow-y:auto;overflow-x:hidden;}
+  .vk-grid{min-height:600px;}   /* 2 colonne restano: in orizzontale c'è spazio */
+}
+
+/* Sotto 720 l'altezza stringe davvero: header Home e timer/margini Live si compattano
+   per ridurre lo scroll (la console Live ha già overflow-y:auto interno). */
+@media (max-height:720px){
+  .vk-greet{margin-bottom:10px;}
+  .vk-greet h1{font-size:clamp(22px,3vw,30px);}
+  .vk-greet p{font-size:13px;margin-top:4px;}
+  .vk-live{padding:16px 26px 14px;}
+  .vk-timer{font-size:48px;}
+  .vk-timer-wrap{margin:8px 0 8px;}
+  .vk-meters{margin-bottom:10px;}
+  .vk-live-ctrl{margin-top:10px;}
+  .vk-live-foot{margin-top:10px;padding-top:9px;}
+}
+
+/* Finestra MOLTO bassa: comprimi ancora (timer minimo, sottotitolo Home via). */
+@media (max-height:560px){
+  .vk-greet p{display:none;}
+  .vk-timer{font-size:38px;}
+  .vk-grid{min-height:560px;}
 }

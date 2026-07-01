@@ -198,6 +198,15 @@ describe("ScreenSettings", () => {
     // nessun bottone "Installa" (auto-download vietato in pacchetto)
     expect(screen.queryByRole("button", { name: "Installa" })).not.toBeInTheDocument();
   });
+
+  it("nasconde la sezione Temperatura CPU quando supported=false", async () => {
+    mockLhmStatus.mockResolvedValue({ installed: false, running: false, canInstall: false, supported: false });
+    render(<ScreenSettings />);
+    // Attende che lhmStatus carichi e la sezione sparisca (è visibile durante il loading)
+    await waitFor(() => {
+      expect(screen.queryByText(/Temperatura CPU/i)).toBeNull();
+    });
+  });
 });
 
 describe("ScreenSettings — verifica/rimuovi chiave API (SET1/SET2)", () => {

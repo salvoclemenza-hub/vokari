@@ -38,7 +38,7 @@ const SCREEN_FOR_NAV: Record<NavItem, Screen> = {
   Registra: "home", Sessioni: "sessions", "Modelli AI": "models", Impostazioni: "settings",
 };
 
-const FALLBACK: AppInfo = { version: "dev", license: "MIT", githubStars: 0 };
+const FALLBACK: AppInfo = { version: "dev", license: "MIT", githubStars: 0, platform: "windows", systemAudioSupported: true };
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("home");
@@ -202,10 +202,18 @@ export default function App() {
           if (document.hidden) void bridge.flashTaskbar();
           // M1: error è terminale come cancelled → azzera il job così la pill di ripresa
           // ("Elaborazione in corso… →") non resta fantasma sulla schermata di errore.
+          const failedId = jobIdRef.current;
           jobIdRef.current = "";
           setJob(null);
           setAnalysisFit(null);
-          fail((payload.error as string) ?? "");
+          // "Riprova" SENZA re-importare l'audio né re-inserire il contesto: resume_job riparte
+          // dall'analisi riusando la trascrizione salvata sul job (persistita PRIMA dell'analisi)
+          // — il contesto resta sul job. Ripristina jobIdRef così gli eventi 'status' del retry
+          // trovano il job. Caso reale: crash analisi su entità fuori-enum (bug 2026-06-30).
+          const retry = failedId
+            ? () => { jobIdRef.current = failedId; setScreen("processing"); void bridge.resumeJob(failedId); }
+            : null;
+          fail((payload.error as string) ?? "", retry);
           return;
         }
         if (status === "cancelled") {
@@ -475,6 +483,7 @@ export default function App() {
                       lastArtifacts={lastArtifacts} mode={recMode} onModeChange={setRecMode}
                       whisperModel={recWhisper} needsApiKey={needsApiKey} needsModel={needsModel}
                       context={recContext} onContextChange={setRecContext}
+                      systemAudioSupported={appInfo.systemAudioSupported}
                       onOpenSettings={() => setScreen("settings")} onOpenModels={() => setScreen("models")} />,
     live: <ScreenLive source={recSource} title={sessionTitle} onTitleChange={setSessionTitle}
                       context={recContext} onContextChange={setRecContext}

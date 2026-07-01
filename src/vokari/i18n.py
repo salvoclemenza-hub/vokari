@@ -326,6 +326,10 @@ _CATALOG: dict[str, dict[str, str]] = {
         "it": "Spazio su disco quasi esaurito: circa {minutes} min di registrazione disponibili.",
         "en": "Disk space almost full: about {minutes} min of recording available.",
     },
+    "api.system_audio_unsupported": {
+        "it": "Cattura dell'audio di sistema non disponibile su questa piattaforma: registro solo dal microfono.",
+        "en": "System audio capture is not available on this platform: recording from the microphone only.",
+    },
     # ── catalogo modelli (descrizioni + tag mostrati nelle card "Modelli AI") ──
     "models.off_desc": {
         "it": "Modello locale installato (fuori dal catalogo consigliato di VOKARI).",

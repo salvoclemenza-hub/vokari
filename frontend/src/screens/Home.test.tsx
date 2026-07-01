@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ScreenHome } from "./Home";
 
@@ -38,6 +38,20 @@ describe("ScreenHome", () => {
     const onStart = vi.fn();
     render(<ScreenHome onStart={onStart} onImport={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: /^mic$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Avvia registrazione/i }));
+    expect(onStart).toHaveBeenCalledWith("mic", undefined);
+  });
+
+  it("senza loopback (systemAudioSupported=false) mostra solo il microfono come sorgente (macOS)", () => {
+    render(<ScreenHome onStart={() => {}} onImport={() => {}} systemAudioSupported={false} />);
+    const group = screen.getByRole("group", { name: "Sorgente audio" });
+    const labels = within(group).getAllByRole("button").map((b) => b.textContent);
+    expect(labels).toEqual(["mic"]); // niente "system"/"entrambi"
+  });
+
+  it("avvia con 'mic' quando il loopback non è supportato (macOS)", () => {
+    const onStart = vi.fn();
+    render(<ScreenHome onStart={onStart} onImport={() => {}} systemAudioSupported={false} />);
     fireEvent.click(screen.getByRole("button", { name: /Avvia registrazione/i }));
     expect(onStart).toHaveBeenCalledWith("mic", undefined);
   });

@@ -1,5 +1,3 @@
-import pytest
-
 from vokari.analyze.schema import Analysis, Entity, Meta
 
 
@@ -46,18 +44,38 @@ def test_analysis_bare_constructor_is_valid():
     assert a.key_ideas == [] and a.decisions == []
 
 
-def test_entity_type_rejects_invalid_value():
-    from pydantic import ValidationError
+def test_entity_type_coerces_unknown_to_termine():
+    """Bug 2026-06-30: l'LLM può restituire tipi entità fuori dall'enum (es. 'evento').
+    NON deve far fallire l'Analysis (si perderebbe il briefing): i tipi sconosciuti si
+    bucketizzano sul fallback 'termine'."""
+    assert Entity(name="Sagra", type="evento").type == "termine"
+    assert Entity(name="Acme", type="azienda").type == "termine"
+    assert Entity(name="Milano", type="luogo").type == "termine"
 
-    with pytest.raises(ValidationError):
-        Entity(name="Acme", type="azienda")  # non in Literal
+
+def test_meta_type_coerces_unknown_to_solo():
+    assert Meta(type="workshop").type == "solo"
 
 
-def test_meta_type_rejects_invalid_value():
-    from pydantic import ValidationError
+def test_entity_and_meta_type_map_known_synonyms():
+    # Sinonimi (anche EN, quando l'output AI è in altra lingua) → canonico IT.
+    assert Entity(name="Ada", type="person").type == "persona"
+    assert Entity(name="Beta", type="Project").type == "progetto"
+    assert Meta(type="riunione").type == "meeting"
 
-    with pytest.raises(ValidationError):
-        Meta(type="workshop")  # non in Literal
+
+def test_analysis_with_unknown_entity_type_does_not_raise():
+    """Regressione esatta del crash riportato (entities[1].type='evento' → literal_error
+    bloccava l'INTERA Analysis): ora l'analisi passa e il tipo fuori-lista è 'termine'."""
+    raw = {
+        "meta": {"type": "meeting"},
+        "entities": [
+            {"name": "Sara", "type": "persona", "note": ""},
+            {"name": "Sagra di paese", "type": "evento", "note": "data da fissare"},
+        ],
+    }
+    a = Analysis.model_validate(raw)
+    assert [e.type for e in a.entities] == ["persona", "termine"]
 
 
 def test_entity_type_accepts_valid_values():

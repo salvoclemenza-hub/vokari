@@ -5,13 +5,13 @@
 ![CI](https://github.com/salvoclemenza-hub/vokari/actions/workflows/ci.yml/badge.svg)
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
 ![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)
-![Platform: Windows 10/11](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6.svg)
+![Platform: Windows · macOS · Linux](https://img.shields.io/badge/platform-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-0078D6.svg)
 
 <p align="center">
   <img src="screenshots/01-home.png" alt="VOKARI — Home screen: choose session type (solo / meeting) and source (mic / system / both), large record button, sidebar with recent sessions" width="820">
 </p>
 
-**VOKARI** is a local-first Windows desktop app: record or import audio, transcribe it on-device with [faster-whisper](https://github.com/SYSTRAN/faster-whisper), analyze the text with Claude or a local Ollama model, and get clean Markdown artifacts — a `briefing.md` optimized for LLMs, a human-readable recap (+PDF), and atomic Obsidian notes.
+**VOKARI** is a local-first desktop app for **Windows, macOS, and Linux**: record or import audio, transcribe it on-device with [faster-whisper](https://github.com/SYSTRAN/faster-whisper), analyze the text with Claude or a local Ollama model, and get clean Markdown artifacts — a `briefing.md` optimized for LLMs, a human-readable recap (+PDF), and atomic Obsidian notes.
 
 **Your audio never leaves your machine** — only the transcribed *text* is sent to the AI, and even that stays local if you choose Ollama.
 
@@ -22,13 +22,13 @@
 - 🔐 **Privacy-first** — audio stays on your device; secrets live in the OS keyring ([Privacy policy](PRIVACY.md))
 - 🌍 **Fully bilingual** — switch the whole app between **English** and **Italian**: not just the UI, but the AI-generated output too (briefing, recap, Obsidian notes, messages)
 
-**Status:** v0.2.0 — the full flow works and is CI-gated (720+ automated tests: ~549 backend with pytest, ~173 frontend with vitest).
+**Status:** v0.2.1 — runs on **Windows, macOS, and Linux**; the full flow works and is CI-gated (760+ automated tests: ~574 backend with pytest, ~186 frontend with vitest).
 
 ---
 
 ## 📥 Installation
 
-### 📦 Packaged build (easiest)
+### 🪟 Windows — packaged build (easiest)
 
 Grab the latest **`VOKARI-vX.Y.Z.zip`** from the **[Releases](https://github.com/salvoclemenza-hub/vokari/releases)** page — it bundles an embedded Python runtime, ffmpeg, and the built UI, so **no toolchain is required**.
 
@@ -43,6 +43,21 @@ AI models (faster-whisper — and Ollama, if you pick it) download automatically
 > ⚠️ **Windows 11 Smart App Control (SAC).** On a *minority* of PCs (clean installs of Windows 11) SAC is ON and blocks files downloaded from the internet — **including scripts** — with no "Run anyway" button. If you hit that block, either **unblock the ZIP before extracting** (step 2) or temporarily turn SAC off: *Windows Security → App & browser control → Smart App Control → Off*, install, then turn it back on. Most PCs (upgrades from Windows 10) have SAC **off** and just work.
 >
 > 🎯 **Microsoft Store — submitted & in certification.** The **v0.2.0** MSIX package has been submitted to the Microsoft Store and is currently going through certification. Once published it installs with **zero warnings** — Microsoft re-signs Store packages and SAC trusts them by design — so no unblocking is needed. (Not live yet; this is the frictionless path coming as soon as certification clears.)
+
+### 🍎 macOS (Apple Silicon)
+
+Download **`VOKARI-vX.Y.Z.dmg`** from [Releases](https://github.com/salvoclemenza-hub/vokari/releases), open it, and drag **VOKARI** into **Applications**.
+
+VOKARI isn't notarized (no paid Apple Developer account), so on first launch macOS shows *"Apple cannot verify…"*. To open it:
+
+- **Right-click** the app → **Open** → **Open** (only the first time), **or**
+- Terminal: `xattr -dr com.apple.quarantine /Applications/VOKARI.app`
+
+Requires **ffmpeg** (`brew install ffmpeg`); Ollama is optional for the local AI brain. On macOS recording is **microphone-only** (system-audio loopback is Windows-only for now).
+
+### 🐧 Linux
+
+Run from source (see **Developer setup** below) — it works on Linux as-is. Prerequisites: `sudo apt install ffmpeg libportaudio2` (or your distro's equivalent). Recording is **microphone-only** (system-audio loopback is Windows-only for now).
 
 ### 🛠 Developer setup (works today)
 
@@ -181,8 +196,9 @@ uv run python scripts/e2e_smoke.py your-audio.m4a
 
 - ✅ **v1** — local transcription + briefing + recap + Obsidian export (done)
 - ✅ **v0.2.0** — packaged Windows release (ZIP/setup), full EN/IT i18n, transcript editing, interview live draft, model-fit gate, long-audio handling (done)
+- ✅ **v0.2.1** — **macOS** (Apple Silicon, DMG) and **Linux** support — both microphone-only (done)
 - 📦 **Microsoft Store** — MSIX **submitted & in certification**; zero-warning install once published
-- 📋 **v2** — macOS/Linux system-audio capture · speaker attribution · RAG over your vault · batch / watch-folder
+- 📋 **v2** — system-audio capture on macOS/Linux · speaker attribution · RAG over your vault · batch / watch-folder
 - 🤖 **v3** — sentiment analysis, action-item extraction, multi-LLM comparison
 
 ---

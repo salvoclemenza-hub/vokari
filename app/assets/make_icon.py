@@ -126,6 +126,19 @@ def main() -> None:
     master.save(ASSETS / "vokari.ico", sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
     print("Scritti: vokari.png, vokari.ico, vokari_512.png, store_logo_300.png")
 
+    # Asset MSIX (Store): stessa icona #vicon, renderizzata alle misure dichiarate in
+    # packaging/msix/AppxManifest.xml. Generarli QUI è il fix del disallineamento storico
+    # (build_msix copia questi PNG verbatim → senza rigenerarli il pacchetto spediva la "V"
+    # piatta vecchia mentre app/assets era già passato al brand #vicon).
+    msix_assets = ASSETS.parent.parent / "packaging" / "msix" / "Assets"
+    if msix_assets.is_dir():
+        render(50).save(msix_assets / "StoreLogo.png")
+        render(150).save(msix_assets / "Square150x150Logo.png")
+        render(44).save(msix_assets / "Square44x44Logo.png")
+        print(f"Scritti MSIX: StoreLogo.png, Square150x150Logo.png, Square44x44Logo.png -> {msix_assets}")
+    else:
+        print(f"[skip] asset MSIX: {msix_assets} non trovato")
+
 
 if __name__ == "__main__":
     main()

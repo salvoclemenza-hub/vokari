@@ -16,7 +16,9 @@ describe("bridge", () => {
     vi.useFakeTimers();
     const p = getAppInfo();
     await vi.advanceTimersByTimeAsync(5100);
-    await expect(p).resolves.toEqual({ version: "dev", license: "MIT", githubStars: 0 });
+    await expect(p).resolves.toEqual({
+      version: "dev", license: "MIT", githubStars: 0, platform: "windows", systemAudioSupported: true,
+    });
   });
 
   it("inoltra alla api di pywebview quando presente", async () => {

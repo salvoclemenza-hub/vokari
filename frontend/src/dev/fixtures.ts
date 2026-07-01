@@ -95,7 +95,7 @@ export const SAMPLE_PARTIAL_TRANSCRIPT =
 
 // ── Strutture dati ────────────────────────────────────────────────────────────
 
-export const sampleAppInfo: AppInfo = { version: "0.1.0", license: "MIT", githubStars: 42 };
+export const sampleAppInfo: AppInfo = { version: "0.1.0", license: "MIT", githubStars: 42, platform: "windows", systemAudioSupported: true };
 
 // RAM bassa di proposito (8 GB) così l'harness mostra l'avviso "pesante per la tua RAM"
 // sul modello da 14B (≈11.7 GB stimati) e il filtro "Compatibili" lo esclude (MOD2).

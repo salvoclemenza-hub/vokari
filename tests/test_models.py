@@ -93,7 +93,10 @@ def test_expected_bytes_parses_gb():
 
 def test_download_with_progress_emits_and_returns_path(monkeypatch, tmp_path):
     """download_with_progress chiama download() e invoca on_progress almeno una volta
-    mentre la dir modelli cresce. Poll accelerato per il test."""
+    mentre la dir modelli cresce. Sincronizzazione deterministica: download() non ritorna
+    finché il monitor non ha emesso almeno un progresso (o 5s di guardia) → niente race di
+    timing su runner CI carichi, dove il thread monitor poteva non essere schedulato prima
+    della fine di un download veloce."""
     import time
 
     from vokari.transcribe import models
@@ -101,14 +104,17 @@ def test_download_with_progress_emits_and_returns_path(monkeypatch, tmp_path):
     monkeypatch.setattr(models, "_DL_POLL_S", 0.02)
     monkeypatch.setattr(models, "_cache_dir", lambda: str(tmp_path))
 
+    seen: list[tuple[int, int]] = []
+
     def fake_download(name):
         (tmp_path / "blob.bin").write_bytes(b"\0" * 1_000_000)  # fa crescere la dir
-        time.sleep(0.1)  # tiene occupato il monitor
+        deadline = time.monotonic() + 5.0
+        while not seen and time.monotonic() < deadline:  # attende il primo progresso del monitor
+            time.sleep(0.01)
         return "/fake/path"
 
     monkeypatch.setattr(models, "download", fake_download)
 
-    seen: list[tuple[int, int]] = []
     out = models.download_with_progress("small", on_progress=lambda d, t: seen.append((d, t)))
 
     assert out == "/fake/path"

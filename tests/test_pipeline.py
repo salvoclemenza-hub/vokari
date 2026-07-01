@@ -15,6 +15,15 @@ class StubProvider:
         return ""
 
 
+@pytest.fixture(autouse=True)
+def _model_available(monkeypatch):
+    """I test di pipeline non devono dipendere da un download reale del modello da HuggingFace
+    (flaky in CI: HfHubHTTPError → 'error' invece dello stato atteso). Per default il modello
+    risulta già scaricato; i test che verificano il ramo 'modello non scaricato' sovrascrivono
+    is_downloaded esplicitamente (l'ultimo setattr sullo stesso monkeypatch vince)."""
+    monkeypatch.setattr(P.models_mod, "is_downloaded", lambda name: True)
+
+
 @pytest.fixture
 def store(tmp_path):
     return JobStore(jobs_dir=tmp_path / "jobs")

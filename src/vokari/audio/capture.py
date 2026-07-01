@@ -7,6 +7,7 @@ isolato dietro _sd()/_pyaudio() (import lazy) e mockato nei test.
 
 import os
 import shutil
+import sys
 import tempfile
 import threading
 import time
@@ -156,6 +157,26 @@ def _pyaudio():
     return pyaudio
 
 
+def system_audio_supported() -> bool:
+    """True se la cattura dell'audio di sistema (loopback) è disponibile su questa piattaforma:
+    - Windows: WASAPI loopback (pyaudiowpatch importabile);
+    - Linux: device monitor (PipeWire/PulseAudio) presente;
+    - macOS/altro: False in v1 (servirebbe BlackHole o ScreenCaptureKit).
+    Tollerante: non instanzia hardware oltre la query dei device, un errore → False."""
+    if sys.platform.startswith("win"):
+        try:
+            _pyaudio()
+        except RuntimeError:
+            return False
+        return True
+    if sys.platform.startswith("linux"):
+        try:
+            return _default_monitor_device() is not None
+        except Exception:
+            return False
+    return False
+
+
 def _capture_mic_native(out_path: str, *, stop_event, device=None, pause_event=None, on_level=None, on_audio=None):
     """Cattura il microfono al sample rate nativo finché stop_event non è settato.
     Mentre pause_event è settato i frame vengono letti ma SCARTATI (pausa).
@@ -293,12 +314,13 @@ class Recorder:
     sample-accurate; il mix tronca/padda alla lunghezza massima (allineamento ~best-effort).
     """
 
-    def __init__(self, source: str, out_path: str, *, device=None, on_level=None, on_audio=None):
+    def __init__(self, source: str, out_path: str, *, device=None, system_device=None, on_level=None, on_audio=None):
         if source not in ("mic", "system", "both"):
             raise ValueError(f"source non valida: {source!r} (usa mic|system|both)")
         self.source = source
         self.out_path = str(out_path)
         self._device = device
+        self._system_device = system_device  # device monitor per la lane 'system' (Linux); None = autodetect
         self._on_level = on_level  # callback(lane: str, db: float) | None
         self._on_audio = on_audio  # callback(mono_int16: np.ndarray, rate: int) | None
         self._audio_lane: str | None = None  # lane preferita per on_audio (mic > altri)
@@ -321,11 +343,24 @@ class Recorder:
         except Exception:  # noqa: S110 — il livello è decorativo, non deve rompere la cattura
             pass
 
-    def _run_capture(self, name, fn, native_path):
-        kwargs = {"stop_event": self._stop, "device": self._device, "pause_event": self._pause}
+    def _system_capture_fn(self):
+        """Funzione di cattura per la lane 'system': WASAPI loopback su Windows, cattura
+        sounddevice (device monitor) altrove (Linux/PipeWire-Pulse)."""
+        if sys.platform.startswith("win"):
+            return _capture_system_native
+        return _capture_mic_native
+
+    def _resolve_device(self, name: str):
+        """Device da passare alla lane `name`. La lane 'system' su Linux usa il device monitor
+        esplicito (self._system_device) o, se assente, il primo monitor disponibile. Su Windows
+        il loopback ignora il device. La lane 'mic' usa self._device."""
+        if name == "system" and not sys.platform.startswith("win"):
+            return self._system_device if self._system_device is not None else _default_monitor_device()
+        return self._device
+
+    def _run_capture(self, name, fn, native_path, device):
+        kwargs = {"stop_event": self._stop, "device": device, "pause_event": self._pause}
         if self._on_level:
-            # Passiamo on_level SOLO se richiesto: così le funzioni di cattura mockate
-            # nei test (firma senza on_level) restano compatibili.
             kwargs["on_level"] = lambda db: self._emit_level(name, db)
         if self._on_audio is not None and name == self._audio_lane:
             kwargs["on_audio"] = self._on_audio
@@ -339,13 +374,15 @@ class Recorder:
         self._paused_total = 0.0
         self._paused_at = None
         self._tmpdir = Path(tempfile.mkdtemp(prefix="vokari-rec-"))
-        funcs = {"mic": _capture_mic_native, "system": _capture_system_native}
+        funcs = {"mic": _capture_mic_native, "system": self._system_capture_fn()}
         active = ["mic", "system"] if self.source == "both" else [self.source]
         self._audio_lane = "mic" if "mic" in active else active[0]
         for name in active:
             native = self._tmpdir / f"{name}_native.wav"
             self._native[name] = native
-            t = threading.Thread(target=self._run_capture, args=(name, funcs[name], native), daemon=True)
+            t = threading.Thread(
+                target=self._run_capture, args=(name, funcs[name], native, self._resolve_device(name)), daemon=True
+            )
             self._threads.append((name, t))
             t.start()
 
@@ -541,3 +578,32 @@ def list_loopback_devices() -> list[dict]:
     finally:
         p.terminate()
     return out
+
+
+def list_monitor_devices() -> list[dict]:
+    """Sorgenti 'monitor' di sistema su Linux (PulseAudio/PipeWire): catturano l'audio in
+    USCITA. Sono normali device di input il cui nome contiene 'monitor'. Speculare a
+    list_loopback_devices() (Windows). [{index, name, channels, samplerate}]."""
+    sd = _sd()
+    out = []
+    for i, d in enumerate(sd.query_devices()):
+        name = str(d.get("name", ""))
+        if d["max_input_channels"] > 0 and "monitor" in name.lower():
+            out.append(
+                {
+                    "index": i,
+                    "name": name,
+                    "channels": d["max_input_channels"],
+                    "samplerate": int(d["default_samplerate"]),
+                }
+            )
+    return out
+
+
+def _default_monitor_device() -> int | None:
+    """Indice del primo device monitor disponibile (Linux), o None se nessuno/errore."""
+    try:
+        mons = list_monitor_devices()
+    except RuntimeError:
+        return None
+    return mons[0]["index"] if mons else None

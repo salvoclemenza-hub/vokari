@@ -1,4 +1,5 @@
 import shutil
+import sys
 import threading
 import time
 
@@ -183,6 +184,8 @@ def test_recorder_single_source_outputs_16k_mono(tmp_path, monkeypatch):
 
 
 def test_recorder_both_mixes_to_16k_mono(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, "platform", "win32")
+
     def fake_mic(out_path, *, stop_event, device=None, pause_event=None):
         capture.write_pcm16_wav(np.full(8000, 1000, dtype=np.int16), out_path, samplerate=16000, channels=1)
         return 16000, 1
@@ -382,6 +385,8 @@ def test_recorder_surfaces_capture_error(tmp_path, monkeypatch):
 
 
 def test_recorder_both_falls_back_to_mic_when_system_fails(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, "platform", "win32")
+
     def fake_mic(out_path, *, stop_event, device=None, pause_event=None):
         capture.write_pcm16_wav(np.full(8000, 1500, dtype=np.int16), out_path, samplerate=16000, channels=1)
         return 16000, 1
@@ -407,6 +412,7 @@ def test_recorder_stop_does_not_hang_on_stuck_source(tmp_path, monkeypatch):
     """Se un thread di cattura si blocca (es. loopback WASAPI silenzioso che non ritorna da
     read()), stop() NON deve appendere all'infinito: timeout sul join → fallback alla
     sorgente terminata (qui mic). È la causa probabile di 'Stop non funziona' in 'both'."""
+    monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setattr(capture, "_STOP_JOIN_TIMEOUT", 0.3)
     block = threading.Event()
 
@@ -426,6 +432,36 @@ def test_recorder_stop_does_not_hang_on_stuck_source(tmp_path, monkeypatch):
     block.set()
     assert res.source == "mic"  # fallback alla sorgente terminata
     assert any("non terminata" in w or "system" in w for w in res.warnings)
+
+
+def test_recorder_both_on_linux_uses_mic_capture_for_both_lanes(tmp_path, monkeypatch):
+    """Su Linux, 'both' usa _capture_mic_native per ENTRAMBE le lane (system tramite device
+    monitor, mic tramite device di default). Il loopback WASAPI non viene mai chiamato."""
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(capture, "_default_monitor_device", lambda: 3)
+    # _dump_native_for_debug chiama app_dirs() che usa platformdirs — su Windows col
+    # platform patchato a "linux" scatta NotImplementedError: isoliamo la chiamata.
+    import vokari.paths
+
+    monkeypatch.setattr(vokari.paths, "app_dirs", lambda: type("D", (), {"data": tmp_path / "data"})())
+    calls: list[dict] = []
+
+    def fake_mic(out_path, *, stop_event, device=None, pause_event=None, on_level=None, on_audio=None):
+        calls.append({"device": device, "out_path": out_path})
+        capture.write_pcm16_wav(np.full(8000, 500, dtype=np.int16), out_path, samplerate=16000, channels=1)
+        return 16000, 1
+
+    monkeypatch.setattr(capture, "_capture_mic_native", fake_mic)
+    monkeypatch.setattr(capture, "_normalize", lambda src, dst: shutil.copyfile(src, dst))
+    out = tmp_path / "linux_both.wav"
+    rec = capture.Recorder("both", str(out))
+    rec.start()
+    res = rec.stop()
+    assert res.source == "both"
+    assert len(calls) == 2  # entrambe le lane attivate via _capture_mic_native
+    devices = {c["device"] for c in calls}
+    assert 3 in devices  # la lane 'system' riceve il device monitor
+    assert None in devices  # la lane 'mic' usa il device di default (None)
 
 
 def test_recorder_raises_when_all_sources_fail(tmp_path, monkeypatch):
@@ -521,6 +557,29 @@ def test_update_marker_changes_label():
     assert rec._markers[0]["label"] == "Lotto X"
 
 
+class _FakeSD:
+    def __init__(self, devices):
+        self._devices = devices
+
+    def query_devices(self):
+        return self._devices
+
+
+def test_list_monitor_devices_filters_only_monitors(monkeypatch):
+    devices = [
+        {"name": "Built-in Microphone", "max_input_channels": 1, "default_samplerate": 44100.0},
+        {"name": "Monitor of Built-in Audio", "max_input_channels": 2, "default_samplerate": 48000.0},
+        {"name": "HDMI Output", "max_input_channels": 0, "default_samplerate": 48000.0},
+    ]
+    monkeypatch.setattr(capture, "_sd", lambda: _FakeSD(devices))
+    out = capture.list_monitor_devices()
+    assert len(out) == 1
+    assert out[0]["index"] == 1
+    assert out[0]["name"] == "Monitor of Built-in Audio"
+    assert out[0]["channels"] == 2
+    assert out[0]["samplerate"] == 48000
+
+
 def test_update_marker_out_of_range_returns_none():
     rec = capture.Recorder("mic", "x.wav")
     assert rec.update_marker(0, "x") is None  # nessun marker
@@ -598,3 +657,29 @@ def test_disk_preflight_tolerates_read_error(monkeypatch):
     monkeypatch.setattr(capture, "disk_free_bytes", _boom)
     sev, _mins = capture.disk_preflight("mic")
     assert sev == "ok"
+
+
+# --- Task 2: dispatch cattura system per-OS + device monitor per-lane ---
+
+
+def test_recorder_system_dispatch_linux_uses_mic_capture(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(capture, "_default_monitor_device", lambda: 7)
+    calls = {}
+
+    def fake_mic(out_path, *, stop_event, device=None, pause_event=None, on_level=None, on_audio=None):
+        calls["device"] = device
+        return 16000, 1
+
+    monkeypatch.setattr(capture, "_capture_mic_native", fake_mic)
+    rec = capture.Recorder("system", "out.wav")
+    fn = rec._system_capture_fn()
+    assert fn is fake_mic  # su Linux il system usa la cattura mic (device monitor)
+    assert rec._resolve_device("system") == 7  # device monitor di default risolto
+
+
+def test_recorder_system_dispatch_windows_uses_loopback(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "win32")
+    rec = capture.Recorder("system", "out.wav")
+    assert rec._system_capture_fn() is capture._capture_system_native
+    assert rec._resolve_device("system") is None  # WASAPI loopback ignora il device

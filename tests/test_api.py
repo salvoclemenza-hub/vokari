@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 import pytest
@@ -1317,6 +1318,28 @@ def test_lhm_status_reports_can_install(isolated_api, monkeypatch):
     assert st["canInstall"] is False
 
 
+def test_lhm_status_not_supported_on_linux(isolated_api, monkeypatch):
+    import app.lhm_manager as lm
+
+    monkeypatch.setattr(lm, "is_installed", lambda d: False)
+    monkeypatch.setattr(lm, "is_running", lambda: False)
+    monkeypatch.setattr(lm, "can_auto_install", lambda: False)
+    monkeypatch.setattr(sys, "platform", "linux")
+    st = isolated_api.lhm_status()
+    assert st["supported"] is False
+
+
+def test_lhm_status_supported_on_windows(isolated_api, monkeypatch):
+    import app.lhm_manager as lm
+
+    monkeypatch.setattr(lm, "is_installed", lambda d: False)
+    monkeypatch.setattr(lm, "is_running", lambda: False)
+    monkeypatch.setattr(lm, "can_auto_install", lambda: False)
+    monkeypatch.setattr(sys, "platform", "win32")
+    st = isolated_api.lhm_status()
+    assert st["supported"] is True
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # M7-H — Artefatti: get_artifacts espone recapMd/obsidianNote; export_pdf/obsidian
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2391,3 +2414,71 @@ def test_resume_job_midflight_missing_audio_sets_error(api, tmp_path):
     assert out is not None
     assert out["status"] == "error"
     assert api._store.get(job.id).status == "error"
+
+
+def test_resume_job_after_error_with_transcript_skips_transcribe(api, tmp_path):
+    """Bug 2026-06-30: dopo un crash in analisi (es. entità con type fuori-enum) il job resta
+    `error` ma la trascrizione è salvata → 'Riprova' deve ripartire dall'ANALISI senza re-importare
+    l'audio né perdere il contesto (skip_transcribe=True). Prima il ramo 'error' di resume_job non
+    esisteva → vicolo cieco, l'utente doveva re-importare tutto."""
+    job = api._store.create(
+        Job.new(str(tmp_path / "a.wav"), status="error", error="boom", transcript="verbale riunione", context="scope")
+    )
+    spawned: dict = {}
+    api._spawn_processing = lambda j, skip_transcribe=False: spawned.update(id=j.id, skip=skip_transcribe)  # type: ignore[method-assign]
+    api.resume_job(job.id)
+    assert spawned.get("id") == job.id
+    assert spawned.get("skip") is True  # transcript presente → riparte dall'analisi
+
+
+def test_resume_job_after_error_without_transcript_retranscribes(api, tmp_path):
+    """Errore PRIMA della trascrizione (no testo) ma audio presente → 'Riprova' ri-trascrive
+    (cache whisper per hash → veloce), skip_transcribe=False."""
+    audio = tmp_path / "a.wav"
+    audio.write_bytes(b"RIFFxxxxWAVE")
+    job = api._store.create(Job.new(str(audio), status="error", error="boom", transcript=""))
+    spawned: dict = {}
+    api._spawn_processing = lambda j, skip_transcribe=False: spawned.update(id=j.id, skip=skip_transcribe)  # type: ignore[method-assign]
+    api.resume_job(job.id)
+    assert spawned.get("id") == job.id
+    assert spawned.get("skip") is False
+
+
+def test_list_sources_linux_uses_monitor(api, monkeypatch):
+    import app.debuglog
+
+    from vokari.audio import capture
+
+    # debuglog.log → app_dirs() → platformdirs: patchare a no-op evita NotImplementedError
+    # quando sys.platform è forzato a "linux" su un host Windows.
+    monkeypatch.setattr(app.debuglog, "log", lambda *a, **kw: None)
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(
+        capture, "list_input_devices", lambda: [{"index": 0, "name": "Mic", "channels": 1, "samplerate": 44100}]
+    )
+    monkeypatch.setattr(
+        capture, "list_monitor_devices", lambda: [{"index": 1, "name": "Monitor", "channels": 2, "samplerate": 48000}]
+    )
+
+    def _boom():
+        raise AssertionError("list_loopback_devices NON deve essere chiamata su Linux")
+
+    monkeypatch.setattr(capture, "list_loopback_devices", _boom)
+    out = api.list_sources()
+    assert out["system"][0]["name"] == "Monitor"
+
+
+def test_list_sources_windows_uses_loopback(api, monkeypatch):
+    import sys
+
+    from vokari.audio import capture
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(capture, "list_input_devices", lambda: [])
+    monkeypatch.setattr(
+        capture,
+        "list_loopback_devices",
+        lambda: [{"index": 5, "name": "Speakers loopback", "channels": 2, "samplerate": 48000}],
+    )
+    out = api.list_sources()
+    assert out["system"][0]["name"] == "Speakers loopback"
