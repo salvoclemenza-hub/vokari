@@ -46,14 +46,28 @@ AI models (faster-whisper — and Ollama, if you pick it) download automatically
 
 ### 🍎 macOS (Apple Silicon)
 
-Download **`VOKARI-vX.Y.Z.dmg`** from [Releases](https://github.com/salvoclemenza-hub/vokari/releases), open it, and drag **VOKARI** into **Applications**.
+**Recommended — Homebrew** (builds locally, so **no Gatekeeper prompt**; pulls `ffmpeg` and `portaudio` automatically). Copy & paste:
 
-VOKARI isn't notarized (no paid Apple Developer account), so on first launch macOS shows *"Apple cannot verify…"*. To open it:
+```bash
+brew install salvoclemenza-hub/vokari/vokari
+```
 
-- **Right-click** the app → **Open** → **Open** (only the first time), **or**
-- Terminal: `xattr -dr com.apple.quarantine /Applications/VOKARI.app`
+Then launch the app:
 
-Requires **ffmpeg** (`brew install ffmpeg`); Ollama is optional for the local AI brain. On macOS recording is **microphone-only** (system-audio loopback is Windows-only for now).
+```bash
+vokari-app
+```
+
+**Alternative — DMG:** download **`VOKARI-vX.Y.Z.dmg`** from [Releases](https://github.com/salvoclemenza-hub/vokari/releases), open it, and drag **VOKARI** into **Applications**. The `.app` is self-contained (**ffmpeg is bundled** — no prerequisites).
+
+VOKARI isn't notarized (no paid Apple Developer account), so on first launch macOS blocks it with *"Apple cannot verify…"* or *"«VOKARI» is damaged and can't be opened → Move to Trash"*. ⚠️ **It is NOT actually damaged** — the signature is valid, it's just not notarized. On macOS Sequoia (15) / Tahoe (26) "right-click → Open" no longer works and the *"damaged"* dialog often has **no** "Open Anyway" button, so the reliable fix is Terminal:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/VOKARI.app
+```
+
+Then double-click to open. Recording is **microphone-only** (system-audio loopback is Windows-only for now).
+
 
 ### 🐧 Linux
 
