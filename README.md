@@ -46,17 +46,27 @@ AI models (faster-whisper — and Ollama, if you pick it) download automatically
 
 ### 🍎 macOS (Apple Silicon)
 
-**Recommended — Homebrew** (builds locally, so **no Gatekeeper prompt**; pulls `ffmpeg` and `portaudio` automatically). Copy & paste:
+**Recommended for terminal users — Homebrew** (builds locally, so **no Gatekeeper prompt**; pulls `ffmpeg` and `portaudio` automatically).
+
+> ⚠️ **Needs up-to-date Command Line Tools.** The formula builds from source, so with outdated CLT `brew install` exits with *"Command Line Tools are too outdated"* and installs nothing. Fix once, then retry:
+> ```bash
+> sudo xcode-select --install
+> ```
+> (or System Settings → General → Software Update, where the Command Line Tools appear.)
+
+Copy & paste:
 
 ```bash
 brew install salvoclemenza-hub/vokari/vokari
 ```
 
-Then launch the app:
+Homebrew installs a **command-line launcher** — there is **no icon in /Applications**. Start the app from Terminal:
 
 ```bash
 vokari-app
 ```
+
+> Prefer a clickable app in /Applications? Use the **DMG** below instead (one `xattr` once).
 
 **Alternative — DMG:** download **`VOKARI-vX.Y.Z.dmg`** from [Releases](https://github.com/salvoclemenza-hub/vokari/releases), open it, and drag **VOKARI** into **Applications**. The `.app` is self-contained (**ffmpeg is bundled** — no prerequisites).
 
