@@ -48,6 +48,8 @@ AI models (faster-whisper — and Ollama, if you pick it) download automatically
 
 **Recommended for terminal users — Homebrew** (builds locally, so **no Gatekeeper prompt**; pulls `ffmpeg` and `portaudio` automatically).
 
+> 🛑 **macOS 26 "Tahoe": Homebrew is currently broken (upstream bug) — use the DMG.** On Tahoe, Homebrew's `python@3.12` has `pyexpat` linked against an expat symbol (`XML_SetAllocTrackerActivationThreshold`, from the 26.6 SDK header) that Tahoe's runtime `libexpat` doesn't export → `pip` crashes → **any** brew Python formula fails to install (both the bottle and `--build-from-source`). This is **not** VOKARI's formula — it's an Apple/Homebrew SDK↔runtime skew that will clear once Homebrew rebuilds its Python bottles for Tahoe. Until then, on Tahoe install from the **DMG** below. On macOS 15 (Sequoia) and earlier the Homebrew channel works.
+
 > ⚠️ **Needs up-to-date Command Line Tools.** The formula builds from source, so with outdated CLT `brew install` exits with *"Command Line Tools are too outdated"* and installs nothing. Fix once, then retry:
 > ```bash
 > sudo xcode-select --install
