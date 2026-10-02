@@ -20,7 +20,7 @@ vi.mock("./bridge", async (importOriginal) => {
       ...real.bridge,
       getActiveJob: vi.fn().mockResolvedValue(null),
       getSettings: vi.fn().mockResolvedValue({
-        brain: "claude", ollamaEndpoint: "", ollamaModel: "", whisperModel: "large-v3-turbo",
+        brain: "claude", ollamaEndpoint: "", ollamaModel: "", consolidateModel: "", whisperModel: "large-v3-turbo",
         claudeModel: "claude-opus-4-8", briefingDir: "", obsidianVault: "",
         defaultMode: "solo", transcriptionLanguage: "auto", livePreview: true, liveModel: "base", onboarded: true, lastSeenVersion: "", appLanguage: "it", hasApiKey: false,
       }),
@@ -40,7 +40,7 @@ vi.mock("./bridge", async (importOriginal) => {
       listSessions: vi.fn().mockResolvedValue([]),
       listModels: vi.fn().mockResolvedValue([]),
       saveSettings: vi.fn().mockResolvedValue({
-        brain: "claude", ollamaEndpoint: "", ollamaModel: "", whisperModel: "large-v3-turbo",
+        brain: "claude", ollamaEndpoint: "", ollamaModel: "", consolidateModel: "", whisperModel: "large-v3-turbo",
         claudeModel: "claude-opus-4-8", briefingDir: "", obsidianVault: "",
         defaultMode: "solo", transcriptionLanguage: "auto", livePreview: true, liveModel: "base", onboarded: true, lastSeenVersion: "", appLanguage: "it", hasApiKey: false,
       }),
@@ -71,7 +71,7 @@ describe("App — macchina a stati", () => {
     // "contagia" i successivi. I test che vogliono altri settings lo ri-sovrascrivono nel corpo.
     const { bridge } = await import("./bridge");
     (bridge.getSettings as ReturnType<typeof vi.fn>).mockResolvedValue({
-      brain: "claude", ollamaEndpoint: "", ollamaModel: "", whisperModel: "large-v3-turbo",
+      brain: "claude", ollamaEndpoint: "", ollamaModel: "", consolidateModel: "", whisperModel: "large-v3-turbo",
       claudeModel: "claude-opus-4-8", briefingDir: "", obsidianVault: "",
       defaultMode: "solo", transcriptionLanguage: "auto", livePreview: true, liveModel: "base", onboarded: true, lastSeenVersion: "", appLanguage: "it", hasApiKey: false,
     });
@@ -85,7 +85,7 @@ describe("App — macchina a stati", () => {
   it("primo avvio (onboarded:false) → mostra il wizard; 'Salta' → Home e segna onboarded", async () => {
     const { bridge } = await import("./bridge");
     (bridge.getSettings as ReturnType<typeof vi.fn>).mockResolvedValue({
-      brain: "claude", ollamaEndpoint: "", ollamaModel: "", whisperModel: "large-v3-turbo",
+      brain: "claude", ollamaEndpoint: "", ollamaModel: "", consolidateModel: "", whisperModel: "large-v3-turbo",
       claudeModel: "claude-opus-4-8", briefingDir: "", obsidianVault: "",
       defaultMode: "solo", transcriptionLanguage: "auto", livePreview: true, liveModel: "base", onboarded: false, lastSeenVersion: "", appLanguage: "it", hasApiKey: false,
     });
@@ -103,7 +103,7 @@ describe("App — macchina a stati", () => {
   it("aggiornamento con novità non viste → popup 'Novità'; chiudendolo segna lastSeenVersion (Tema 2)", async () => {
     const { bridge } = await import("./bridge");
     (bridge.getSettings as ReturnType<typeof vi.fn>).mockResolvedValue({
-      brain: "claude", ollamaEndpoint: "", ollamaModel: "", whisperModel: "large-v3-turbo",
+      brain: "claude", ollamaEndpoint: "", ollamaModel: "", consolidateModel: "", whisperModel: "large-v3-turbo",
       claudeModel: "claude-opus-4-8", briefingDir: "", obsidianVault: "",
       defaultMode: "solo", transcriptionLanguage: "auto", livePreview: true, liveModel: "base",
       onboarded: true, lastSeenVersion: "0.1.1", appLanguage: "it", hasApiKey: false,
@@ -137,7 +137,7 @@ describe("App — macchina a stati", () => {
   it("Stop passa mode (da settings) e titolo digitato a stopRecording", async () => {
     const { bridge } = await import("./bridge");
     (bridge.getSettings as ReturnType<typeof vi.fn>).mockResolvedValue({
-      brain: "claude", ollamaEndpoint: "", ollamaModel: "", whisperModel: "large-v3-turbo",
+      brain: "claude", ollamaEndpoint: "", ollamaModel: "", consolidateModel: "", whisperModel: "large-v3-turbo",
       claudeModel: "claude-opus-4-8", briefingDir: "", obsidianVault: "",
       defaultMode: "riunione", transcriptionLanguage: "auto", livePreview: true, liveModel: "base", onboarded: true, lastSeenVersion: "", appLanguage: "it", hasApiKey: false,
     });
@@ -391,7 +391,7 @@ describe("App — macchina a stati", () => {
   it("import: il dialog passa tipo e contesto scelti a importFile (MDL2)", async () => {
     const { bridge } = await import("./bridge");
     (bridge.getSettings as ReturnType<typeof vi.fn>).mockResolvedValue({
-      brain: "claude", ollamaEndpoint: "", ollamaModel: "", whisperModel: "large-v3-turbo",
+      brain: "claude", ollamaEndpoint: "", ollamaModel: "", consolidateModel: "", whisperModel: "large-v3-turbo",
       claudeModel: "claude-opus-4-8", briefingDir: "", obsidianVault: "",
       defaultMode: "solo", transcriptionLanguage: "auto", livePreview: true, liveModel: "base", onboarded: true, lastSeenVersion: "", appLanguage: "it", hasApiKey: false,
     });

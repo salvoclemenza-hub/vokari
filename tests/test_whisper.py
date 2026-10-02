@@ -39,7 +39,7 @@ def test_transcribe_uses_cache_on_second_run(tmp_path, monkeypatch):
     _make_wav(p, 2)
     calls = {"n": 0}
 
-    def _fake_infer(audio, model_name, language, initial_prompt=""):
+    def _fake_infer(audio, model_name, language, initial_prompt="", **kw):
         calls["n"] += 1
         return [{"start": 0.0, "end": 1.0, "text": "uno"}]
 
@@ -56,7 +56,7 @@ def test_transcribe_chunks_long_audio_with_offsets(tmp_path, monkeypatch):
     _make_wav(p, 3)
     monkeypatch.setattr(chunking, "CHUNK_DURATION_S", 1)  # soglia bassa -> 3 chunk
 
-    def _fake_infer(audio, model_name, language, initial_prompt=""):
+    def _fake_infer(audio, model_name, language, initial_prompt="", **kw):
         return [{"start": 0.0, "end": 0.5, "text": "x"}]
 
     monkeypatch.setattr(whisper, "_transcribe_audio", _fake_infer)
@@ -74,7 +74,7 @@ def test_transcribe_dedupes_overlapping_chunk_segments(tmp_path, monkeypatch):
     monkeypatch.setattr(chunking, "OVERLAP_DURATION_S", 4)
 
     # ogni chunk (10s) restituisce gli stessi segmenti RELATIVI: 0.0 e 7.5
-    def _fake_infer(audio, model_name, language, initial_prompt=""):
+    def _fake_infer(audio, model_name, language, initial_prompt="", **kw):
         return [{"start": 0.0, "end": 0.5, "text": "a"}, {"start": 7.5, "end": 8.0, "text": "b"}]
 
     monkeypatch.setattr(whisper, "_transcribe_audio", _fake_infer)
@@ -93,7 +93,7 @@ def test_transcribe_stream_dedupes_overlapping_chunk_segments(tmp_path, monkeypa
     monkeypatch.setattr(chunking, "CHUNK_DURATION_S", 10)
     monkeypatch.setattr(chunking, "OVERLAP_DURATION_S", 4)
 
-    def _fake_iter(audio, model_name, language, should_cancel=None, initial_prompt=""):
+    def _fake_iter(audio, model_name, language, should_cancel=None, initial_prompt="", **kw):
         yield {"start": 0.0, "end": 0.5, "text": "a"}
         yield {"start": 7.5, "end": 8.0, "text": "b"}
 
@@ -124,7 +124,7 @@ def test_skips_reconversion_when_already_16k_mono(tmp_path, monkeypatch):
     monkeypatch.setattr(
         whisper,
         "_transcribe_audio",
-        lambda audio, model_name, language, initial_prompt="": [{"start": 0.0, "end": 1.0, "text": "x"}],
+        lambda audio, model_name, language, initial_prompt="", **kw: [{"start": 0.0, "end": 1.0, "text": "x"}],
     )
     whisper.transcribe(str(p), model="small", language="it")
     assert called["n"] == 0  # nessuna passata ffmpeg
@@ -144,7 +144,7 @@ def test_converts_when_not_16k_mono(tmp_path, monkeypatch):
     monkeypatch.setattr(
         whisper,
         "_transcribe_audio",
-        lambda audio, model_name, language, initial_prompt="": [{"start": 0.0, "end": 1.0, "text": "x"}],
+        lambda audio, model_name, language, initial_prompt="", **kw: [{"start": 0.0, "end": 1.0, "text": "x"}],
     )
     whisper.transcribe(str(p), model="small", language="it")
     assert called["n"] == 1  # conversione eseguita
@@ -181,7 +181,7 @@ def test_transcribe_captures_detected_language(tmp_path, monkeypatch):
     monkeypatch.setattr(
         W,
         "_transcribe_audio",
-        lambda audio, model, language, initial_prompt="": [{"start": 0.0, "end": 1.0, "text": "ciao"}],
+        lambda audio, model, language, initial_prompt="", **kw: [{"start": 0.0, "end": 1.0, "text": "ciao"}],
     )
     monkeypatch.setattr(W, "detect_language", lambda wav_path, model_name: ("en", 0.97))
 
@@ -201,7 +201,7 @@ def test_transcribe_tolerates_detect_language_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(
         W,
         "_transcribe_audio",
-        lambda audio, model, language, initial_prompt="": [{"start": 0.0, "end": 1.0, "text": "x"}],
+        lambda audio, model, language, initial_prompt="", **kw: [{"start": 0.0, "end": 1.0, "text": "x"}],
     )
 
     def _boom(wav_path, model_name):

@@ -57,6 +57,9 @@ const IcoRecap = () => (
 const IcoVault = () => (
   <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l9 5v10l-9 5-9-5V7l9-5zm0 2.3L5 8v8l7 3.9 7-3.9V8l-7-3.7z" /></svg>
 );
+const IcoTranscript = () => (
+  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 5h16v2H4V5zm0 4h16v2H4V9zm0 4h11v2H4v-2zm0 4h8v2H4v-2z" /></svg>
+);
 const IcoInfo = () => (
   <svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 7h2v2h-2V7zm0 4h2v6h-2v-6zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" /></svg>
 );
@@ -68,12 +71,13 @@ const IcoBars = () => (
 );
 
 export function ScreenArtifacts({
-  artifacts, onCopy, onOpenFolder, onExportPdf, onExportObsidian, onDownload, onReexport, onBack,
+  artifacts, onCopy, onOpenFolder, onExportPdf, onExportObsidian, onExportSrt, onDownload, onReexport, onBack,
 }: {
   artifacts?: Artifacts;
   onCopy?: (md: string) => void;
   onOpenFolder?: (path: string) => void;
   onExportPdf?: () => Promise<ExportResult> | void;
+  onExportSrt?: () => Promise<ExportResult> | void;
   onExportObsidian?: () => Promise<ExportResult> | void;
   onDownload?: (suggestedName: string, content: string) => Promise<ExportResult> | void;
   onReexport?: () => Promise<ExportResult> | void;
@@ -81,14 +85,14 @@ export function ScreenArtifacts({
 }) {
   const { t } = useTranslation();
   // Tempo di lettura tradotto (~200 parole/min). Locale alla schermata per usare t().
-  const readTimeLabel = (words: number): string => {
+  const readTimeLabel = (words: number, doc: string): string => {
     if (!words) return t("art.empty");
     const secs = Math.round((words / 200) * 60);
     const label = secs < 60 ? t("art.readSec", { n: Math.max(5, secs) }) : t("art.readMin", { n: Math.round(secs / 60) });
-    return t("art.readTime", { label, words });
+    return t("art.readTime", { label, words, doc });
   };
   const [tab, setTab] = useState<"briefing" | "recap" | "obsidian" | "transcript">("briefing");
-  const [busy, setBusy] = useState<"pdf" | "obsidian" | "reexport" | null>(null);
+  const [busy, setBusy] = useState<"pdf" | "obsidian" | "srt" | "reexport" | null>(null);
   const [openInfo, setOpenInfo] = useState<string | null>(null);
   const a = artifacts;
   const briefing = a?.briefingMd ?? "";
@@ -105,6 +109,11 @@ export function ScreenArtifacts({
     : tab === "recap" ? recap
     : tab === "obsidian" ? obsidian
     : transcript;
+  const tabDocName =
+    tab === "briefing" ? "briefing.md"
+    : tab === "recap" ? "recap.md"
+    : tab === "obsidian" ? "obsidian/"
+    : t("art.tabTranscript");
 
   // Mini-indice sezioni + chip "da chiarire": solo sul briefing, derivati dal markdown reale.
   const sections =
@@ -153,6 +162,23 @@ export function ScreenArtifacts({
       }
     } catch (e) {
       toast(t("art.toastPdfFail", { error: String(e) }), "error");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleExportSrt() {
+    if (!onExportSrt) return;
+    setBusy("srt");
+    try {
+      const res = await onExportSrt();
+      if (res && typeof res === "object") {
+        if (res.ok) toast(t("art.toastSrtSaved", { path: res.path ?? "" }), "success");
+        else if (res.error) toast(t("art.toastSrtFail", { error: res.error }), "error");
+        // res.cancelled (dialogo chiuso dall'utente) → nessun toast
+      }
+    } catch (e) {
+      toast(t("art.toastSrtFail", { error: String(e) }), "error");
     } finally {
       setBusy(null);
     }
@@ -253,7 +279,7 @@ export function ScreenArtifacts({
               onClick={() => setTab("transcript")}
             ><span className="dot" />{t("art.tabTranscript")}</button>
             <span className="vk-tabs-grow" />
-            <span className="vk-readtime">{readTimeLabel(countWords(tabContent))}</span>
+            <span className="vk-readtime">{readTimeLabel(countWords(tabContent), tabDocName)}</span>
             <button className="vk-copy" title={t("art.copyTitle")}
                     onClick={() => onCopy?.(tabContent)}>{t("art.copy")}</button>
           </div>
@@ -360,6 +386,30 @@ export function ScreenArtifacts({
               </div>
               <div className="vk-file-exp">{t("art.expVault")}</div>
             </div>
+
+            {hasTranscript && (
+              <div className={"vk-fileitem" + (openInfo === "transcript" ? " open" : "")}>
+                <div className="vk-file">
+                  <span className="ico tr"><IcoTranscript /></span>
+                  <div className="info">
+                    <div className="nm">{t("art.transcriptFileName")}</div>
+                    <div className="ds">{t("art.dsTranscript")}</div>
+                  </div>
+                  <div className="acts">
+                    <button type="button" className="vk-info-btn" aria-label={t("art.whatTranscript")}
+                            onClick={() => toggleInfo("transcript")}><IcoInfo /></button>
+                    {onExportSrt && (
+                      <button type="button" className="vk-mini" aria-label={t("art.srtAria")}
+                              title={t("art.srtTitle")}
+                              disabled={busy === "srt"} onClick={handleExportSrt}>{busy === "srt" ? "…" : "SRT"}</button>
+                    )}
+                    <button type="button" className="vk-mini"
+                            onClick={() => void handleDownload(t("art.transcriptFileName"), transcript)}>{t("art.download")}</button>
+                  </div>
+                </div>
+                <div className="vk-file-exp">{t("art.expTranscript")}</div>
+              </div>
+            )}
 
             <div className="vk-rail-sep" />
             {onReexport && (

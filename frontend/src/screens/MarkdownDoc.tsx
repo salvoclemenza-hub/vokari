@@ -8,6 +8,11 @@ import type { JSX, ReactNode } from "react";
 
 const CLAR_RE = /^\[DA CHIARIRE:\s*([\s\S]*?)\]\s*$/;
 
+// Tag XML strutturali del briefing (<purpose>, </context>, <session_summary>…): nel FILE
+// servono al consumatore LLM e restano, ma nell'anteprima sono rumore — ogni blocco ha già
+// il suo "## " come titolo. Solo tag nudi su riga propria (niente attributi) → mai testo utente.
+const XML_TAG_RE = /^<\/?[a-z][a-z0-9_]*>$/;
+
 /** Inline: **bold** e [[wikilink]]. Il resto è testo. */
 function inline(text: string): ReactNode[] {
   const out: ReactNode[] = [];
@@ -72,6 +77,7 @@ export function MarkdownDoc({ md }: { md: string }): JSX.Element {
   for (; i < lines.length; i++) {
     const line = lines[i].trim();
     if (!line) { flush(); continue; }
+    if (XML_TAG_RE.test(line)) { flush(); continue; }
     if (line.startsWith("## ")) { flush(); blocks.push(<h3 key={key++}>{inline(line.slice(3))}</h3>); continue; }
     if (line.startsWith("# ")) { flush(); blocks.push(<h2 key={key++}>{inline(line.slice(2))}</h2>); continue; }
     if (line.startsWith("- ") || line.startsWith("* ")) {

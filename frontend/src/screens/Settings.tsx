@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { bridge, onVokariEvent, DEFAULT_SETTINGS, type ModelEntry, type VokariSettings, type LhmStatus } from "../bridge";
+import { bridge, onVokariEvent, DEFAULT_SETTINGS, type ModelEntry, type OllamaModelEntry, type VokariSettings, type LhmStatus, type DiarizationStatus } from "../bridge";
 import { toast } from "../toast";
 import { confirmDialog } from "../confirm";
 import { VkIcon } from "../icons";
@@ -20,19 +20,25 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
   const [keyVerify, setKeyVerify] = useState<{ state: "idle" | "checking" | "ok" | "err"; msg: string }>(
     { state: "idle", msg: "" });
   const [models, setModels] = useState<ModelEntry[]>([]);
+  // Modelli Ollama installati: servono per scegliere il consolidatore (ADR-066).
+  const [ollamaModels, setOllamaModels] = useState<OllamaModelEntry[]>([]);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   // Verifica runtime Ollama (metodo bridge esistente; gestione completa → schermata Modelli AI).
   // OllamaHint distingue installato-ma-fermo da non-installato (B2).
   const [ollamaState, setOllamaState] = useState<"unknown" | "checking" | OllamaHint>("unknown");
   const [lhmStatus, setLhmStatus] = useState<LhmStatus | null>(null);
+  const [diarStatus, setDiarStatus] = useState<DiarizationStatus | null>(null);
+  const [diarDownloading, setDiarDownloading] = useState(false);
   const [lhmInstalling, setLhmInstalling] = useState(false);
 
   // carica settings + modelli + stato LHM al mount
   useEffect(() => {
     bridge.getSettings().then(setSettings);
     bridge.listModels().then(setModels);
+    bridge.listOllamaModels().then((m) => setOllamaModels(m.filter((x) => x.isInstalled)));
     bridge.lhmStatus().then(setLhmStatus);
+    bridge.diarizationStatus().then(setDiarStatus);
   }, []);
 
   // ascolta eventi model_download per aggiornare la lista
@@ -49,6 +55,26 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
         setDownloading(null);
         toast(t("settings.modelDownloadFail", { name: payload.name as string, error: (payload.error as string) ?? t("settings.unknownError") }), "error");
         bridge.listModels().then(setModels);
+      }
+    });
+    return off;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // fine (o fallimento) del download dei modelli per gli interlocutori
+  useEffect(() => {
+    const off = onVokariEvent((event, payload) => {
+      if (event !== "diarization_progress") return;
+      if (payload.status === "done") {
+        setDiarDownloading(false);
+        toast(t("settings.diarizationDownloaded"), "success");
+        bridge.diarizationStatus().then(setDiarStatus);
+      } else if (payload.status === "error") {
+        setDiarDownloading(false);
+        toast(
+          t("settings.diarizationDownloadFail", { error: (payload.error as string) ?? t("settings.unknownError") }),
+          "error",
+        );
       }
     });
     return off;
@@ -115,6 +141,16 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
       livePreview: DEFAULT_SETTINGS.livePreview,
       liveModel: DEFAULT_SETTINGS.liveModel,
     });
+  }
+
+  async function handleDiarizationDownload() {
+    setDiarDownloading(true);
+    try {
+      await bridge.downloadDiarizationModels();
+    } catch (e) {
+      toast(t("settings.diarizationDownloadFail", { error: String(e) }), "error");
+      setDiarDownloading(false);
+    }
   }
 
   async function handleApiKeyBlur() {
@@ -334,6 +370,30 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
                       : t("settings.ollamaNotInstalled")}
                   </div>
                 )}
+                {settings.brain === "ollama" && (
+                  <div className="vk-field" style={{ marginTop: 16, marginBottom: 0 }}>
+                    <label>{t("settings.consolidateLabel")}</label>
+                    <select
+                      className="vk-input"
+                      aria-label={t("settings.consolidateLabel")}
+                      value={settings.consolidateModel}
+                      onChange={(e) => {
+                        const consolidateModel = e.target.value;
+                        setSettings((s) => ({ ...s, consolidateModel }));
+                        void savePatch({ consolidateModel });
+                      }}
+                    >
+                      <option value="">{t("settings.consolidateSame")}</option>
+                      {ollamaModels
+                        .filter((m) => m.name !== settings.ollamaModel)
+                        .map((m) => (
+                          <option key={m.name} value={m.name}>{m.name}</option>
+                        ))}
+                    </select>
+                    <div className="vk-hlp">{t("settings.consolidateHelp")}</div>
+                  </div>
+                )}
+
                 {onOpenModels && (
                   <button className="vk-xlink" onClick={() => onOpenModels()}>
                     {t("settings.modelsManage")} <VkIcon.arrow /> {t("settings.modelsAI")}
@@ -598,6 +658,55 @@ export function ScreenSettings({ onOpenModels }: { onOpenModels?: () => void } =
                       </div>
                     );
                   })()}
+                </div>
+              )}
+
+              <div className="vk-field" style={{ marginTop: 16 }}>
+                <label>{t("settings.diarizationLabel")}</label>
+                <div className="vk-seg2">
+                  <button
+                    className={settings.diarization ? "on" : ""}
+                    onClick={() => void savePatch({ diarization: true })}
+                  >
+                    {t("settings.enable")}
+                  </button>
+                  <button
+                    className={!settings.diarization ? "on" : ""}
+                    onClick={() => void savePatch({ diarization: false })}
+                  >
+                    {t("settings.disable")}
+                  </button>
+                </div>
+                <div className="vk-hlp">{t("settings.diarizationHelp")}</div>
+              </div>
+
+              {settings.diarization && (
+                <div className="vk-field" style={{ marginBottom: 0 }}>
+                  <label>{t("settings.speakersLabel")}</label>
+                  <div className="vk-seg2">
+                    {[0, 2, 3, 4, 5].map((n) => (
+                      <button
+                        key={n}
+                        className={settings.numSpeakers === n ? "on" : ""}
+                        onClick={() => void savePatch({ numSpeakers: n })}
+                      >
+                        {n === 0 ? t("settings.speakersAuto") : n === 5 ? "5+" : n}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="vk-hlp">{t("settings.speakersHelp")}</div>
+                  {diarStatus && !diarStatus.available && (
+                    <div className="vk-hlp">{t("settings.diarizationUnavailable")}</div>
+                  )}
+                  {diarStatus && diarStatus.available && !diarStatus.modelsReady && (
+                    <div className="vk-dlnote">
+                      <VkIcon.down />
+                      <span>{t("settings.diarizationModelsMissing", { mb: diarStatus.sizeMb })}</span>
+                      <button disabled={diarDownloading} onClick={() => void handleDiarizationDownload()}>
+                        {diarDownloading ? t("settings.downloading") : t("settings.downloadNow")}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

@@ -150,7 +150,19 @@
     "privacyFooter": "L'audio non lascia mai il dispositivo. Nessun account obbligatorio: solo il testo viene inviato all'AI scelta.",
     "userContextLabel": "Il tuo contesto",
     "userContextHint": "Descrivi il tuo dominio, ruolo e termini ricorrenti: l'AI li userà per capire meglio le tue sessioni e trascrivere bene i termini tecnici. Opzionale.",
-    "userContextPlaceholder": "es. Magazzino alimentare B2B: lotti, tracciabilità, HACCP, DDT…"
+    "userContextPlaceholder": "es. Magazzino alimentare B2B: lotti, tracciabilità, HACCP, DDT…",
+    "consolidateLabel": "Modello per tirare le somme",
+    "consolidateSame": "Lo stesso dell'analisi",
+    "consolidateHelp": "Sulle registrazioni lunghe VOKARI legge a tratti e poi unisce quello che ha trovato: è una sola chiamata, breve. Un modello più capace qui unisce i doppioni e tiene le voci più precise, al prezzo di un paio di minuti in più a fine analisi.",
+    "diarizationLabel": "Attribuzione degli interlocutori",
+    "diarizationHelp": "Marca chi dice cosa nella trascrizione e nei sottotitoli. Gira in locale sulla CPU e aggiunge circa un minuto ogni tre di registrazione (misurato su questo tipo di macchina). Su un audio che mescola microfono e suono di sistema in un canale solo il risultato peggiora.",
+    "speakersLabel": "Quante persone parlano",
+    "speakersAuto": "Non lo so",
+    "speakersHelp": "Dirlo migliora molto il risultato: lasciato a «non lo so», capita che una stessa persona venga divisa in due.",
+    "diarizationModelsMissing": "I modelli per riconoscere le voci (~{{mb}} MB) non sono ancora sul computer.",
+    "diarizationUnavailable": "Il componente per riconoscere le voci non è installato in questa copia di VOKARI.",
+    "diarizationDownloaded": "Modelli per gli interlocutori pronti.",
+    "diarizationDownloadFail": "Download dei modelli non riuscito: {{error}}"
   },
   "home": {
     "kicker": "~/nuova-sessione",
@@ -162,8 +174,15 @@
     "sourceLabel": "sorgente",
     "typeGroup": "Tipo sessione",
     "sourceGroup": "Sorgente audio",
-    "mode": { "solo": "solo", "riunione": "riunione" },
-    "source": { "mic": "mic", "system": "system", "both": "entrambi" },
+    "mode": {
+      "solo": "solo",
+      "riunione": "riunione"
+    },
+    "source": {
+      "mic": "mic",
+      "system": "system",
+      "both": "entrambi"
+    },
     "modeHint": {
       "solo": "— note e brainstorming personali: l'analisi struttura idee, spunti e to-do",
       "riunione": "— più persone: l'analisi cerca decisioni, responsabili e prossimi passi"
@@ -372,7 +391,7 @@
     "empty": "vuoto",
     "readSec": "~{{n}} sec",
     "readMin": "~{{n}} min",
-    "readTime": "{{label}} · {{words}} parole",
+    "readTime": "{{label}} · {{words}} parole in {{doc}}",
     "toastPdfSaved": "PDF del recap salvato: {{path}}",
     "toastPdfFail": "PDF non generato: {{error}}",
     "toastPdfDone": "PDF del recap generato.",
@@ -388,7 +407,7 @@
     "back": "Sessioni",
     "kick": "~/sessione",
     "titleFallback": "Sessione",
-    "wordsLabel": "parole",
+    "wordsLabel": "parole trascritte",
     "ttRecapUnavailable": "recap.md non disponibile",
     "ttObsNotCreated": "Nota Obsidian non ancora creata",
     "ttTranscriptUnavailable": "Trascrizione non disponibile",
@@ -428,7 +447,15 @@
     "detTranscription": "trascrizione",
     "detLanguage": "lingua",
     "detPrivacy": "privacy",
-    "detPrivacyVal": "solo testo all'AI"
+    "detPrivacyVal": "solo testo all'AI",
+    "transcriptFileName": "trascrizione.txt",
+    "dsTranscript": "testo integrale",
+    "whatTranscript": "Cos'è la trascrizione",
+    "expTranscript": "Il testo integrale così come è stato riconosciuto dall'audio, senza rielaborazioni dell'AI: la fonte da cui nascono briefing, recap e note.",
+    "toastSrtSaved": "Sottotitoli salvati: {{path}}",
+    "toastSrtFail": "Sottotitoli non generati: {{error}}",
+    "srtAria": "Esporta i sottotitoli (.srt)",
+    "srtTitle": "Crea un file di sottotitoli con i tempi di ogni frase e ti chiede dove salvarlo"
   },
   "sess": {
     "noDate": "Senza data",

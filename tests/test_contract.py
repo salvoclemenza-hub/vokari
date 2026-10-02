@@ -45,6 +45,7 @@ SETTINGS_KEYS = {
     "brain",
     "ollamaEndpoint",
     "ollamaModel",
+    "consolidateModel",
     "whisperModel",
     "claudeModel",
     "briefingDir",
@@ -58,6 +59,8 @@ SETTINGS_KEYS = {
     "lastSeenVersion",
     "appLanguage",
     "userContext",
+    "diarization",
+    "numSpeakers",
 }
 ARTIFACTS_KEYS = {
     "title",
@@ -107,6 +110,7 @@ EVENTS = {
     "warning",
     "resource_usage",
     "lhm_progress",
+    "diarization_progress",
     "ollama_pull",
     "ollama_setup",
     "analysis_preview",
@@ -257,3 +261,33 @@ def test_analyze_step_payload_has_required_keys():
     assert "jobId" in payload_str, "payload analyze_step manca chiave 'jobId'"
     assert "step" in payload_str, "payload analyze_step manca chiave 'step'"
     assert "label" in payload_str, "payload analyze_step manca chiave 'label'"
+
+
+# ── Contratto: i metodi che il bridge chiama devono esistere davvero ──────────
+# Il bridge invoca `a.<metodo>()` su window.pywebview.api. `withApi` restituisce il
+# fallback solo se l'api MANCA DEL TUTTO: se c'e' ma il metodo no, il TypeError
+# diventa una promise rigettata che nessuno raccoglie (schermata monca in
+# produzione, unhandled error nei test). Due guardie, due drift diversi:
+#   1. Python: un metodo rinominato in api.py e non nel bridge = rotto in app.
+#   2. Mock dev: l'harness del browser (ADR-040) deve poter chiamare tutto quello
+#      che il bridge chiama, o l'anteprima mostra una UI piu' sana del reale.
+
+
+def _bridge_called_methods() -> set[str]:
+    src = (_ROOT / "frontend" / "src" / "bridge.ts").read_text(encoding="utf-8")
+    return set(re.findall(r"\ba\.([a-z_0-9]+)\(", src))
+
+
+def test_bridge_methods_exist_on_api():
+    """Ogni metodo chiamato dal bridge esiste su Api (drift Python↔JS)."""
+    from app.api import Api
+
+    missing = sorted(m for m in _bridge_called_methods() if not hasattr(Api, m))
+    assert not missing, f"bridge.ts chiama metodi assenti da app/api.py: {missing}"
+
+
+def test_dev_mock_api_covers_every_bridge_method():
+    """Il mock del dev harness copre ogni metodo del bridge (ADR-040)."""
+    mock = (_ROOT / "frontend" / "src" / "dev" / "mockApi.ts").read_text(encoding="utf-8")
+    missing = sorted(m for m in _bridge_called_methods() if not re.search(rf"^\s*{m}\s*:", mock, re.M))
+    assert not missing, f"dev/mockApi.ts non espone: {missing}"

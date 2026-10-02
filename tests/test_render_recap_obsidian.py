@@ -165,3 +165,54 @@ def test_obsidian_session_note_includes_markers():
     session = notes[0].content
     assert "## Segnalibri" in session
     assert "- 01:30 — Lotto X" in session
+
+
+def test_obsidian_frontmatter_survives_quotes_in_the_title():
+    """Un titolo con una virgoletta produceva `title: "Analisi "avocado""` = YAML invalido, e
+    Obsidian in quel caso non degrada: perde TUTTE le proprieta' della nota."""
+    import yaml
+
+    from vokari.analyze.schema import Analysis, Decision, Meta
+    from vokari.render.obsidian import render_obsidian_notes
+
+    a = Analysis(
+        meta=Meta(type="meeting", title='Analisi "avocado" 2025/26', date="2026-09-22"),
+        decisions=[Decision(title='Formato: "HTML", non PDF', decision="si usa HTML")],
+    )
+    notes = render_obsidian_notes(a, session_title='Analisi "avocado" 2025/26', session_date="2026-09-22")
+    assert len(notes) == 2
+    for note in notes:
+        fm = note.content.split("---")[1]
+        data = yaml.safe_load(fm)  # solleva se il frontmatter e' rotto
+        assert data["title"]
+        assert data["tags"]
+
+
+def test_obsidian_filenames_stay_openable_on_windows():
+    """Nomi che finiscono con punto o spazio: Windows li rinomina in silenzio e il wikilink
+    che punta al nome originale resta rotto. `^` confonde i riferimenti a blocco."""
+    from vokari.render.obsidian import safe
+
+    assert safe("Riunione del 3.") == "Riunione del 3"
+    assert safe("Nota  ") == "Nota"
+    assert safe("prezzi^2") == "prezzi2"
+    assert safe("***") == "Nota"
+
+
+def test_obsidian_wikilinks_match_the_generated_filenames():
+    """Il link [[...]] deve combaciare col nome del file, o nel vault resta un link morto."""
+    from vokari.analyze.schema import Analysis, Decision, Meta
+    from vokari.render.obsidian import render_obsidian_notes
+
+    a = Analysis(
+        meta=Meta(type="meeting", title="Riunione: calibri/2026", date="2026-09-22"),
+        decisions=[Decision(title="Scelta A", decision="si fa A")],
+    )
+    notes = render_obsidian_notes(a, session_title="Riunione: calibri/2026", session_date="2026-09-22")
+    names = {n.filename[:-3] for n in notes}  # senza .md
+    import re
+
+    for note in notes:
+        for link in re.findall(r"\[\[([^\]]+)\]\]", note.content):
+            if link.startswith("2026-09-22"):  # i link alle note generate, non alle entita'
+                assert link in names, f"wikilink morto: {link}"

@@ -27,14 +27,34 @@ describe("ScreenArtifacts", () => {
     const onDownload = vi.fn().mockResolvedValue({ ok: true, path: "/tmp/briefing.md" });
     render(<ScreenArtifacts artifacts={ART} onDownload={onDownload} />);
     const btns = screen.getAllByRole("button", { name: /^Scarica$/i });
-    expect(btns.length).toBe(3);                       // briefing + recap + nota
+    expect(btns.length).toBe(4);                       // briefing + recap + nota + trascrizione
     fireEvent.click(btns[0]);
     await waitFor(() => expect(onDownload).toHaveBeenCalledWith("briefing.md", ART.briefingMd));
   });
 
   it("senza recap/nota i relativi Scarica non compaiono (FB-C)", () => {
     render(<ScreenArtifacts artifacts={ART_NO_RECAP} onDownload={vi.fn()} />);
-    expect(screen.getAllByRole("button", { name: /^Scarica$/i }).length).toBe(1); // solo briefing
+    expect(screen.getAllByRole("button", { name: /^Scarica$/i }).length).toBe(2); // briefing + trascrizione
+  });
+
+  it("la trascrizione integrale si scarica dai FILE GENERATI", async () => {
+    const onDownload = vi.fn().mockResolvedValue({ ok: true, path: "/tmp/trascrizione.txt" });
+    render(<ScreenArtifacts artifacts={ART} onDownload={onDownload} />);
+    const btns = screen.getAllByRole("button", { name: /^Scarica$/i });
+    fireEvent.click(btns[3]);
+    await waitFor(() => expect(onDownload).toHaveBeenCalledWith("trascrizione.txt", ART.transcriptText));
+  });
+
+  it("senza trascrizione la voce trascrizione non compare", () => {
+    render(<ScreenArtifacts artifacts={{ ...ART, transcriptText: "" }} onDownload={vi.fn()} />);
+    expect(screen.getAllByRole("button", { name: /^Scarica$/i }).length).toBe(3); // briefing + recap + nota
+  });
+
+  it("i due conteggi parole dicono cosa contano (trascritte vs documento del tab)", () => {
+    render(<ScreenArtifacts artifacts={ART} />);
+    // header = parole della TRASCRIZIONE; barra tab = parole del documento aperto.
+    expect(screen.getByText(/parole trascritte/i)).toBeInTheDocument();
+    expect(screen.getByText(/parole in briefing\.md/i)).toBeInTheDocument();
   });
 
   it("copia chiama il callback con il markdown del briefing", () => {
@@ -123,5 +143,21 @@ describe("ScreenArtifacts", () => {
   it("senza onReexport il bottone Rigenera artefatti non compare", () => {
     render(<ScreenArtifacts artifacts={ART} />);
     expect(screen.queryByRole("button", { name: /Rigenera artefatti/i })).not.toBeInTheDocument();
+  });
+});
+
+describe("ScreenArtifacts — sottotitoli", () => {
+  it("il bottone SRT sta accanto alla trascrizione e chiama onExportSrt", async () => {
+    const onExportSrt = vi.fn().mockResolvedValue({ ok: true, path: "/out/x.srt" });
+    render(<ScreenArtifacts artifacts={ART} onExportSrt={onExportSrt} />);
+    const btn = screen.getByRole("button", { name: /sottotitoli/i });
+    expect(btn).not.toBeDisabled();
+    fireEvent.click(btn);
+    await waitFor(() => expect(onExportSrt).toHaveBeenCalled());
+  });
+
+  it("senza trascrizione non c'è niente da sottotitolare", () => {
+    render(<ScreenArtifacts artifacts={{ ...ART, transcriptText: "" }} onExportSrt={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: /sottotitoli/i })).not.toBeInTheDocument();
   });
 });

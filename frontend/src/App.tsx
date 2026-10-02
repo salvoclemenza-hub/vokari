@@ -510,6 +510,7 @@ export default function App() {
     artifacts: <ScreenArtifacts artifacts={artifacts ?? undefined} onCopy={copy}
                                 onOpenFolder={(p) => void bridge.openFolder(p)}
                                 onExportPdf={() => bridge.exportPdf(jobIdRef.current)}
+                                onExportSrt={() => bridge.exportSrt(jobIdRef.current)}
                                 onExportObsidian={() => bridge.exportObsidian(jobIdRef.current)}
                                 onDownload={(name, content) => bridge.saveTextFile(content, name)}
                                 onReexport={async () => {

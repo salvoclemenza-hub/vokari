@@ -27,16 +27,31 @@ from vokari.audio import capture
 from vokari.paths import ensure_dirs
 from vokari.render import obsidian as obsidian_mod
 from vokari.render import pdf as pdf_mod
+from vokari.render import srt as srt_mod
 from vokari.store.session import Session
 from vokari.store.sessions_repo import SessionsRepo
 from vokari.transcribe import models as models_mod
+
+# Versione scritta nel payload da packaging/build_release.py: nel pacchetto distribuito
+# (ZIP/MSIX) i sorgenti sono COPIATI, non pip-installati → importlib.metadata non trova
+# nessuna distribuzione "vokari" e la titlebar mostrerebbe il fallback per sempre.
+_VERSION_FILE = Path(__file__).resolve().parent / "assets" / "version.txt"
 
 
 def _vokari_version() -> str:
     try:
         return _pkg_version("vokari")
     except PackageNotFoundError:
-        return "0.1.2"
+        pass
+    try:
+        v = _VERSION_FILE.read_text(encoding="utf-8").strip()
+        if v:
+            return v
+    except OSError:
+        pass
+    # Mai un numero fisso: sembrerebbe una versione reale (e resterebbe indietro a ogni
+    # rilascio). "dev" è già il caso previsto da changelog._parse → nessuna voce mostrata.
+    return "dev"
 
 
 def _platform_name() -> str:
@@ -137,6 +152,20 @@ _OLLAMA_CATALOG = [
         "context": "128K",
         "tags": ["italiano", "multilingue"],
         "detailUrl": "https://ollama.com/library/llama3.1",
+    },
+    {
+        "name": "granite4.2:8b",
+        "sizeLabel": "~5.3 GB",
+        "description": (
+            "IBM, tarato su output JSON. Lento su CPU, ma il più preciso nel tirare le somme: "
+            "consigliato come modello di consolidamento."
+        ),
+        "speed": 1,
+        "quality": 3,
+        "params": "8B",
+        "context": "128K",
+        "tags": ["json", "reasoning", "multilingue"],
+        "detailUrl": "https://ollama.com/library/granite4.2",
     },
     {
         "name": "qwen2.5:14b",
@@ -581,6 +610,7 @@ class Api:
             "brain": s.brain,
             "ollamaEndpoint": s.ollama_endpoint,
             "ollamaModel": s.ollama_model,
+            "consolidateModel": s.consolidate_model,
             "whisperModel": s.whisper_model,
             "claudeModel": s.claude_model,
             "briefingDir": s.briefing_dir,
@@ -593,6 +623,8 @@ class Api:
             "lastSeenVersion": s.last_seen_version,
             "appLanguage": s.app_language,
             "userContext": s.user_context,
+            "diarization": s.diarization,
+            "numSpeakers": s.num_speakers,
             "hasApiKey": bool(settings_mod.get_api_key()),
         }
 
@@ -603,6 +635,7 @@ class Api:
             "brain": "brain",
             "ollamaEndpoint": "ollama_endpoint",
             "ollamaModel": "ollama_model",
+            "consolidateModel": "consolidate_model",
             "whisperModel": "whisper_model",
             "claudeModel": "claude_model",
             "briefingDir": "briefing_dir",
@@ -615,6 +648,8 @@ class Api:
             "lastSeenVersion": "last_seen_version",
             "appLanguage": "app_language",
             "userContext": "user_context",
+            "diarization": "diarization",
+            "numSpeakers": "num_speakers",
         }
         s = settings_mod.load()
         for camel, snake in _CAMEL_TO_SNAKE.items():
@@ -1062,6 +1097,39 @@ class Api:
             except Exception as e:
                 debuglog.log_exc("lhm_install_error", e)
                 self._emit("lhm_progress", {"pct": 0.0, "status": "error", "error": str(e)})
+
+        threading.Thread(target=_do, daemon=True).start()
+        return {"ok": True}
+
+    # --- diarization (attribuzione speaker) ---------------------------
+    def diarization_status(self) -> dict:
+        """{available, modelsReady, sizeMb}. `available` = pacchetto sherpa-onnx presente;
+        `modelsReady` = i due modelli sono gia' scaricati. Sono due mancanze diverse con due
+        rimedi diversi, e la UI deve poterle distinguere."""
+        from vokari.diarize import engine
+
+        return {
+            "available": engine.is_available(),
+            "modelsReady": engine.models_ready(),
+            "sizeMb": 35,
+        }
+
+    def download_diarization_models(self) -> dict:
+        """Scarica i modelli (~35 MB) in background. Progresso via evento `diarization_progress`."""
+        from vokari.diarize import engine
+
+        def _do() -> None:
+            self._emit("diarization_progress", {"pct": 0.0, "status": "downloading"})
+            try:
+                engine.download_models(
+                    on_progress=lambda fatti, tot: self._emit(
+                        "diarization_progress", {"pct": round(fatti / max(1, tot), 3), "status": "downloading"}
+                    )
+                )
+                self._emit("diarization_progress", {"pct": 1.0, "status": "done"})
+            except Exception as e:
+                debuglog.log_exc("diarization_download_error", e)
+                self._emit("diarization_progress", {"pct": 0.0, "status": "error", "error": str(e)})
 
         threading.Thread(target=_do, daemon=True).start()
         return {"ok": True}
@@ -1581,6 +1649,7 @@ class Api:
             status="ready",
             audio_path=job.audio_path,
             markers=job.markers,
+            segments=job.segments,
             analysis=job.analysis,
             da_chiarire=job.da_chiarire,
             briefing_path=job.briefing_path,
@@ -1711,6 +1780,31 @@ class Api:
             return {"ok": False, "cancelled": True}  # dialogo annullato dall'utente
         try:
             pdf_mod.recap_md_to_pdf(recap_md or "", out)
+            return {"ok": True, "path": out}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    @_traced
+    def export_srt(self, job_id: str) -> dict:
+        """Scrive i sottotitoli (.srt) della registrazione dai segmenti con i tempi.
+
+        Come gli altri export: prima il job, poi la Session salvata (dalla libreria il job
+        puo' non esistere piu'). Senza tempi non si inventa un file vuoto: si spiega perche'."""
+        job = self._store.get(job_id)
+        if job:
+            title, segments, audio_path = job.title, job.segments, job.audio_path
+        else:
+            session = self._sessions.get(job_id)
+            if not session:
+                return {"ok": False, "error": i18n.t("api.job_not_found", self._lang(), sid=repr(job_id))}
+            title, segments, audio_path = session.title, session.segments, session.audio_path
+        if not segments:
+            return {"ok": False, "error": i18n.t("api.no_timestamps", self._lang())}
+        out = self._choose_save_path(f"{_slug(title)}.srt", audio_path, ".srt")
+        if out is None:
+            return {"ok": False, "cancelled": True}  # dialogo annullato dall'utente
+        try:
+            Path(out).write_text(srt_mod.render_srt(segments, lang=self._lang()), encoding="utf-8")
             return {"ok": True, "path": out}
         except Exception as e:
             return {"ok": False, "error": str(e)}

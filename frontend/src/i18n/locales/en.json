@@ -150,7 +150,19 @@
     "privacyFooter": "The audio never leaves the device. No mandatory account: only the text is sent to the chosen AI.",
     "userContextLabel": "Your context",
     "userContextHint": "Describe your domain, role and recurring terms: the AI will use them to better understand your sessions and transcribe technical terms correctly. Optional.",
-    "userContextPlaceholder": "e.g. B2B food warehouse: lots, traceability, HACCP, DDT…"
+    "userContextPlaceholder": "e.g. B2B food warehouse: lots, traceability, HACCP, DDT…",
+    "consolidateLabel": "Model for drawing conclusions",
+    "consolidateSame": "Same as the analysis",
+    "consolidateHelp": "On long recordings VOKARI reads in passes and then merges what it found: a single, short call. A more capable model here merges duplicates and keeps the more precise wording, at the cost of a couple of extra minutes at the end.",
+    "diarizationLabel": "Speaker attribution",
+    "diarizationHelp": "Marks who says what in the transcript and the subtitles. Runs locally on the CPU and adds about one minute for every three minutes of recording (measured on this class of machine). On audio that mixes microphone and system sound into a single channel the result gets worse.",
+    "speakersLabel": "How many people are speaking",
+    "speakersAuto": "I don't know",
+    "speakersHelp": "Saying it helps a lot: left on «I don't know», one person sometimes gets split in two.",
+    "diarizationModelsMissing": "The voice recognition models (~{{mb}} MB) are not on this computer yet.",
+    "diarizationUnavailable": "The voice recognition component is not installed in this copy of VOKARI.",
+    "diarizationDownloaded": "Speaker models ready.",
+    "diarizationDownloadFail": "Model download failed: {{error}}"
   },
   "home": {
     "kicker": "~/new-session",
@@ -162,8 +174,15 @@
     "sourceLabel": "source",
     "typeGroup": "Session type",
     "sourceGroup": "Audio source",
-    "mode": { "solo": "solo", "riunione": "meeting" },
-    "source": { "mic": "mic", "system": "system", "both": "both" },
+    "mode": {
+      "solo": "solo",
+      "riunione": "meeting"
+    },
+    "source": {
+      "mic": "mic",
+      "system": "system",
+      "both": "both"
+    },
     "modeHint": {
       "solo": "— personal notes and brainstorming: the analysis structures ideas, cues and to-dos",
       "riunione": "— multiple people: the analysis looks for decisions, owners and next steps"
@@ -372,7 +391,7 @@
     "empty": "empty",
     "readSec": "~{{n}} sec",
     "readMin": "~{{n}} min",
-    "readTime": "{{label}} · {{words}} words",
+    "readTime": "{{label}} · {{words}} words in {{doc}}",
     "toastPdfSaved": "Recap PDF saved: {{path}}",
     "toastPdfFail": "PDF not generated: {{error}}",
     "toastPdfDone": "Recap PDF generated.",
@@ -388,7 +407,7 @@
     "back": "Sessions",
     "kick": "~/session",
     "titleFallback": "Session",
-    "wordsLabel": "words",
+    "wordsLabel": "transcribed words",
     "ttRecapUnavailable": "recap.md not available",
     "ttObsNotCreated": "Obsidian note not created yet",
     "ttTranscriptUnavailable": "Transcript not available",
@@ -428,7 +447,15 @@
     "detTranscription": "transcription",
     "detLanguage": "language",
     "detPrivacy": "privacy",
-    "detPrivacyVal": "only text to the AI"
+    "detPrivacyVal": "only text to the AI",
+    "transcriptFileName": "transcript.txt",
+    "dsTranscript": "full text",
+    "whatTranscript": "What the transcript is",
+    "expTranscript": "The full text exactly as recognised from the audio, with no AI rewriting: the source briefing, recap and notes are built from.",
+    "toastSrtSaved": "Subtitles saved: {{path}}",
+    "toastSrtFail": "Subtitles not generated: {{error}}",
+    "srtAria": "Export subtitles (.srt)",
+    "srtTitle": "Creates a subtitle file with the timing of every sentence and asks where to save it"
   },
   "sess": {
     "noDate": "No date",

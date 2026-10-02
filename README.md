@@ -22,7 +22,7 @@
 - 🔐 **Privacy-first** — audio stays on your device; secrets live in the OS keyring ([Privacy policy](PRIVACY.md))
 - 🌍 **Fully bilingual** — switch the whole app between **English** and **Italian**: not just the UI, but the AI-generated output too (briefing, recap, Obsidian notes, messages)
 
-**Status:** v0.2.1 — runs on **Windows, macOS, and Linux**; the full flow works and is CI-gated (760+ automated tests: ~574 backend with pytest, ~186 frontend with vitest).
+**Status:** v0.3.0 — runs on **Windows, macOS, and Linux**; the full flow works and is CI-gated (870+ automated tests: 680 backend with pytest, 198 frontend with vitest).
 
 ---
 
@@ -42,7 +42,10 @@ AI models (faster-whisper — and Ollama, if you pick it) download automatically
 
 > ⚠️ **Windows 11 Smart App Control (SAC).** On a *minority* of PCs (clean installs of Windows 11) SAC is ON and blocks files downloaded from the internet — **including scripts** — with no "Run anyway" button. If you hit that block, either **unblock the ZIP before extracting** (step 2) or temporarily turn SAC off: *Windows Security → App & browser control → Smart App Control → Off*, install, then turn it back on. Most PCs (upgrades from Windows 10) have SAC **off** and just work.
 >
-> 🎯 **Microsoft Store — submitted & in certification.** The **v0.2.0** MSIX package has been submitted to the Microsoft Store and is currently going through certification. Once published it installs with **zero warnings** — Microsoft re-signs Store packages and SAC trusts them by design — so no unblocking is needed. (Not live yet; this is the frictionless path coming as soon as certification clears.)
+> 🎯 **Easiest of all: get it from the Microsoft Store.** VOKARI is published at
+> **[apps.microsoft.com/detail/9p5ttg36zl3z](https://apps.microsoft.com/detail/9p5ttg36zl3z)** — it installs with
+> **zero warnings** (Microsoft re-signs Store packages and SAC trusts them by design), so none of the
+> unblocking above applies. Use the ZIP only if you prefer installing outside the Store.
 
 ### 🍎 macOS (Apple Silicon)
 
@@ -157,6 +160,14 @@ ffmpeg on Windows: `winget install ffmpeg` (or `choco install ffmpeg`).
 
 **Settings** — app language (English / Italian), LLM brain (Claude / Ollama), API key in OS keyring, default session type (*solo* brainstorm / *riunione* meeting), briefing folder, Obsidian vault, Whisper model + download progress, transcription language (auto / IT / EN), and a **"your context"** field where you describe your domain/context — used to guide the analysis and improve transcription.
 
+**Speaker attribution (optional)** — marks who says what, turning the transcript into a dialogue —
+which matters to the AI too: "he decided it" and "she decided it" are not the same fact. Runs locally
+on CPU (voice models ~35 MB, downloaded on demand) and costs about **one minute per three minutes of
+audio**. Telling VOKARI how many people are speaking improves it a lot; quality degrades on audio that
+mixes mic and system sound into one channel — the app says so rather than hiding it.
+
+**Subtitles** — export an **`.srt`** with per-line timings, carrying speaker names when attribution is on.
+
 **Sessions library** — persistent storage, full-text search, filtering by type.
 
 ---
@@ -223,8 +234,9 @@ uv run python scripts/e2e_smoke.py your-audio.m4a
 - ✅ **v1** — local transcription + briefing + recap + Obsidian export (done)
 - ✅ **v0.2.0** — packaged Windows release (ZIP/setup), full EN/IT i18n, transcript editing, interview live draft, model-fit gate, long-audio handling (done)
 - ✅ **v0.2.1** — **macOS** (Apple Silicon, DMG) and **Linux** support — both microphone-only (done)
-- 📦 **Microsoft Store** — MSIX **submitted & in certification**; zero-warning install once published
-- 📋 **v2** — system-audio capture on macOS/Linux · speaker attribution · RAG over your vault · batch / watch-folder
+- ✅ **Microsoft Store** — published; installs with zero warnings (done)
+- ✅ **v0.3.0** — **speaker attribution**, `.srt` subtitles, fidelity warnings, vocabulary that reaches the whole recording (done)
+- 📋 **v2** — system-audio capture on macOS/Linux · RAG over your vault · batch / watch-folder
 - 🤖 **v3** — sentiment analysis, action-item extraction, multi-LLM comparison
 
 ---

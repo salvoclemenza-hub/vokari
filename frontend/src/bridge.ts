@@ -39,6 +39,8 @@ export interface VokariSettings {
   brain: string;
   ollamaEndpoint: string;
   ollamaModel: string;
+  /** Modello per il solo consolidamento (reduce). "" = stesso dell'analisi. */
+  consolidateModel: string;
   whisperModel: string;
   claudeModel: string;
   briefingDir: string;
@@ -51,6 +53,8 @@ export interface VokariSettings {
   lastSeenVersion: string;
   appLanguage: string; // lingua app (it|en): UI + output AI + template
   userContext: string; // contesto utente (dominio, ruolo, termini) → iniettato nell'analisi
+  diarization: boolean; // attribuzione degli speaker (modelli propri, ~35 MB a richiesta)
+  numSpeakers: number; // 0 = stima automatica
   hasApiKey: boolean;
 }
 
@@ -58,10 +62,12 @@ export interface VokariSettings {
  *  Unica fonte di verità (prima duplicata 4× qui + in Models.tsx/Settings.tsx). */
 export const DEFAULT_SETTINGS = {
   brain: "claude", ollamaEndpoint: "http://localhost:11434", ollamaModel: "qwen2.5:7b",
+  consolidateModel: "",
   whisperModel: "large-v3-turbo", claudeModel: "claude-sonnet-4-6",
   briefingDir: "", obsidianVault: "", defaultMode: "solo",
   transcriptionLanguage: "auto", livePreview: true, liveModel: "base", onboarded: false,
-  lastSeenVersion: "", appLanguage: "it", userContext: "", hasApiKey: false,
+  lastSeenVersion: "", appLanguage: "it", userContext: "", diarization: false, numSpeakers: 0,
+  hasApiKey: false,
 } satisfies VokariSettings;
 
 export interface ModelEntry {
@@ -142,6 +148,12 @@ export interface ExportResult {
   paths?: string[];
   error?: string;
   cancelled?: boolean;
+}
+
+export interface DiarizationStatus {
+  available: boolean;   // pacchetto sherpa-onnx presente
+  modelsReady: boolean; // i due modelli (~35 MB) sono già scaricati
+  sizeMb: number;
 }
 
 export interface LhmStatus {
@@ -239,6 +251,7 @@ interface VokariApi {
   // H — Export
   export_pdf(jobId: string): Promise<ExportResult>;
   export_obsidian(jobId: string): Promise<ExportResult>;
+  export_srt(jobId: string): Promise<ExportResult>;
   reexport_session(sessionId: string): Promise<ExportResult>;
   save_text_file(content: string, suggestedName: string): Promise<ExportResult>;
   // E — Settings
@@ -266,6 +279,8 @@ interface VokariApi {
   ollama_install(): Promise<{ ok: boolean }>;
   // I — LibreHardwareMonitor (telemetria temperatura)
   lhm_status(): Promise<LhmStatus>;
+  diarization_status(): Promise<DiarizationStatus>;
+  download_diarization_models(): Promise<{ ok: boolean }>;
   lhm_install(): Promise<{ ok: boolean }>;
   lhm_start(): Promise<{ ok: boolean }>;
   lhm_stop(): Promise<{ ok: boolean }>;
@@ -425,6 +440,8 @@ export const bridge = {
     withApi<ExportResult>((a) => a.export_pdf(jobId), { ok: false, error: "no api" }),
   exportObsidian: (jobId: string) =>
     withApi<ExportResult>((a) => a.export_obsidian(jobId), { ok: false, error: "no api" }),
+  exportSrt: (jobId: string) =>
+    withApi<ExportResult>((a) => a.export_srt(jobId), { ok: false, error: "no api" }),
   reexportSession: (sessionId: string) =>
     withApi<ExportResult>((a) => a.reexport_session(sessionId), { ok: false, error: "no api" }),
   saveTextFile: (content: string, suggestedName: string) =>
@@ -465,6 +482,9 @@ export const bridge = {
   ollamaInstall: () => withApi((a) => a.ollama_install(), { ok: false }),
   // I — LibreHardwareMonitor
   lhmStatus: () => withApi<LhmStatus>((a) => a.lhm_status(), { installed: false, running: false, canInstall: false, supported: true }),
+  diarizationStatus: () =>
+    withApi<DiarizationStatus>((a) => a.diarization_status(), { available: false, modelsReady: false, sizeMb: 35 }),
+  downloadDiarizationModels: () => withApi((a) => a.download_diarization_models(), { ok: false }),
   lhmInstall: () => withApi((a) => a.lhm_install(), { ok: false }),
   lhmStart: () => withApi((a) => a.lhm_start(), { ok: false }),
   lhmStop: () => withApi((a) => a.lhm_stop(), { ok: false }),

@@ -73,4 +73,8 @@ def render_recap(
     if mk_lines:
         out += ["", f"## {i18n.t('common.bookmarks_h', app_lang)}", *mk_lines]
 
+    # Il recap e' la versione che legge una persona: dice da se' di essere
+    # generato (AI Act art. 50, trasparenza sul contenuto sintetico).
+    out += ["", "---", i18n.t("common.ai_disclaimer", app_lang)]
+
     return "\n".join(out).rstrip() + "\n"

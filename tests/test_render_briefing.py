@@ -1,4 +1,4 @@
-from vokari.analyze.schema import Analysis, NextStep
+from vokari.analyze.schema import Analysis, Meta, NextStep
 from vokari.render import briefing
 
 
@@ -192,3 +192,26 @@ def test_briefing_renders_user_markers_section():
 def test_briefing_no_markers_section_when_none():
     md = briefing.render_briefing(_sample(), transcript="t")
     assert "<user_markers>" not in md
+
+
+# --- Trasparenza AI (AI Act art. 50, in applicazione dal 2026) ----------------
+# Un artefatto prodotto da trascrizione + LLM e' contenuto generato: va dichiarato in
+# forma leggibile dalle macchine (frontmatter) e da chi legge (recap).
+
+
+def test_briefing_frontmatter_declares_ai_generation():
+    from vokari.render.briefing import render_briefing
+
+    md = render_briefing(Analysis(meta=Meta(type="solo", title="T")), llm_model="qwen2.5:7b")
+    head = md.split("---")[1]
+    assert "ai_generated: true" in head
+    assert "generated_by: VOKARI" in head
+
+
+def test_recap_says_it_was_generated_automatically():
+    from vokari.render.recap import render_recap
+
+    it = render_recap(Analysis(meta=Meta(type="solo", title="T")), app_lang="it")
+    en = render_recap(Analysis(meta=Meta(type="solo", title="T")), app_lang="en")
+    assert "VOKARI" in it and "VOKARI" in en
+    assert it.strip().splitlines()[-1] != en.strip().splitlines()[-1]  # localizzata

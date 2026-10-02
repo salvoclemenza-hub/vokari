@@ -26,6 +26,13 @@ _CATALOG: dict[str, dict[str, str]] = {
     "common.by_inline": {"it": "entro", "en": "by"},
     "common.to_clarify_h": {"it": "Punti da chiarire", "en": "Points to clarify"},
     "common.bookmarks_h": {"it": "Segnalibri", "en": "Bookmarks"},
+    # Trasparenza AI (AI Act art. 50): chi legge deve sapere che il testo e' generato.
+    "common.ai_disclaimer": {
+        "it": "_Trascritto e sintetizzato automaticamente da VOKARI (AI). "
+        "Controlla i punti importanti sulla registrazione._",
+        "en": "_Automatically transcribed and summarised by VOKARI (AI). "
+        "Check anything important against the recording._",
+    },
     # ── briefing.md ──
     "briefing.purpose_h": {"it": "Scopo della sessione", "en": "Session purpose"},
     "briefing.context_h": {"it": "Contesto", "en": "Context"},
@@ -187,6 +194,14 @@ _CATALOG: dict[str, dict[str, str]] = {
         "it": "Ricontrollo di aver colto tutto",
         "en": "Double-checking I caught everything",
     },
+    "pipeline.step_window": {
+        "it": "Leggo la registrazione a tratti ({n} di {tot})",
+        "en": "Reading the recording in passes ({n} of {tot})",
+    },
+    "pipeline.step_consolidate": {
+        "it": "Unisco quello che ho trovato nei vari tratti",
+        "en": "Merging what I found across the passes",
+    },
     "pipeline.step_questions": {
         "it": "Preparo le domande di rifinitura",
         "en": "Preparing the refinement questions",
@@ -233,6 +248,40 @@ _CATALOG: dict[str, dict[str, str]] = {
             "I'll skip the interview and generate the briefing anyway."
         ),
     },
+    "pipeline.diarization_failed": {
+        "it": (
+            "Non è stato possibile attribuire le battute ai partecipanti: la trascrizione "
+            "prosegue senza etichette. Su un audio con microfono e sistema mischiati insieme "
+            "è un esito normale."
+        ),
+        "en": (
+            "Could not attribute lines to speakers: the transcript continues without labels. "
+            "On audio that mixes microphone and system sound together this is expected."
+        ),
+    },
+    "diarize.speaker": {"it": "Interlocutore {n}", "en": "Speaker {n}"},
+    "api.no_timestamps": {
+        "it": (
+            "Questa sessione non ha i tempi dei segmenti salvati (è stata trascritta con una "
+            "versione precedente di VOKARI): per avere i sottotitoli va ri-trascritta."
+        ),
+        "en": (
+            "This session has no segment timings saved (it was transcribed with an earlier "
+            "version of VOKARI): to get subtitles it needs to be transcribed again."
+        ),
+    },
+    "pipeline.unsupported_items": {
+        "it": (
+            "Alcuni punti del briefing contengono nomi o cifre che nella registrazione non "
+            "compaiono ({items}): controllali prima di usarli. Il modello può averli dedotti "
+            "o inventati."
+        ),
+        "en": (
+            "Some points in the briefing contain names or figures that do not appear in the "
+            "recording ({items}): check them before relying on them. The model may have "
+            "inferred or invented them."
+        ),
+    },
     "pipeline.sparse_analysis": {
         "it": (
             "L'analisi è tornata quasi vuota: nessuna idea, decisione, domanda o azione "
@@ -245,6 +294,20 @@ _CATALOG: dict[str, dict[str, str]] = {
             "were extracted from the transcript. The model may have struggled — try a more "
             "capable model, add some context in Home, or check that the recording actually "
             "contains content to summarize."
+        ),
+    },
+    "pipeline.thin_analysis": {
+        "it": (
+            "L'analisi ha estratto poco rispetto alla lunghezza della registrazione "
+            "({found} elementi su ~{expected} attesi): il modello potrebbe aver perso "
+            "contenuto per strada. Il briefing è comunque pronto, ma se ti sembra corto "
+            "rigeneralo con un modello più capace (Claude, o un Ollama più grande)."
+        ),
+        "en": (
+            "The analysis extracted little for a recording this long ({found} items vs "
+            "~{expected} expected): the model may have dropped content along the way. "
+            "The briefing is ready anyway, but if it looks short, regenerate it with a more "
+            "capable model (Claude, or a larger Ollama one)."
         ),
     },
     # lingua audio ≠ configurata (L09)
@@ -338,6 +401,16 @@ _CATALOG: dict[str, dict[str, str]] = {
     "models.desc.qwen2.5:7b": {
         "it": "Miglior compromesso: ottimo italiano, JSON affidabile, veloce su CPU — il default.",
         "en": "Best all-rounder: great Italian, reliable JSON, fast on CPU — the default.",
+    },
+    "models.desc.granite4.2:8b": {
+        "it": (
+            "IBM, tarato su output JSON. Lento su CPU, ma il più preciso nel tirare le somme: "
+            "consigliato come modello di consolidamento."
+        ),
+        "en": (
+            "IBM, tuned for JSON output. Slow on CPU, but the most precise at drawing conclusions: "
+            "recommended as the consolidation model."
+        ),
     },
     "models.desc.qwen3:4b-instruct": {
         "it": "Nuova gen Qwen3: veloce, leggero, ottimo italiano; per dispositivi con poca RAM.",

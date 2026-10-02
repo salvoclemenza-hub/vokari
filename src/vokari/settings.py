@@ -18,6 +18,11 @@ class Settings:
     brain: str = "claude"  # 'claude' | 'ollama'
     ollama_endpoint: str = "http://localhost:11434"
     ollama_model: str = "qwen2.5:7b"  # qwen2.5:7b batte gemma2:9b su IT + JSON affidabile
+    # Modello Ollama per il solo CONSOLIDAMENTO (il "reduce" del map-reduce, ADR-064): e' una
+    # sola chiamata corta per sessione, quindi li' un modello piu' capace costa poco e rende
+    # molto (misurato: granite unisce i next_step riformulati, qwen 7B no nemmeno col prompt
+    # esplicito). Vuoto = stesso modello dell'analisi.
+    consolidate_model: str = ""
     whisper_model: str = "large-v3-turbo"
     claude_model: str = "claude-sonnet-4-6"  # sonnet ≈ opus su analisi testo, ~5x meno costoso
     briefing_dir: str = ""
@@ -30,6 +35,10 @@ class Settings:
     last_seen_version: str = ""  # ultima versione di cui l'utente ha visto le novità (popup changelog)
     app_language: str = "it"  # lingua dell'app: UI + output AI + template (it|en). Audio = transcription_language
     user_context: str = ""  # contesto persistente dell'utente (dominio/ruolo/termini): analisi + vocab Whisper
+    # Attribuzione degli speaker (chi ha detto cosa). Spenta di default: richiede modelli
+    # propri (~35 MB, scaricati a richiesta) e su un audio "both" mixato in mono degrada.
+    diarization: bool = False
+    num_speakers: int = 0  # 0 = stima automatica; indicarlo quando si sa migliora molto il risultato
 
 
 def _settings_path() -> Path:

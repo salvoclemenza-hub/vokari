@@ -73,6 +73,9 @@ describe("navigazione", () => {
         lhm_start: async () => ({ ok: true }),
         lhm_stop: async () => ({ ok: true }),
         lhm_uninstall: async () => ({ ok: true }),
+        // J — attribuzione speaker: Impostazioni la interroga al mount
+        diarization_status: async () => ({ available: false, modelsReady: false, sizeMb: 35 }),
+        download_diarization_models: async () => ({ ok: true }),
       },
     };
   });

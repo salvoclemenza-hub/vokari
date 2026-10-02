@@ -48,6 +48,10 @@ def _frontmatter(
         f"source: {source}",
         f"transcription_model: {transcription_model}",
         f"llm_model: {llm_model}",
+        # Marcatura leggibile dalle macchine del contenuto generato (AI Act art. 50):
+        # il briefing nasce da una trascrizione automatica + una sintesi LLM.
+        "ai_generated: true",
+        "generated_by: VOKARI",
     ]
     if language:
         lines.append(f"language: {language}")

@@ -112,7 +112,7 @@ export const sampleResources: ResourceUsage = { cpu: 38, ramMb: 1820, tempC: 61 
 export const sampleSettings: VokariSettings = {
   brain: "claude",
   ollamaEndpoint: "http://localhost:11434",
-  ollamaModel: "qwen2.5:7b",
+  ollamaModel: "qwen2.5:7b", consolidateModel: "",
   whisperModel: "large-v3-turbo",
   claudeModel: "claude-sonnet-4-6",
   briefingDir: "C:\\Users\\salvo\\Documents\\VOKARI\\briefing",
@@ -124,6 +124,8 @@ export const sampleSettings: VokariSettings = {
   onboarded: true,
   lastSeenVersion: "0.1.2",
   appLanguage: "it",
+  diarization: false,
+  numSpeakers: 0,
   userContext: "",
   hasApiKey: true,
 };

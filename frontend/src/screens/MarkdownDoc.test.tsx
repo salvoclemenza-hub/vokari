@@ -53,6 +53,30 @@ describe("MarkdownDoc", () => {
     expect(container.querySelector("pre")).toBeNull();
   });
 
+  it("non mostra i tag XML strutturali del briefing (servono all'LLM, non all'occhio)", () => {
+    const md = `<purpose>
+## Scopo
+Analizzare i dati.
+</purpose>
+
+<context>
+## Contesto
+Testo.
+</context>`;
+    const { container } = render(<MarkdownDoc md={md} />);
+    expect(container.textContent).not.toContain("<purpose>");
+    expect(container.textContent).not.toContain("</purpose>");
+    expect(container.textContent).not.toContain("<context>");
+    // il contenuto resta, e i titoli pure
+    expect(container.textContent).toContain("Analizzare i dati.");
+    expect(container.querySelectorAll("h3").length).toBe(2);
+  });
+
+  it("un testo che contiene < > NON viene scambiato per un tag", () => {
+    const { container } = render(<MarkdownDoc md={"Se x < y allora <ok>, vedi <Piano>"} />);
+    expect(container.textContent).toContain("Se x < y allora <ok>, vedi <Piano>");
+  });
+
   it("non esplode su markdown vuoto", () => {
     const { container } = render(<MarkdownDoc md="" />);
     expect(container).toBeTruthy();

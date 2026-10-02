@@ -8,7 +8,7 @@ import type { ModelEntry, VokariSettings } from "../bridge";
 const FAKE_SETTINGS: VokariSettings = {
   brain: "claude",
   ollamaEndpoint: "http://localhost:11434",
-  ollamaModel: "gemma2:9b",
+  ollamaModel: "gemma2:9b", consolidateModel: "",
   whisperModel: "large-v3-turbo",
   claudeModel: "claude-opus-4-8",
   briefingDir: "",
@@ -20,6 +20,8 @@ const FAKE_SETTINGS: VokariSettings = {
   onboarded: true,
   lastSeenVersion: "",
   appLanguage: "it",
+  diarization: false,
+  numSpeakers: 0,
   userContext: "",
   hasApiKey: false,
 };
@@ -54,7 +56,7 @@ vi.mock("../bridge", () => ({
   // valore iniziale di useState (poi sovrascritto da getSettings nel test). Inline perché
   // la factory di vi.mock non può referenziare variabili out-of-scope non-`mock*`.
   DEFAULT_SETTINGS: {
-    brain: "claude", ollamaEndpoint: "http://localhost:11434", ollamaModel: "qwen2.5:7b",
+    brain: "claude", ollamaEndpoint: "http://localhost:11434", ollamaModel: "qwen2.5:7b", consolidateModel: "",
     whisperModel: "large-v3-turbo", claudeModel: "claude-sonnet-4-6", briefingDir: "",
     obsidianVault: "", defaultMode: "solo", transcriptionLanguage: "it",
     livePreview: true, liveModel: "base", hasApiKey: false,

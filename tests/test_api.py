@@ -39,6 +39,28 @@ def test_get_app_info_unchanged(api):
     assert info["license"] == "MIT" and "githubStars" in info
 
 
+def test_version_falls_back_to_payload_file_not_to_a_frozen_number(monkeypatch, tmp_path):
+    """Nel pacchetto distribuito i sorgenti sono COPIATI (niente dist-info): la versione
+    arriva da app/assets/version.txt, scritto dal packaging. Mai un numero hard-coded."""
+    from importlib.metadata import PackageNotFoundError
+
+    import app.api as api_mod
+
+    def boom(_name):
+        raise PackageNotFoundError(_name)
+
+    monkeypatch.setattr(api_mod, "_pkg_version", boom)
+
+    vfile = tmp_path / "version.txt"
+    vfile.write_text("9.9.9", encoding="utf-8")
+    monkeypatch.setattr(api_mod, "_VERSION_FILE", vfile)
+    assert api_mod._vokari_version() == "9.9.9"
+
+    # senza nemmeno quel file: "dev", che changelog._parse tratta già come build di sviluppo
+    monkeypatch.setattr(api_mod, "_VERSION_FILE", tmp_path / "assente.txt")
+    assert api_mod._vokari_version() == "dev"
+
+
 def test_import_file_derives_title_from_filename(api, monkeypatch, tmp_path):
     """B3: importando un file senza titolo esplicito, il titolo viene dal nome file
     (es. '183.m4a' → '183') invece dell'ennesima 'Sessione senza titolo'."""
@@ -2482,3 +2504,103 @@ def test_list_sources_windows_uses_loopback(api, monkeypatch):
     )
     out = api.list_sources()
     assert out["system"][0]["name"] == "Speakers loopback"
+
+
+# --- Export SRT (2026-09-25) --------------------------------------------------
+
+
+def _job_con_segmenti(api, tmp_path, **kw):
+    from app.jobs import Job
+
+    audio = str(tmp_path / "srt.wav")
+    Path(audio).touch()
+    job = api._store.create(Job.new(audio, mode="solo", title="Riunione magazzino"))
+    api._store.update(
+        job.id,
+        transcript="Buongiorno a tutti. Oggi parliamo della landing page.",
+        segments=[
+            {"start": 0.0, "end": 2.5, "text": "Buongiorno a tutti."},
+            {"start": 2.5, "end": 7.25, "text": "Oggi parliamo della landing page."},
+        ],
+        status="ready",
+        **kw,
+    )
+    return api._store.get(job.id)
+
+
+def test_export_srt_writes_the_file_next_to_the_briefing(api, tmp_path, monkeypatch):
+    import vokari.settings as sm
+
+    monkeypatch.setattr(sm, "load", lambda: sm.Settings(briefing_dir=str(tmp_path / "out")))
+    job = _job_con_segmenti(api, tmp_path)
+
+    res = api.export_srt(job.id)
+
+    assert res["ok"] is True
+    p = Path(res["path"])
+    assert p.exists() and p.suffix == ".srt"
+    assert "00:00:02,500 --> 00:00:07,250" in p.read_text(encoding="utf-8")
+
+
+def test_export_srt_without_timestamps_explains_itself(api, tmp_path, monkeypatch):
+    """Le sessioni trascritte prima di questa versione non hanno i tempi salvati: si dice
+    perché non si può fare, non si scrive un file vuoto."""
+    from app.jobs import Job
+
+    import vokari.settings as sm
+
+    monkeypatch.setattr(sm, "load", lambda: sm.Settings(briefing_dir=str(tmp_path / "out")))
+    audio = str(tmp_path / "vecchia.wav")
+    Path(audio).touch()
+    job = api._store.create(Job.new(audio, mode="solo"))
+    api._store.update(job.id, transcript="testo senza tempi", status="ready")
+
+    res = api.export_srt(job.id)
+    assert res["ok"] is False and res["error"]
+
+
+def test_export_srt_falls_back_to_the_saved_session(api, tmp_path, monkeypatch):
+    """Dalla libreria Sessioni il job può non esistere più: i tempi stanno nella Session."""
+    import vokari.settings as sm
+    from vokari.store.session import Session
+
+    monkeypatch.setattr(sm, "load", lambda: sm.Settings(briefing_dir=str(tmp_path / "out")))
+    s = Session.new(title="Vecchia riunione", mode="solo")
+    s.transcript = "Buongiorno a tutti."
+    s.segments = [{"start": 0.0, "end": 2.5, "text": "Buongiorno a tutti."}]
+    api._sessions.save(s)
+
+    res = api.export_srt(s.id)
+    assert res["ok"] is True and Path(res["path"]).exists()
+
+
+# --- Diarization: stato e download modelli ------------------------------------
+
+
+def test_diarization_status_says_what_is_missing(api, monkeypatch):
+    """La UI deve poter distinguere «pacchetto assente» da «modelli da scaricare»: sono due
+    rimedi diversi (uno lo risolve l'utente, l'altro un bottone)."""
+    from vokari.diarize import engine
+
+    monkeypatch.setattr(engine, "is_available", lambda: True)
+    monkeypatch.setattr(engine, "models_ready", lambda: False)
+    st = api.diarization_status()
+    assert st["available"] is True and st["modelsReady"] is False
+
+
+def test_download_diarization_models_reports_progress(api, monkeypatch, sync_threads):
+    from vokari.diarize import engine
+
+    chiamate = {"n": 0}
+
+    def _fake_download(on_progress=None):
+        chiamate["n"] += 1
+        if on_progress:
+            on_progress(2, 2)
+        return None
+
+    monkeypatch.setattr(engine, "download_models", _fake_download)
+    res = api.download_diarization_models()
+    assert res["ok"] is True and chiamate["n"] == 1
+    eventi = " ".join(api._window.calls)
+    assert "diarization_progress" in eventi and "done" in eventi

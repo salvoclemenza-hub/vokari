@@ -92,7 +92,9 @@ def _safe_detect_language(wav_path: str, model_name: str) -> tuple[str, float]:
         return "", 0.0
 
 
-def _transcribe_audio(audio, model_name: str, language: str, initial_prompt: str = "") -> list[dict]:
+def _transcribe_audio(
+    audio, model_name: str, language: str, initial_prompt: str = "", hotwords: str = ""
+) -> list[dict]:
     """Inferenza reale su un audio (path o file-like). Ritorna [{start,end,text}]."""
     model = _load_model(model_name)
     lang = None if language == "auto" else language
@@ -101,6 +103,10 @@ def _transcribe_audio(audio, model_name: str, language: str, initial_prompt: str
         language=lang,
         beam_size=5,
         initial_prompt=initial_prompt or _INITIAL_PROMPT_BASE,
+        # `initial_prompt` vale solo per la prima finestra di ~30s: su un chunk da 600s il
+        # vocabolario dell'utente non arriva al resto dell'audio. `hotwords` viene invece
+        # ri-applicato a ogni finestra di decodifica (faster-whisper >=1.1).
+        hotwords=hotwords or None,
         # VAD: salta i tratti non-parlato (silenzi/musica/rumore). Senza, su file lunghi
         # faster-whisper macina i silenzi LENTISSIMO e ALLUCINA ("Grazie per la visione!",
         # "Sottotitoli a cura di…") → percepito come "trascrizione bloccata a metà".
@@ -112,13 +118,27 @@ def _transcribe_audio(audio, model_name: str, language: str, initial_prompt: str
     ]
 
 
+def cache_key(source_path: str, model: str, language: str, vocab: str = "") -> str:
+    """Chiave di cache della trascrizione. Include il VOCABOLARIO: cambiarlo cambia il
+    risultato dell'inferenza (hotwords), quindi non deve restituire la trascrizione
+    vecchia. Senza vocabolario la chiave resta quella storica: le cache gia' sul disco
+    degli utenti continuano a valere (una trascrizione costa minuti di CPU)."""
+    key = f"{audio_hash(source_path)}-{model}-{language}"
+    vocab = (vocab or "").strip()
+    if vocab:
+        key += "-v" + hashlib.sha256(vocab.encode("utf-8")).hexdigest()[:8]
+    return key
+
+
 def _cache_path(key: str) -> Path:
     d = ensure_dirs().cache / "transcripts"
     d.mkdir(parents=True, exist_ok=True)
     return d / f"{key}.json"
 
 
-def _iter_transcribe(audio, model_name: str, language: str, should_cancel=None, initial_prompt: str = ""):
+def _iter_transcribe(
+    audio, model_name: str, language: str, should_cancel=None, initial_prompt: str = "", hotwords: str = ""
+):
     """Come _transcribe_audio ma yield-a i segmenti man mano (per lo streaming).
     Se `should_cancel()` diventa vero, interrompe subito (chiude il generatore faster-whisper)."""
     model = _load_model(model_name)
@@ -128,6 +148,10 @@ def _iter_transcribe(audio, model_name: str, language: str, should_cancel=None, 
         language=lang,
         beam_size=5,
         initial_prompt=initial_prompt or _INITIAL_PROMPT_BASE,
+        # `initial_prompt` vale solo per la prima finestra di ~30s: su un chunk da 600s il
+        # vocabolario dell'utente non arriva al resto dell'audio. `hotwords` viene invece
+        # ri-applicato a ogni finestra di decodifica (faster-whisper >=1.1).
+        hotwords=hotwords or None,
         # VAD: salta i tratti non-parlato (silenzi/musica/rumore). Senza, su file lunghi
         # faster-whisper macina i silenzi LENTISSIMO e ALLUCINA ("Grazie per la visione!",
         # "Sottotitoli a cura di…") → percepito come "trascrizione bloccata a metà".
@@ -148,8 +172,7 @@ def transcribe_stream(
     segmento. `should_cancel` (callable→bool) interrompe la trascrizione tra un segmento
     e l'altro. Cache identica a transcribe; su cache hit emette un singolo evento al 100%.
     Se cancellato a metà NON scrive cache (eviterebbe di cachare una trascrizione parziale)."""
-    key = f"{audio_hash(source_path)}-{model}-{language}"
-    cache = _cache_path(key)
+    cache = _cache_path(cache_key(source_path, model, language, vocab))
     if cache.exists():
         result = json.loads(cache.read_text(encoding="utf-8"))
         if on_segment:
@@ -177,7 +200,7 @@ def transcribe_stream(
 
         if duration <= chunking.CHUNK_DURATION_S:
             for seg in _iter_transcribe(
-                wav, model, language, should_cancel=should_cancel, initial_prompt=initial_prompt
+                wav, model, language, should_cancel=should_cancel, initial_prompt=initial_prompt, hotwords=vocab
             ):
                 segments.append(seg)
                 _emit(seg)
@@ -186,7 +209,12 @@ def transcribe_stream(
                 if should_cancel is not None and should_cancel():
                     break
                 for seg in _iter_transcribe(
-                    io.BytesIO(chunk.data), model, language, should_cancel=should_cancel, initial_prompt=initial_prompt
+                    io.BytesIO(chunk.data),
+                    model,
+                    language,
+                    should_cancel=should_cancel,
+                    initial_prompt=initial_prompt,
+                    hotwords=vocab,
                 ):
                     seg = chunking.apply_offset([seg], chunk.offset_s)[0]
                     # Dedup overlap (L17): tieni il segmento solo se cade nella finestra di
@@ -225,8 +253,7 @@ def transcribe_stream(
 
 def transcribe(source_path: str, *, model: str, language: str, vocab: str = "") -> dict:
     """Trascrive `source_path`. Cache su (hash, model, language). Ritorna il dict risultato."""
-    key = f"{audio_hash(source_path)}-{model}-{language}"
-    cache = _cache_path(key)
+    cache = _cache_path(cache_key(source_path, model, language, vocab))
     if cache.exists():
         return json.loads(cache.read_text(encoding="utf-8"))
 
@@ -245,11 +272,14 @@ def transcribe(source_path: str, *, model: str, language: str, vocab: str = "") 
 
         segments: list[dict] = []
         if duration <= chunking.CHUNK_DURATION_S:
-            segments = _transcribe_audio(wav, model, language, initial_prompt=initial_prompt)  # path diretto (R3)
+            # path diretto (R3)
+            segments = _transcribe_audio(wav, model, language, initial_prompt=initial_prompt, hotwords=vocab)
         else:
             for chunk in chunking.split_wav(wav, chunking.CHUNK_DURATION_S):
                 segs = chunking.apply_offset(
-                    _transcribe_audio(io.BytesIO(chunk.data), model, language, initial_prompt=initial_prompt),
+                    _transcribe_audio(
+                        io.BytesIO(chunk.data), model, language, initial_prompt=initial_prompt, hotwords=vocab
+                    ),
                     chunk.offset_s,
                 )
                 # Dedup overlap (L17): la zona di sovrapposizione appartiene a un solo chunk.

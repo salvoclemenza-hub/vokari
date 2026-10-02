@@ -50,6 +50,10 @@ class Job:
     partial_text: str = ""
     transcript: str = ""
     transcript_edited: bool = False  # N1: flag di edit manuale della trascrizione (editing-trascrizione)
+    # Segmenti con i tempi, come li produce faster-whisper: servono all'export SRT (e sono
+    # l'aggancio naturale per l'attribuzione degli speaker). Scritti una volta sola, a fine
+    # trascrizione. Le sessioni piu' vecchie non li hanno: chi li usa deve reggere la lista vuota.
+    segments: list[dict] = field(default_factory=list)
     duration_s: float = 0.0
     analysis: dict | None = None
     questions: list[dict] = field(default_factory=list)

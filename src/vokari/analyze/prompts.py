@@ -237,3 +237,69 @@ def build_verify_user(
         analysis.model_dump_json(),
     ]
     return "\n".join(parts)
+
+
+# --- Consolidamento delle finestre (map-reduce) -------------------------------------------
+# Il "reduce": riceve SOLO gli elementi gia' estratti dalle finestre (poche righe, non la
+# trascrizione), quindi e' una chiamata corta ed economica. Serve perche' ogni finestra
+# lavora all'oscuro delle altre: la stessa cosa torna come idea in una e come next_step in
+# un'altra, e il dedup per stringa non la riconosce.
+_CONSOLIDATE_SYSTEM = (
+    "Sei un redattore che consolida l'analisi di una singola sessione. Ricevi elementi estratti "
+    "SEPARATAMENTE da parti diverse della STESSA registrazione e devi restituirne una versione "
+    "unica e pulita. Rispondi ESCLUSIVAMENTE con un JSON Analysis valido, nessun code fence, "
+    "nessuna spiegazione."
+)
+
+
+def build_consolidate_system(language: str = "it", user_context: str = "") -> str:
+    base = _CONSOLIDATE_SYSTEM + " " + i18n.t("prompts.content_directive", language)
+    uc = _truncate_user_context(user_context)
+    if uc:
+        base += f" Contesto dell'utente: {uc}"
+    return base
+
+
+def build_consolidate_user(
+    merged: Analysis,
+    *,
+    mode: str = "solo",
+    context: str | None = None,
+    language: str = "it",
+    user_context: str = "",
+) -> str:
+    parts = [
+        "Gli elementi qui sotto vengono da porzioni CONSECUTIVE della stessa registrazione, "
+        "analizzate una per una. Consolidali:",
+        "1. UNISCI i duplicati, anche quando sono formulati in modo diverso: tienine la versione "
+        "piu' specifica (quella con nomi, numeri e date).",
+        "2. RIMETTI ogni voce nella categoria giusta: un'azione da compiere e' un next_step, "
+        "non una domanda; una domanda retorica non e' una open_question.",
+        "3. SCARTA le voci generiche o vuote (quelle che si potrebbero scrivere senza aver "
+        "ascoltato la registrazione).",
+        "3-bis. ENTITA': tieni solo nomi PROPRI di persone, progetti o termini tecnici "
+        "realmente citati. Scarta i pronomi (io, noi, loro) e i nomi comuni (rivenditore, "
+        "cliente, fornitore, negozio): non sono entita'. Se un nome comune e' importante, "
+        "il suo tipo e' `termine`, mai `persona`.",
+        "4. SCRIVI `purpose` e `context` COMPLESSIVI della sessione intera, non di una porzione.",
+        "5. NON INVENTARE NULLA: puoi solo unire, riclassificare, scartare e riscrivere piu' "
+        "chiaramente cio' che e' gia' presente. Nomi propri, date e numeri vanno preservati "
+        "esattamente come sono.",
+        "",
+        _shape(language),
+        "",
+        i18n.t("prompts.reinforce", language),
+        "",
+    ]
+    uc = _truncate_user_context(user_context)
+    if uc:
+        parts += ["CONTESTO PERSISTENTE DELL'UTENTE (per interpretare sigle e tecnicismi):", uc, ""]
+    if context:
+        parts += ["CONTESTO FORNITO DALL'UTENTE (lo scopo dichiarato):", context, ""]
+    parts += [
+        f"Tipo di sessione: {_MODE_ALIASES.get(mode, 'solo')}.",
+        "",
+        "ELEMENTI DA CONSOLIDARE (unione grezza delle porzioni):",
+        merged.model_dump_json(),
+    ]
+    return "\n".join(parts)

@@ -252,6 +252,39 @@ def test_detect_questions_gets_empty_transcript_when_over_budget(store, tmp_path
     assert captured["t"] == "", "detect_questions deve ricevere transcript vuoto quando supera il budget"
 
 
+def test_detect_questions_gets_empty_transcript_when_fit_check_fails(store, tmp_path, monkeypatch):
+    """Se il check di idoneità SOLLEVA, "non lo so" non è "va tutto bene": mandare comunque il
+    transcript integrale rientra dal retro nel timeout che ADR-041/P2 aveva chiuso."""
+    analysis = Analysis(meta=Meta(type="solo", title="X"))
+    long_text = " ".join(["parola"] * 4000)
+    captured: dict = {}
+
+    def boom(*a, **k):
+        raise RuntimeError("check di idoneità rotto")
+
+    def fake_detect(a, t, *, provider, mode, should_cancel=None, **_kw):
+        captured["t"] = t
+        return []
+
+    monkeypatch.setattr(
+        P.whisper_mod,
+        "transcribe_stream",
+        lambda path, *, model, language, on_segment=None, should_cancel=None, **_kw: {
+            "text": long_text,
+            "duration_s": 600.0,
+        },
+    )
+    monkeypatch.setattr(P.analyzer_mod, "analyze", lambda text, *, mode, provider, refinement=None, **_kw: analysis)
+    monkeypatch.setattr(P.interview_mod, "detect_questions", fake_detect)
+    monkeypatch.setattr(P.fit_mod, "assess_fit", boom)
+
+    job = store.create(Job.new(str(tmp_path / "a.wav"), model="small", language="it", mode="solo"))
+    P.run_processing(
+        job, store, settings=Settings(briefing_dir=str(tmp_path / "out")), provider=StubProvider(), emit=None
+    )
+    assert captured["t"] == "", "check fallito ⇒ prudenza: si lavora sull'analisi JSON"
+
+
 def test_detect_questions_gets_full_transcript_when_ideal(store, tmp_path, monkeypatch):
     """Contraltare di P2: trascrizione ideale (o provider senza budget noto) → detect_questions
     riceve il transcript intero (comportamento invariato)."""
@@ -473,6 +506,38 @@ def test_generate_briefing_aborts_when_cancelled_during_refinement(store, tmp_pa
     )
     assert out.status == "cancelled"
     assert out.briefing_md == "" and out.briefing_path == ""
+
+
+def test_generate_briefing_passes_should_cancel_to_analyze(store, tmp_path, monkeypatch):
+    """Annulla durante il refinement deve INTERROMPERE la chiamata LLM, non solo scartarne
+    il risultato: su Ollama/CPU sono minuti di attesa a vuoto (stessa classe di bug di
+    ADR-024 per la trascrizione). `run_processing` passava should_cancel, questa no."""
+    analysis = Analysis(meta=Meta(type="solo", title="X"))
+    job = store.create(Job.new(str(tmp_path / "a.wav"), model="small", mode="solo"))
+    store.update(
+        job.id,
+        transcript="t",
+        analysis=analysis.model_dump(),
+        questions=[IV.Question(id="q1", text="Budget?").model_dump()],
+        status="awaiting_interview",
+    )
+    captured: dict = {}
+
+    def fake_analyze(text, *, mode, context=None, provider, refinement=None, should_cancel=None, **kwargs):
+        captured["cb"] = should_cancel
+        return analysis
+
+    monkeypatch.setattr(P.analyzer_mod, "analyze", fake_analyze)
+    s = Settings(briefing_dir=str(tmp_path / "out"))
+    P.generate_briefing(
+        store.get(job.id), store, answers={"q1": "10k"}, skipped=[], settings=s, provider=StubProvider()
+    )
+
+    cb = captured.get("cb")
+    assert callable(cb), "analyze deve ricevere should_cancel"
+    assert cb() is False  # job non annullato
+    store.update(job.id, status="cancelled")
+    assert cb() is True  # l'annullamento arriva al motore mentre l'LLM sta lavorando
 
 
 def test_generate_briefing_writes_file_with_markers(store, tmp_path, monkeypatch):
@@ -769,6 +834,65 @@ def test_generate_briefing_no_sparse_warning_when_content_present(store, tmp_pat
     assert out.status == "ready"
     sparse_warn = [p for (ev, p) in events if ev == "warning" for m in p.get("messages", []) if "vuot" in m.lower()]
     assert not sparse_warn
+
+
+def test_generate_briefing_warns_when_analysis_is_thin_for_a_long_transcript(store, tmp_path):
+    """Il caso segnalato dall'uso reale: l'analisi NON è vuota (2 domande su 5) ma per la
+    lunghezza della registrazione è magra. Prima passava in silenzio. Il briefing arriva
+    comunque a ready: l'avviso informa, non blocca."""
+    thin = Analysis(meta=Meta(type="solo", title="Corta"), key_ideas=["un'idea"], open_questions=["e i costi?"])
+    job = store.create(Job.new(str(tmp_path / "c.wav"), model="small", mode="solo"))
+    store.update(
+        job.id,
+        transcript=" ".join(["parola"] * 900),  # trascrizione lunga, analisi corta
+        analysis=thin.model_dump(),
+        questions=[],
+        status="awaiting_interview",
+    )
+    events: list[tuple] = []
+    s = Settings(briefing_dir=str(tmp_path / "out3"))
+    out = P.generate_briefing(
+        store.get(job.id),
+        store,
+        answers={},
+        skipped=[],
+        settings=s,
+        provider=StubProvider(),
+        emit=lambda ev, payload: events.append((ev, payload)),
+    )
+    assert out.status == "ready" and out.briefing_md
+    msgs = [m for (ev, p) in events if ev == "warning" for m in p.get("messages", [])]
+    assert any("estratto poco" in m.lower() for m in msgs), msgs
+
+
+def test_generate_briefing_silent_when_analysis_matches_transcript_length(store, tmp_path):
+    """Controprova: un'analisi ricca su una trascrizione lunga non deve produrre rumore."""
+    rich = Analysis(
+        meta=Meta(type="solo", title="Piena"),
+        key_ideas=[f"idea {i}" for i in range(8)],
+        open_questions=[f"domanda {i}" for i in range(5)],
+    )
+    job = store.create(Job.new(str(tmp_path / "d.wav"), model="small", mode="solo"))
+    store.update(
+        job.id,
+        transcript=" ".join(["parola"] * 900),
+        analysis=rich.model_dump(),
+        questions=[],
+        status="awaiting_interview",
+    )
+    events: list[tuple] = []
+    s = Settings(briefing_dir=str(tmp_path / "out4"))
+    P.generate_briefing(
+        store.get(job.id),
+        store,
+        answers={},
+        skipped=[],
+        settings=s,
+        provider=StubProvider(),
+        emit=lambda ev, payload: events.append((ev, payload)),
+    )
+    msgs = [m for (ev, p) in events if ev == "warning" for m in p.get("messages", [])]
+    assert not any("estratto poco" in m.lower() for m in msgs), msgs
 
 
 def test_generate_briefing_renders_markers_in_artifacts(store, tmp_path, monkeypatch):
@@ -1232,3 +1356,163 @@ def test_run_processing_skip_transcribe_empty_transcript_errors(store, tmp_path,
         skip_transcribe=True,
     )
     assert out.status == "error"
+
+
+def test_step_labels_are_readable_including_the_window_counter():
+    """La fase a finestre dura minuti: senza il contatore l'utente vedrebbe la stessa frase
+    immobile e penserebbe a un blocco. Uno step sconosciuto non deve far saltare nulla."""
+    assert "2" in P._step_label("window:2/3", "it") and "3" in P._step_label("window:2/3", "it")
+    assert P._step_label("window:1/4", "en") != "window:1/4"
+    assert P._step_label("consolidate", "it") != "consolidate"
+    assert P._step_label("verify", "it") != "verify"
+    assert P._step_label("sconosciuto", "it") == "sconosciuto"
+    assert P._step_label("window:rotto", "it") == "window:rotto"
+
+
+def test_generate_briefing_warns_about_items_not_in_the_recording(store, tmp_path):
+    """Un nome o una cifra che nella registrazione non c'è finiva nel briefing senza che
+    nessuno lo dicesse (ADR-066: due persone mai nominate). Il briefing si genera comunque:
+    è un avviso, non una censura — cancellare un elemento corretto sarebbe peggio."""
+    analysis = Analysis(
+        meta=Meta(type="solo", title="X"),
+        key_ideas=["Il progetto lo segue Genoveffa", "Budget da definire"],
+    )
+    job = store.create(Job.new(str(tmp_path / "a.wav"), model="small", mode="solo"))
+    store.update(
+        job.id,
+        transcript="Abbiamo parlato del progetto con Kamil, il budget è da definire.",
+        analysis=analysis.model_dump(),
+        questions=[],
+        status="awaiting_interview",
+    )
+    events: list[tuple] = []
+    out = P.generate_briefing(
+        store.get(job.id),
+        store,
+        answers={},
+        skipped=[],
+        settings=Settings(briefing_dir=str(tmp_path / "out")),
+        provider=StubProvider(),
+        emit=lambda ev, payload: events.append((ev, payload)),
+    )
+    warnings = [p for ev, p in events if ev == "warning"]
+    assert warnings, "un elemento non ancorato alla registrazione deve essere segnalato"
+    assert "Genoveffa" in " ".join(" ".join(w["messages"]) for w in warnings)
+    assert out.status == "ready"  # avviso, non blocco
+
+
+# --- Attribuzione degli speaker (2026-09-25) ----------------------------------
+
+
+def _wav16k(path, seconds=1):
+    import wave
+
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(16000)
+        w.writeframes(b"\x00\x00" * 16000 * seconds)
+    return str(path)
+
+
+def _prepara_diarization(store, tmp_path, monkeypatch, *, turni=None, boom=False):
+    from vokari.diarize.speakers import Turn
+
+    audio = _wav16k(tmp_path / "riunione.wav", 6)
+    job = store.create(Job.new(audio, model="small", language="it", mode="riunione"))
+    monkeypatch.setattr(
+        P.whisper_mod,
+        "transcribe_stream",
+        lambda path, *, model, language, on_segment=None, should_cancel=None, **_kw: {
+            "text": "Buongiorno a tutti. D'accordo.",
+            "duration_s": 6.0,
+            "segments": [
+                {"start": 0.0, "end": 2.0, "text": "Buongiorno a tutti."},
+                {"start": 2.5, "end": 5.0, "text": "D'accordo."},
+            ],
+        },
+    )
+    monkeypatch.setattr(P.diarize_mod, "is_available", lambda: True)
+    monkeypatch.setattr(P.diarize_mod, "models_ready", lambda: True)
+
+    def _fake(wav, *, num_speakers=0, on_progress=None, should_cancel=None):
+        if boom:
+            raise RuntimeError("modello di diarization corrotto")
+        return turni if turni is not None else [Turn(0.0, 2.2, 0), Turn(2.2, 6.0, 1)]
+
+    monkeypatch.setattr(P.diarize_mod, "diarize_wav", _fake)
+    return job
+
+
+def test_speakers_reach_the_transcript_given_to_the_model(store, tmp_path, monkeypatch):
+    """Per una riunione «chi dice cosa» cambia il senso di una decisione: il testo che va
+    all'LLM diventa un dialogo, non un blocco unico."""
+    visto: dict = {}
+    job = _prepara_diarization(store, tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        P.analyzer_mod,
+        "analyze",
+        lambda text, *, mode, provider, refinement=None, **_kw: (
+            (visto.setdefault("t", text) and None) or Analysis(meta=Meta(type="meeting", title="X"))
+        ),
+    )
+    monkeypatch.setattr(
+        P.interview_mod, "detect_questions", lambda a, t, *, provider, mode, should_cancel=None, **_kw: []
+    )
+
+    out = P.run_processing(
+        job,
+        store,
+        settings=Settings(diarization=True, num_speakers=2, briefing_dir=str(tmp_path / "out")),
+        provider=StubProvider(),
+        emit=None,
+    )
+    assert "Interlocutore 1:" in visto["t"] and "Interlocutore 2:" in visto["t"]
+    assert [s.get("speaker") for s in out.segments] == [0, 1]
+
+
+def test_a_broken_diarization_does_not_cost_the_briefing(store, tmp_path, monkeypatch):
+    """È una funzione accessoria: se cade, si avvisa e si continua con la trascrizione
+    normale — mai perdere l'analisi per l'attribuzione degli speaker."""
+    job = _prepara_diarization(store, tmp_path, monkeypatch, boom=True)
+    monkeypatch.setattr(
+        P.analyzer_mod,
+        "analyze",
+        lambda text, *, mode, provider, refinement=None, **_kw: Analysis(meta=Meta(type="meeting", title="X")),
+    )
+    monkeypatch.setattr(
+        P.interview_mod, "detect_questions", lambda a, t, *, provider, mode, should_cancel=None, **_kw: []
+    )
+    events: list[tuple] = []
+    out = P.run_processing(
+        job,
+        store,
+        settings=Settings(diarization=True, briefing_dir=str(tmp_path / "out")),
+        provider=StubProvider(),
+        emit=lambda ev, p: events.append((ev, p)),
+    )
+    assert out.status == "awaiting_interview"
+    assert any(ev == "warning" for ev, _ in events)
+
+
+def test_diarization_off_does_not_touch_the_audio(store, tmp_path, monkeypatch):
+    job = _prepara_diarization(store, tmp_path, monkeypatch)
+    chiamate = {"n": 0}
+
+    def _mai(*a, **k):
+        chiamate["n"] += 1
+        return []
+
+    monkeypatch.setattr(P.diarize_mod, "diarize_wav", _mai)
+    monkeypatch.setattr(
+        P.analyzer_mod,
+        "analyze",
+        lambda text, *, mode, provider, refinement=None, **_kw: Analysis(meta=Meta(type="meeting", title="X")),
+    )
+    monkeypatch.setattr(
+        P.interview_mod, "detect_questions", lambda a, t, *, provider, mode, should_cancel=None, **_kw: []
+    )
+    P.run_processing(
+        job, store, settings=Settings(briefing_dir=str(tmp_path / "out")), provider=StubProvider(), emit=None
+    )
+    assert chiamate["n"] == 0

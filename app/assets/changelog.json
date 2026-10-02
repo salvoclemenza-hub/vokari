@@ -2,14 +2,116 @@
   "_comment": "Changelog VOKARI — mostrato in-app dopo un aggiornamento. Aggiungi una voce in cima a 'versions' a ogni rilascio. kind: feature | fix | improvement. Allinea la versione a pyproject.toml.",
   "versions": [
     {
+      "version": "0.3.0",
+      "date": "2026-10-01",
+      "title": "Chi ha detto cosa, e i sottotitoli",
+      "highlights": [
+        {
+          "kind": "feature",
+          "text": "Attribuzione degli interlocutori: la trascrizione diventa un dialogo, con il nome di chi parla accanto a ogni frase. Gira in locale sulla CPU, va attivata in Impostazioni e aggiunge circa un minuto ogni tre di registrazione. Dire quante persone parlano migliora molto il risultato."
+        },
+        {
+          "kind": "feature",
+          "text": "Sottotitoli: dagli artefatti si esporta un file .srt con i tempi di ogni frase, e con il nome di chi parla se l'attribuzione è attiva."
+        },
+        {
+          "kind": "improvement",
+          "text": "Il vocabolario che scrivi in «Il tuo contesto» ora conta su tutta la registrazione: prima arrivava solo ai primi trenta secondi, e cambiandolo la trascrizione restava comunque quella vecchia."
+        },
+        {
+          "kind": "improvement",
+          "text": "Le registrazioni lunghe si tagliano nei momenti di silenzio invece che a tempo fisso: meno frasi spezzate a metà, e meno parole inventate là dove il taglio cadeva dentro una parola."
+        },
+        {
+          "kind": "improvement",
+          "text": "Avviso quando nel briefing compaiono nomi o cifre che nella registrazione non si sentono. Niente viene cancellato: il dubbio si mostra, la scelta resta a te."
+        },
+        {
+          "kind": "fix",
+          "text": "Tirando le somme non si perdono più i numeri: date, quantità e importi che la prima lettura aveva trovato tornano nel briefing anche se il riassunto li aveva lasciati fuori."
+        },
+        {
+          "kind": "fix",
+          "text": "«Annulla» durante la rigenerazione del briefing ferma davvero il lavoro, invece di scartare il risultato lasciando il modello a macinare per minuti."
+        },
+        {
+          "kind": "fix",
+          "text": "Sulle registrazioni lunghe l'ultimo passo di controllo non rimanda più tutto il testo in una volta sola: era proprio ciò che la lettura a tratti serviva a evitare."
+        },
+        {
+          "kind": "improvement",
+          "text": "Briefing e recap dichiarano di essere stati generati con l'intelligenza artificiale."
+        }
+      ]
+    },
+    {
+      "version": "0.2.2",
+      "date": "2026-09-24",
+      "title": "Le registrazioni lunghe non perdono piu' pezzi",
+      "highlights": [
+        {
+          "kind": "improvement",
+          "text": "Sulle registrazioni lunghe l'analisi legge il testo a tratti invece che tutto in un colpo: prima la seconda meta' della riunione veniva spesso ignorata. Su una registrazione reale di 10 minuti gli elementi estratti sono passati da 7 a 21, con dentro date, impegni e argomenti che prima sparivano."
+        },
+        {
+          "kind": "fix",
+          "text": "I modelli che \"ragionano ad alta voce\" (granite, qwen3, deepseek-r1) non bloccano piu' l'analisi: prima potevano farla scadere dopo dieci minuti anche su una nota breve."
+        },
+        {
+          "kind": "feature",
+          "text": "La trascrizione integrale si scarica dagli artefatti, non solo si copia."
+        },
+        {
+          "kind": "feature",
+          "text": "Nuovo modello consigliato: granite4.2:8b, preciso nel tirare le somme. Con il cervello locale puoi sceglierlo in Impostazioni come modello di consolidamento, tenendo quello veloce per il resto."
+        },
+        {
+          "kind": "improvement",
+          "text": "Avviso quando l'analisi estrae poco rispetto alla lunghezza della registrazione: prima un briefing incompleto sembrava completo."
+        },
+        {
+          "kind": "fix",
+          "text": "Fra le \"entita' citate\" non finiscono piu' pronomi, nomi comuni, o nomi che nella registrazione non sono mai stati pronunciati."
+        },
+        {
+          "kind": "fix",
+          "text": "Note Obsidian: un titolo con le virgolette non manda piu' in errore le proprieta' della nota (tag e data venivano perse)."
+        },
+        {
+          "kind": "fix",
+          "text": "Se Ollama non e' installato l'app lo dice, invece di chiedere di avviare un servizio che non c'e'."
+        },
+        {
+          "kind": "fix",
+          "text": "Anteprima del briefing senza i tag tecnici a vista, e i conteggi di parole ora dicono cosa stanno contando."
+        },
+        {
+          "kind": "fix",
+          "text": "La versione mostrata in alto a destra e' quella davvero installata."
+        }
+      ]
+    },
+    {
       "version": "0.1.2",
       "date": "2026-06-25",
       "title": "Benvenuto guidato e modelli più chiari",
       "highlights": [
-        { "kind": "feature", "text": "Wizard di benvenuto al primo avvio: configuri cervello AI e modello di trascrizione passo dopo passo." },
-        { "kind": "feature", "text": "Questa finestra: dopo ogni aggiornamento vedi cosa è cambiato." },
-        { "kind": "fix", "text": "Schermata Modelli AI: il modello selezionato ma non ancora scaricato non viene più mostrato come \"Attivo\"." },
-        { "kind": "fix", "text": "Impostazioni: lo stato di Ollama ora distingue \"installato ma fermo\" da \"non installato\" e indica dove agire." }
+        {
+          "kind": "feature",
+          "text": "Wizard di benvenuto al primo avvio: configuri cervello AI e modello di trascrizione passo dopo passo."
+        },
+        {
+          "kind": "feature",
+          "text": "Questa finestra: dopo ogni aggiornamento vedi cosa è cambiato."
+        },
+        {
+          "kind": "fix",
+          "text": "Schermata Modelli AI: il modello selezionato ma non ancora scaricato non viene più mostrato come \"Attivo\"."
+        },
+        {
+          "kind": "fix",
+          "text": "Impostazioni: lo stato di Ollama ora distingue \"installato ma fermo\" da \"non installato\" e indica dove agire."
+        }
       ]
     },
     {
@@ -17,8 +119,14 @@
       "date": "2026-06-20",
       "title": "Primo pacchetto distribuibile",
       "highlights": [
-        { "kind": "feature", "text": "Pacchetto di installazione per Windows (ZIP con setup), nessuna configurazione manuale richiesta." },
-        { "kind": "improvement", "text": "Avvisi più onesti quando la lingua rilevata nell'audio non coincide con quella impostata." }
+        {
+          "kind": "feature",
+          "text": "Pacchetto di installazione per Windows (ZIP con setup), nessuna configurazione manuale richiesta."
+        },
+        {
+          "kind": "improvement",
+          "text": "Avvisi più onesti quando la lingua rilevata nell'audio non coincide con quella impostata."
+        }
       ]
     },
     {
@@ -26,8 +134,14 @@
       "date": "2026-06-10",
       "title": "Primo rilascio",
       "highlights": [
-        { "kind": "feature", "text": "Da una registrazione vocale a briefing.md, recap e note Obsidian — tutto in locale, solo il testo trascritto va all'AI." },
-        { "kind": "feature", "text": "Trascrizione locale con faster-whisper e analisi con Claude oppure Ollama (offline)." }
+        {
+          "kind": "feature",
+          "text": "Da una registrazione vocale a briefing.md, recap e note Obsidian — tutto in locale, solo il testo trascritto va all'AI."
+        },
+        {
+          "kind": "feature",
+          "text": "Trascrizione locale con faster-whisper e analisi con Claude oppure Ollama (offline)."
+        }
       ]
     }
   ]

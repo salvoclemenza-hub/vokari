@@ -1,0 +1,58 @@
+# NOTICE — componenti di terze parti
+
+VOKARI è distribuito sotto licenza MIT (vedi `LICENSE`).
+I pacchetti di distribuzione (ZIP Windows, DMG macOS, MSIX) includono i componenti
+elencati qui sotto, che restano dei rispettivi autori e mantengono le loro licenze.
+
+## Ridistribuiti dentro il pacchetto
+
+### FFmpeg — LGPL v2.1 o successiva
+Copyright (c) 2000-2026 gli autori di FFmpeg.
+Build usata: **`ffmpeg-master-latest-win64-lgpl-shared`** (BtbN/FFmpeg-Builds), compilata
+**senza** `--enable-gpl` e **senza** i componenti GPL (x264, x265). VOKARI invoca gli
+eseguibili `ffmpeg`/`ffprobe` come processi esterni e le librerie sono DLL condivise
+sostituibili dall'utente: la LGPL è soddisfatta per via del collegamento dinamico.
+- Licenza: https://www.ffmpeg.org/legal.html
+- Sorgenti: https://github.com/FFmpeg/FFmpeg — le build: https://github.com/BtbN/FFmpeg-Builds
+⚠ Chi ricostruisce i pacchetti **non** deve sostituire questa build con una "full"/GPL:
+cambierebbe gli obblighi di licenza dell'intero prodotto.
+
+### CPython — Python Software Foundation License 2.0
+Runtime Python embedded (ZIP Windows) / incluso da PyInstaller (DMG macOS).
+https://docs.python.org/3/license.html
+
+### Microsoft Visual C++ Runtime — Microsoft Software License Terms
+Ridistribuibile incluso nel pacchetto Windows per le macchine senza runtime.
+
+## Dipendenze Python (installate nel pacchetto)
+
+| Componente | Licenza | Ruolo |
+|---|---|---|
+| faster-whisper | MIT | trascrizione locale |
+| CTranslate2 | MIT | motore di inferenza di faster-whisper |
+| pywebview | BSD 3-Clause | finestra dell'applicazione |
+| PyInstaller | GPL 2.0 con eccezione per i bundle | build del `.app`/DMG macOS |
+| pydantic, httpx, typer, numpy, psutil, keyring, platformdirs | MIT / BSD | libreria |
+| sounddevice, PyAudioWPatch | MIT | cattura audio |
+| sherpa-onnx | Apache 2.0 | attribuzione degli speaker (opzionale, ~6 MB) |
+| pydub | MIT | conversione audio |
+| fpdf2 | LGPL v3 | export PDF (usata come libreria, non modificata) |
+| anthropic (SDK) | MIT | client API Claude (opzionale, chiave dell'utente) |
+
+## Modelli
+
+- **Whisper** (OpenAI) — pesi sotto licenza **MIT**. Scaricati su richiesta dell'utente,
+  non ridistribuiti nel pacchetto.
+- **Modelli Ollama** — scaricati dall'utente, ciascuno con la propria licenza. I modelli
+  consigliati nel catalogo di VOKARI sono **Apache 2.0** (`qwen2.5` nelle taglie 0.5B–32B
+  esclusa la 3B, `granite`). ⚠ `qwen2.5:3b` e `qwen2.5:72b` **non** sono Apache 2.0: sono
+  sotto licenza Qwen e richiedono un accordo separato per l'uso commerciale.
+- **Claude** (Anthropic) — servizio remoto, usato solo se l'utente inserisce la **propria**
+  chiave API; vale il contratto fra l'utente e Anthropic.
+- **Modelli per l'attribuzione degli speaker** — scaricati a richiesta dalle release di
+  `k2-fsa/sherpa-onnx`, non ridistribuiti nel pacchetto: segmentazione derivata da
+  `pyannote/segmentation-3.0` ed embedding `3D-Speaker campplus`. ⚠ Prima di ridistribuirli
+  (cioè di includerli in un pacchetto invece di scaricarli) va verificata la licenza di
+  ciascuno: qui l'utente li scarica per sé, ed è una situazione diversa.
+
+Segnalazioni su questo file: apri una issue sul repository.

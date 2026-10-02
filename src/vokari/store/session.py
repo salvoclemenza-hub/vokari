@@ -19,6 +19,7 @@ class Session:
     audio_path: str = ""  # LOCALE, mai uploadato
     transcript: str | None = None
     markers: list[dict] = field(default_factory=list)  # [{t_ms, label}]
+    segments: list[dict] = field(default_factory=list)  # [{start, end, text}] — export SRT
     refinement: dict | None = None  # {answers: {...}, skipped: [...]}
     artifacts: dict | None = None  # {briefing_md, recap_md, obsidian_note}
     word_count: int | None = None

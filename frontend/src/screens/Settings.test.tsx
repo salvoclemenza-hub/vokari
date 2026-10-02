@@ -8,7 +8,7 @@ import type { LhmStatus, ModelEntry, VokariSettings } from "../bridge";
 const FAKE_SETTINGS: VokariSettings = {
   brain: "claude",
   ollamaEndpoint: "http://localhost:11434",
-  ollamaModel: "gemma2:9b",
+  ollamaModel: "gemma2:9b", consolidateModel: "",
   whisperModel: "large-v3-turbo",
   claudeModel: "claude-opus-4-8",
   briefingDir: "/home/user/briefing",
@@ -21,6 +21,8 @@ const FAKE_SETTINGS: VokariSettings = {
   lastSeenVersion: "",
   appLanguage: "it",
   userContext: "",
+  diarization: false,
+  numSpeakers: 0,
   hasApiKey: true,
 };
 
@@ -36,9 +38,11 @@ const mockDeleteApiKey = vi.fn();
 const mockVerifyApiKey = vi.fn();
 const mockBrowseFolder = vi.fn();
 const mockListModels = vi.fn();
+const mockListOllamaModels = vi.fn();
 const mockDownloadModel = vi.fn();
 const mockSetActiveModel = vi.fn();
 const mockLhmStatus = vi.fn();
+const mockDiarizationStatus = vi.fn();
 const mockOllamaStatus = vi.fn();
 const mockOnVokariEvent = vi.fn();
 
@@ -46,10 +50,11 @@ vi.mock("../bridge", () => ({
   // valore iniziale di useState (poi sovrascritto da getSettings nel test). Inline perché
   // la factory di vi.mock non può referenziare variabili out-of-scope non-`mock*`.
   DEFAULT_SETTINGS: {
-    brain: "claude", ollamaEndpoint: "http://localhost:11434", ollamaModel: "gemma2:9b",
+    brain: "claude", ollamaEndpoint: "http://localhost:11434", ollamaModel: "gemma2:9b", consolidateModel: "",
     whisperModel: "large-v3-turbo", claudeModel: "claude-opus-4-8", briefingDir: "",
     obsidianVault: "", defaultMode: "solo", transcriptionLanguage: "auto",
-    livePreview: true, liveModel: "base", userContext: "", hasApiKey: false,
+    livePreview: true, liveModel: "base", userContext: "", diarization: false, numSpeakers: 0,
+    hasApiKey: false,
   },
   bridge: {
     getSettings: () => mockGetSettings() as Promise<VokariSettings>,
@@ -60,9 +65,12 @@ vi.mock("../bridge", () => ({
     verifyApiKey: () => mockVerifyApiKey() as Promise<{ ok: boolean; reachable: boolean; error: string }>,
     browseFolder: () => mockBrowseFolder() as Promise<{ path: string }>,
     listModels: () => mockListModels() as Promise<ModelEntry[]>,
+    listOllamaModels: () => mockListOllamaModels(),
     downloadModel: (name: string) => mockDownloadModel(name) as Promise<{ ok: boolean }>,
     setActiveModel: (name: string) => mockSetActiveModel(name) as Promise<VokariSettings>,
     lhmStatus: () => mockLhmStatus() as Promise<LhmStatus>,
+    diarizationStatus: () => mockDiarizationStatus(),
+    downloadDiarizationModels: vi.fn().mockResolvedValue({ ok: true }),
     ollamaStatus: () => mockOllamaStatus() as Promise<{ installed: boolean; running: boolean; canInstall: boolean }>,
     lhmInstall: vi.fn().mockResolvedValue({ ok: true }),
     lhmStart: vi.fn().mockResolvedValue({ ok: true }),
@@ -88,8 +96,14 @@ describe("ScreenSettings", () => {
     mockVerifyApiKey.mockResolvedValue({ ok: true, reachable: true, error: "" });
     mockBrowseFolder.mockResolvedValue({ path: "" });
     mockListModels.mockResolvedValue([...FAKE_MODELS]);
+    mockListOllamaModels.mockResolvedValue([
+      { name: "qwen2.5:7b", isInstalled: true },
+      { name: "granite4.2:8b", isInstalled: true },
+      { name: "llama3.1:8b", isInstalled: false },
+    ]);
     mockSetActiveModel.mockResolvedValue({ ...FAKE_SETTINGS });
     mockLhmStatus.mockResolvedValue({ installed: false, running: false, canInstall: true });
+    mockDiarizationStatus.mockResolvedValue({ available: true, modelsReady: true, sizeMb: 35 });
     mockOllamaStatus.mockResolvedValue({ installed: false, running: false, canInstall: true });
     mockOnVokariEvent.mockReturnValue(() => {});
   });
@@ -282,5 +296,62 @@ describe("ScreenSettings — sezione Il tuo contesto", () => {
     await waitFor(() => {
       expect(mockSaveSettings).toHaveBeenCalledWith({ userContext: "magazzino alimentare" });
     });
+  });
+
+  it("il consolidatore si sceglie solo col cervello locale, e non ripropone il modello attivo", async () => {
+    mockGetSettings.mockResolvedValue({ ...FAKE_SETTINGS, brain: "ollama", ollamaModel: "qwen2.5:7b" });
+    render(<ScreenSettings />);
+
+    const select = (await screen.findByLabelText("Modello per tirare le somme")) as HTMLSelectElement;
+    const options = within(select).getAllByRole("option").map((o) => o.textContent);
+    expect(options).toContain("Lo stesso dell'analisi");
+    expect(options).toContain("granite4.2:8b");
+    expect(options).not.toContain("qwen2.5:7b");   // e' gia' il modello dell'analisi
+    expect(options).not.toContain("llama3.1:8b");  // non installato
+
+    fireEvent.change(select, { target: { value: "granite4.2:8b" } });
+    await waitFor(() => expect(mockSaveSettings).toHaveBeenCalledWith({ consolidateModel: "granite4.2:8b" }));
+  });
+
+  it("col cervello Claude il consolidatore non compare (una scelta in meno, senza guadagno)", async () => {
+    mockGetSettings.mockResolvedValue({ ...FAKE_SETTINGS, brain: "claude" });
+    render(<ScreenSettings />);
+    await waitFor(() => expect(mockGetSettings).toHaveBeenCalled());
+    expect(screen.queryByLabelText("Modello per tirare le somme")).toBeNull();
+  });
+});
+
+describe("ScreenSettings — attribuzione speaker", () => {
+  beforeEach(() => {
+    mockGetSettings.mockResolvedValue({ ...FAKE_SETTINGS });
+    mockSaveSettings.mockResolvedValue({ ...FAKE_SETTINGS, diarization: true });
+    mockListModels.mockResolvedValue([...FAKE_MODELS]);
+    mockListOllamaModels.mockResolvedValue([]);
+    mockLhmStatus.mockResolvedValue({ installed: false, running: false, canInstall: true });
+    mockOllamaStatus.mockResolvedValue({ installed: false, running: false, canInstall: true });
+    mockDiarizationStatus.mockResolvedValue({ available: true, modelsReady: true, sizeMb: 35 });
+    mockOnVokariEvent.mockReturnValue(() => {});
+  });
+
+  it("si attiva dalle impostazioni e viene salvata", async () => {
+    render(<ScreenSettings />);
+    const label = await screen.findByText(/Attribuzione degli interlocutori/i);
+    const field = label.closest(".vk-field") as HTMLElement;
+    fireEvent.click(within(field).getByRole("button", { name: /^Attiva$/ }));
+    await waitFor(() => expect(mockSaveSettings).toHaveBeenCalledWith({ diarization: true }));
+  });
+
+  it("con i modelli da scaricare lo dice, invece di fallire al primo uso", async () => {
+    mockDiarizationStatus.mockResolvedValue({ available: true, modelsReady: false, sizeMb: 35 });
+    mockGetSettings.mockResolvedValue({ ...FAKE_SETTINGS, diarization: true });
+    render(<ScreenSettings />);
+    expect(await screen.findByRole("button", { name: /Scarica ora/i })).toBeInTheDocument();
+  });
+
+  it("senza il pacchetto installato non promette una funzione che non c'è", async () => {
+    mockDiarizationStatus.mockResolvedValue({ available: false, modelsReady: false, sizeMb: 35 });
+    mockGetSettings.mockResolvedValue({ ...FAKE_SETTINGS, diarization: true });
+    render(<ScreenSettings />);
+    expect(await screen.findByText(/non è installato/i)).toBeInTheDocument();
   });
 });

@@ -96,6 +96,15 @@ def _ollama_http_error_message(endpoint: str, e: httpx.HTTPError) -> str:
     caso ECO 5.0 (1s prima dell'errore la telemetria segnava CPU 57%: Ollama stava ancora
     generando, non era morto)."""
     if isinstance(e, (httpx.ConnectError, httpx.ConnectTimeout)):
+        # "Non raggiungibile, avvialo" manda a cercare un servizio che non esiste quando
+        # Ollama non è nemmeno installato — caso reale di un utente al primo avvio, che ha
+        # passato la configurazione senza leggerla. Distinguiamo: l'eseguibile c'è o no.
+        if not shutil.which("ollama"):
+            return (
+                "Ollama non è installato su questo computer: installalo da https://ollama.com "
+                "(poi scarica un modello dalla schermata Modelli AI), oppure passa a Claude "
+                "nelle Impostazioni."
+            )
         return f"Ollama non raggiungibile su {endpoint} — avvialo o passa a Claude nelle Impostazioni."
     if isinstance(e, (httpx.ReadTimeout, httpx.PoolTimeout)):
         mins = max(1, int((_TIMEOUT.read or 0) // 60))
@@ -103,6 +112,8 @@ def _ollama_http_error_message(endpoint: str, e: httpx.HTTPError) -> str:
             f"Ollama è attivo ma la risposta ha superato {mins} min: il modello è lento su CPU. "
             "Usa un modello più piccolo, abbrevia la registrazione, o passa a Claude."
         )
+    if not shutil.which("ollama"):
+        return f"Ollama non è installato su questo computer (installalo da https://ollama.com): {e}"
     return f"Ollama non raggiungibile su {endpoint}: {e}"
 
 
@@ -171,6 +182,14 @@ class OllamaProvider:
         payload: dict = {
             "model": self.model,
             "stream": stream,
+            # Ragionamento ad alta voce SPENTO. I modelli "thinking" (granite4.2, qwen3,
+            # deepseek-r1...) generano una catena di pensiero prima della risposta: misurato
+            # su granite4.2:8b, la stessa estrazione JSON costa 94s e 771 token col pensiero
+            # e 6s con 12 token senza — 15x, a parità di risultato. Su CPU è la differenza
+            # fra usabile e inutilizzabile, e il nostro compito è ESTRARRE ciò che è stato
+            # detto, non ragionarci sopra. Su un modello che non pensa Ollama ignora il campo
+            # (verificato su qwen2.5:7b: HTTP 200), quindi non serve rilevare le capability.
+            "think": False,
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},

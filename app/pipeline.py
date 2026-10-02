@@ -2,6 +2,7 @@
 Emette eventi via il callback `emit(event, payload)`; l'Api li inoltra al JS con
 evaluate_js. Riusa interamente il motore (M1-M4) e llm.factory (DRY)."""
 
+import tempfile
 import time
 from datetime import date
 from pathlib import Path
@@ -11,12 +12,15 @@ from app.jobs import Job, JobStore
 from vokari import i18n
 from vokari import settings as settings_mod
 from vokari.analyze import analyzer as analyzer_mod
+from vokari.analyze import fidelity as fidelity_mod
 from vokari.analyze import fit as fit_mod
 from vokari.analyze import interview as interview_mod
 from vokari.analyze.preview import preview_from_partial_json
 from vokari.analyze.schema import Analysis, Meta
 from vokari.audio import convert as convert_mod
-from vokari.llm.factory import make_provider
+from vokari.diarize import engine as diarize_mod
+from vokari.diarize import speakers as speakers_mod
+from vokari.llm.factory import make_consolidate_provider, make_provider
 from vokari.render import briefing as briefing_mod
 from vokari.render import obsidian as obsidian_mod
 from vokari.render import recap as recap_mod
@@ -191,6 +195,56 @@ def _combined_context(job_context: str, extra_context: str) -> str | None:
     return "\n\n".join(parts) if parts else None
 
 
+def _step_label(step: str, lang: str) -> str:
+    """Etichetta leggibile di una sotto-fase dell'analisi. `window:2/3` (map-reduce) porta con
+    se' i numeri: senza, l'utente vedrebbe la stessa frase ferma per minuti e penserebbe a un
+    blocco. Uno step sconosciuto torna com'e' (mai un crash per una label)."""
+    if step.startswith("window:"):
+        try:
+            n, tot = step.split(":", 1)[1].split("/")
+            return i18n.t("pipeline.step_window", lang, n=n, tot=tot)
+        except ValueError:
+            return step
+    return {
+        "verify": i18n.t("pipeline.step_verify", lang),
+        "consolidate": i18n.t("pipeline.step_consolidate", lang),
+        "questions": i18n.t("pipeline.step_questions", lang),
+    }.get(step, step)
+
+
+def _diarize_transcript(job: Job, store: JobStore, *, settings, lang: str, emit, cancelled) -> str:
+    """Attribuisce gli speaker ai segmenti gia' trascritti e restituisce la trascrizione come
+    DIALOGO (`""` se non si puo' fare). Scrive gli speaker nei segmenti del job: servono
+    all'export SRT e a chiunque riapra la sessione.
+
+    Non solleva mai: la diarization e' accessoria. Se il pacchetto manca, se i modelli non
+    sono stati scaricati o se il motore cade, si avvisa e si prosegue senza etichette."""
+    segmenti = store.get(job.id).segments
+    if not segmenti or not diarize_mod.is_available() or not diarize_mod.models_ready():
+        return ""
+    try:
+        wav = job.audio_path
+        temp_dir = None
+        if not whisper_mod._is_wav_16k_mono(wav):
+            temp_dir = tempfile.TemporaryDirectory()
+            wav = str(Path(temp_dir.name) / "diar.wav")
+            convert_mod.to_wav_16k_mono(job.audio_path, wav)
+        try:
+            turni = diarize_mod.diarize_wav(wav, num_speakers=settings.num_speakers, should_cancel=cancelled)
+        finally:
+            if temp_dir is not None:
+                temp_dir.cleanup()
+        if not turni:
+            return ""
+        segmenti = speakers_mod.assign_speakers(segmenti, turni)
+        store.update(job.id, segments=segmenti)
+        return speakers_mod.transcript_with_speakers(segmenti, lang=lang)
+    except Exception as e:
+        debuglog.log_exc("diarization_failed", e, jobId=job.id)
+        emit("warning", {"messages": [i18n.t("pipeline.diarization_failed", lang)]})
+        return ""
+
+
 def run_processing(
     job: Job,
     store: JobStore,
@@ -357,7 +411,15 @@ def run_processing(
                 _emit("warning", {"messages": [lang_msg]})
 
             transcript_text = result["text"]
-            store.update(job.id, transcript=transcript_text, duration_s=result["duration_s"], pct=1.0)
+            store.update(
+                job.id,
+                transcript=transcript_text,
+                # i tempi arrivano gratis dalla trascrizione: buttarli via costerebbe una
+                # ri-trascrizione per un export SRT (o per attribuire gli speaker).
+                segments=result.get("segments") or [],
+                duration_s=result["duration_s"],
+                pct=1.0,
+            )
 
             # N1: GATE editing trascrizione — pausa per la correzione manuale del testo PRIMA
             # dell'analisi (errori di riconoscimento — omofoni, nomi propri — degradano il briefing).
@@ -381,6 +443,14 @@ def run_processing(
 
         store.update(job.id, status="analyzing", pct=1.0)
         _emit("status", {"jobId": job.id, "status": "analyzing"})
+
+        # Chi ha detto cosa (opzionale). Gira PRIMA dell'analisi perche' il suo prodotto e' il
+        # testo stesso: in una riunione «l'ha deciso lui» e «l'ha deciso lei» non sono la stessa
+        # informazione. Tollerante per principio — un'etichetta mancata non vale un briefing.
+        if s.diarization:
+            testo_dialogo = _diarize_transcript(job, store, settings=s, lang=lang, emit=_emit, cancelled=_cancelled)
+            if testo_dialogo:
+                transcript_text = testo_dialogo
 
         # A2 (check idoneità, piano timeout-robustezza): conferma con i NUMERI REALI della
         # trascrizione se è adatta al contesto del modello, PRIMA di spendere l'analisi. Tollerante:
@@ -431,17 +501,13 @@ def run_processing(
             # Emette substep della fase analyzing (es. "verify", "questions") per il timer/label
             # nella schermata Processing. Il backend non chiama this per ogni step opzionale
             # (es. se verify=False), ma solo quando il step davvero sta per eseguirsi.
-            step_labels = {
-                "verify": i18n.t("pipeline.step_verify", lang),
-                "questions": i18n.t("pipeline.step_questions", lang),
-            }
-            label = step_labels.get(step, step)
-            _emit("analyze_step", {"jobId": job.id, "step": step, "label": label})
+            _emit("analyze_step", {"jobId": job.id, "step": step, "label": _step_label(step, lang)})
 
         # verify=True attiva il check di copertura "ho colto il punto?" (Task 8); l'analyzer lo
         # esegue solo se serve (purpose debole o mode=riunione) per non raddoppiare i tempi su CPU.
         analysis = analyzer_mod.analyze(
             transcript_text,
+            consolidate_provider=make_consolidate_provider(s),
             mode=job.mode,
             context=job.context or None,
             markers=job.markers,
@@ -464,7 +530,10 @@ def run_processing(
         # chiamata più pesante di tutte (re-incollava ~98k char IGNORANDO il riassunto già fatto
         # dall'analyzer → read-timeout sull'ultimo step). L'analisi JSON è già un riassunto
         # strutturato: passiamo il transcript SOLO se è ideale per il modello, altrimenti "".
-        q_transcript = transcript_text if (fit_report is None or fit_report.level == "ideal") else ""
+        # `fit_report is None` = il check di idoneita' e' FALLITO: "non lo so" non e' "va tutto
+        # bene". Mandare comunque il transcript integrale rientrerebbe dal retro nel timeout che
+        # questo stesso P2 ha chiuso → in dubbio si lavora sull'analisi JSON.
+        q_transcript = transcript_text if (fit_report is not None and fit_report.level == "ideal") else ""
 
         _emit_analyze_step("questions")
         try:
@@ -547,15 +616,18 @@ def generate_briefing(
             )
 
         def _emit_analyze_step_refinement(step: str) -> None:
-            step_labels = {
-                "verify": i18n.t("pipeline.step_verify", lang),
-                "questions": i18n.t("pipeline.step_questions", lang),
-            }
-            label = step_labels.get(step, step)
-            _emit("analyze_step", {"jobId": job.id, "step": step, "label": label})
+            _emit("analyze_step", {"jobId": job.id, "step": step, "label": _step_label(step, lang)})
+
+        # Annulla = interrompi la chiamata LLM, non solo scartarne il risultato: senza questo
+        # il refinement su Ollama/CPU va avanti per minuti dopo che l'utente ha annullato
+        # (stessa classe di bug chiusa in ADR-024 per la trascrizione).
+        def _cancelled() -> bool:
+            return store.get(job.id).status == "cancelled"
 
         analysis = analyzer_mod.analyze(
             job.transcript,
+            should_cancel=_cancelled,
+            consolidate_provider=make_consolidate_provider(s),
             mode=job.mode,
             context=_combined_context(job.context, extra_context),
             markers=job.markers,
@@ -586,8 +658,35 @@ def generate_briefing(
     # "(nessuna…)". Avvisa (warning non bloccante) invece di consegnarlo in silenzio: la causa
     # tipica è il modello (contesto troncato/troppo debole) o un audio senza sostanza. Il
     # briefing si genera comunque (status resta ready) — l'utente decide se rifarlo.
+    # Cifre e nomi che nella registrazione non ci sono (ADR-066): si AVVISA, non si cancella —
+    # un elemento corretto tolto in silenzio farebbe più danno di uno dubbio mostrato.
+    not_grounded = fidelity_mod.unsupported_items(analysis, job.transcript)
+    if not_grounded:
+        voci = ", ".join(dict.fromkeys(m for f in not_grounded for m in f.missing))
+        _emit("warning", {"messages": [i18n.t("pipeline.unsupported_items", lang, items=voci)]})
+
     if analyzer_mod.is_sparse_analysis(analysis):
         _emit("warning", {"messages": [i18n.t("pipeline.sparse_analysis", lang)]})
+    else:
+        # Il caso più insidioso non è l'analisi vuota, è quella ACCORCIATA: un modello
+        # piccolo tiene 2 domande su 5 e consegna un briefing che sembra completo. Qui
+        # l'avviso è deliberatamente cauto ("potrebbe aver perso contenuto"): è una misura
+        # di densità, non di correttezza, e il briefing arriva comunque a ready.
+        words = len((job.transcript or "").split())
+        if analyzer_mod.is_thin_analysis(analysis, words):
+            _emit(
+                "warning",
+                {
+                    "messages": [
+                        i18n.t(
+                            "pipeline.thin_analysis",
+                            lang,
+                            found=analyzer_mod.structured_element_count(analysis),
+                            expected=analyzer_mod.expected_element_floor(words),
+                        )
+                    ]
+                },
+            )
 
     store.update(job.id, status="rendering")
     _emit("status", {"jobId": job.id, "status": "rendering"})

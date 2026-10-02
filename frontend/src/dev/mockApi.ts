@@ -22,6 +22,7 @@ export function installMockApi(): void {
 
   const api = {
     get_app_info: async () => fx.sampleAppInfo,
+    get_changelog: async () => ({ currentVersion: fx.sampleAppInfo.version, entries: [] }),
     system_specs: async () => fx.sampleSystemSpecs,
     disk_usage: async () => fx.sampleDiskUsage,
     flash_taskbar: async () => ok,
@@ -29,6 +30,7 @@ export function installMockApi(): void {
     list_sources: async () => ({ mic: [{}], system: [{}] }),
     start_recording: async () => ok,
     add_marker: async (label: string) => ({ t_ms: 1000, label }),
+    update_marker: async (_i: number, label: string) => ({ t_ms: 1000, label }),
     cancel_recording: async () => ok,
     pause_recording: async () => ({ ok: true, paused: true }),
     resume_recording: async () => ({ ok: true, paused: false }),
@@ -40,6 +42,8 @@ export function installMockApi(): void {
     resume_job: async () => fx.jobView(),
     cancel_job: async () => fx.jobView({ status: "cancelled" }),
     invalidate_transcript_cache: async () => ok,
+    update_transcript: async () => ({ success: true }),
+    resolve_fit: async () => fx.jobView({ status: "transcribing" }),
     get_questions: async () => fx.sampleQuestions,
     generate: async () => fx.jobView({ status: "ready" }),
     get_artifacts: async () => fx.sampleArtifacts,
@@ -57,6 +61,7 @@ export function installMockApi(): void {
     // H — Export
     export_pdf: async () => ({ ok: true, path: "C:\\dev\\recap.pdf" }),
     export_obsidian: async () => ({ ok: true, count: 1 }),
+    export_srt: async () => ({ ok: true, path: "C:\\dev\\recap.srt" }),
     reexport_session: async () => ({ ok: true, path: "C:\\dev\\out.briefing.md", count: 3, paths: [] }),
     save_text_file: async (_c: string, name: string) => ({ ok: true, path: `C:\\dev\\${name}` }),
     // E — Settings
@@ -88,6 +93,9 @@ export function installMockApi(): void {
     lhm_stop: async () => ok,
     lhm_uninstall: async () => ok,
     lhm_debug: async () => ({ ok: true, stdout: "dev" }),
+    // J — attribuzione speaker (diarization)
+    diarization_status: async () => ({ available: true, modelsReady: true, sizeMb: 35 }),
+    download_diarization_models: async () => ok,
   };
 
   // Cast: l'oggetto rispetta il contratto VokariApi a runtime; evitiamo di

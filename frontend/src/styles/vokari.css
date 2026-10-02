@@ -456,6 +456,7 @@ kbd{font-family:var(--mono);font-size:11px;font-weight:500;}
 .vk-file .ico.md{background:var(--green);}
 .vk-file .ico.rc{background:var(--amber);}
 .vk-file .ico.vault{background:var(--violet);}
+.vk-file .ico.tr{background:var(--ink2);}
 .vk-file .info{flex:1 1 auto;min-width:0;}
 .vk-file .info .nm{font-family:var(--mono);font-size:12.5px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .vk-file .info .ds{font-size:11px;color:var(--mut);margin-top:1px;}

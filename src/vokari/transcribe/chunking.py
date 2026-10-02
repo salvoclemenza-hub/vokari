@@ -20,6 +20,17 @@ CHUNK_DURATION_S = 600
 # tipica al confine; 5s è ampio e aggiunge <1% di audio ri-trascritto per chunk da 10min.
 OVERLAP_DURATION_S = 5
 
+# Quanto si può arretrare il taglio per farlo cadere in un silenzio (secondi). Il taglio a
+# tempo fisso cade quasi sempre in mezzo a una parola: Whisper riparte da un frammento e
+# proprio lì tende ad allucinare. Si cerca ALL'INDIETRO (mai in avanti: il chunk non deve
+# crescere) e ci si sposta solo se il guadagno è reale.
+BOUNDARY_SEARCH_S = 15
+# Finestra su cui si misura l'energia, in millisecondi.
+_RMS_WINDOW_MS = 50
+# Ci si sposta solo se il punto candidato è almeno la metà meno sonoro di quello nominale:
+# su audio uniforme (o tutto silenzio) non c'è niente da guadagnare e il taglio resta dov'era.
+_QUIET_GAIN = 0.5
+
 
 class Chunk(NamedTuple):
     """Un chunk WAV con il suo offset e la finestra di accettazione (tempo assoluto, secondi).
@@ -31,6 +42,42 @@ class Chunk(NamedTuple):
     offset_s: float
     accept_lo: float
     accept_hi: float
+
+
+def quietest_offset(samples, center: int, search: int, win: int) -> int:
+    """Indice del punto più silenzioso in `[center-search, center]`, o `center` se spostarsi
+    non porta un guadagno vero. Puro: lavora su un array di campioni interi.
+
+    `samples` è un array numpy di PCM16 mono; `center`, `search` e `win` sono in campioni."""
+    import numpy as np
+
+    lo = max(0, center - search)
+    if center <= lo or win <= 0 or len(samples) < center:
+        return center
+    a = np.asarray(samples[lo:center], dtype=np.float64)
+    n_win = len(a) // win
+    if n_win < 2:
+        return center
+    energia = np.sqrt((a[: n_win * win].reshape(n_win, win) ** 2).mean(axis=1))
+    i_min = int(energia.argmin())
+    coda = np.asarray(samples[max(0, center - win) : center], dtype=np.float64)
+    rms_nominale = float(np.sqrt((coda**2).mean())) if len(coda) else 0.0
+    if energia[i_min] >= rms_nominale * _QUIET_GAIN:
+        return center  # niente di meglio del punto in cui saremmo tagliati comunque
+    return lo + i_min * win + win // 2
+
+
+def _pcm16_mono(raw: bytes, n_channels: int, sampwidth: int):
+    """Array numpy dei campioni, o None se il formato non è PCM16 mono (nessun aggiustamento:
+    meglio il taglio a tempo fisso che un'interpretazione sbagliata dei byte)."""
+    if n_channels != 1 or sampwidth != 2:
+        return None
+    try:
+        import numpy as np
+
+        return np.frombuffer(raw, dtype=np.int16)
+    except Exception:
+        return None
 
 
 def wav_duration(wav_path: str) -> float:
@@ -75,15 +122,31 @@ def split_wav(wav_path: str, chunk_s: int = CHUNK_DURATION_S, overlap_s: int | N
 
             offset_sec = offset / framerate
             is_last = offset + chunk_frames >= total_frames
-            # Confine alla metà dell'overlap: il prossimo chunk parte a offset_sec+step_s,
-            # quindi il confine condiviso è (offset_sec + step_s) + overlap_s/2.
+
+            # Dove comincia il prossimo chunk: il passo nominale, arretrato fino al punto più
+            # silenzioso se ce n'è uno (così Whisper non riparte da mezza parola). La ricerca
+            # guarda solo INDIETRO: il chunk corrente copre già quell'audio, quindi spostare
+            # il taglio non può aprire buchi.
+            passo = step_frames
+            if not is_last:
+                samples = _pcm16_mono(raw, n_channels, sampwidth)
+                if samples is not None:
+                    passo = quietest_offset(
+                        samples,
+                        center=step_frames,
+                        search=min(BOUNDARY_SEARCH_S * framerate, step_frames // 2),
+                        win=max(1, _RMS_WINDOW_MS * framerate // 1000),
+                    )
+            next_sec = (offset + passo) / framerate
+
+            # Confine alla metà dell'overlap fra questo chunk e il prossimo.
             accept_lo = 0.0 if index == 0 else offset_sec + overlap_s / 2
-            accept_hi = float("inf") if is_last else offset_sec + step_s + overlap_s / 2
+            accept_hi = float("inf") if is_last else next_sec + overlap_s / 2
             yield Chunk(buf.getvalue(), offset_sec, accept_lo, accept_hi)
 
             if is_last:
                 break
-            offset += step_frames
+            offset += passo
             index += 1
 
 

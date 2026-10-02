@@ -9,6 +9,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-01
+
+Speaker attribution, subtitles, and a vocabulary that finally counts.
+
+### Added
+- **Speaker attribution (optional).** The transcript becomes a dialogue, with the speaker's
+  name next to each line — in the transcript and in the subtitles. It runs locally on your
+  CPU and adds roughly one minute for every three minutes of recording. Telling VOKARI how
+  many people are speaking improves the result a lot; left on "I don't know", one person
+  sometimes gets split in two. Voice models (~35 MB) download on demand, only if you enable
+  the feature. On audio that mixes microphone and system sound into a single channel the
+  quality degrades — the app says so.
+- **`.srt` subtitle export** from the artifacts, with the timing of every line and the
+  speaker's name when attribution is on. Sessions recorded before this version have no
+  stored timings, and the export says so instead of writing an empty file.
+- **A warning when the briefing drifts from the recording.** If names or figures appear that
+  cannot be heard in the audio, VOKARI tells you. Nothing is deleted — silently removing a
+  correct item would be worse than showing the doubt.
+
+### Changed
+- **Your vocabulary now applies to the whole recording.** The terms you type in "Your
+  context" used to reach only the first ~30 seconds, and changing them returned the old
+  cached transcript anyway. Both are fixed; existing caches stay valid.
+- **Long recordings are split at quiet moments** instead of at a fixed time, so fewer
+  sentences get cut in half — and fewer words get invented where the cut used to land in
+  the middle of one.
+- **Briefings and recaps state that they were generated with AI**, in the metadata and in
+  a line a person can read.
+
+### Fixed
+- **Drawing the conclusions no longer drops numbers.** Dates, quantities and amounts found
+  in the first pass come back into the briefing even when the summary left them out.
+- **"Cancel" really stops the briefing regeneration** instead of discarding the result while
+  the model keeps working for minutes.
+- On long recordings the final check no longer re-sends the whole transcript in one call —
+  the very thing that reading it in passes was meant to avoid.
+
+## [0.2.2] - 2026-09-24
+
+Long recordings stop losing their second half. *(Built but never shipped publicly — its
+changes reach you with 0.3.0.)*
+
+### Added
+- **The full transcript can be downloaded** from the artifacts, not just copied.
+- **A dedicated model to draw the conclusions.** With a local brain you can pick a more
+  capable model (e.g. `granite4.2:8b`) just for the final merge, keeping the fast one for
+  everything else. It is more precise and noticeably slower — and it compresses: the raw
+  merge stays the most faithful, only messier.
+- **A warning when the analysis extracts little** for the length of the recording.
+
+### Changed
+- **Long recordings are analyzed in passes** instead of all at once. On a real 10-minute
+  recording the extracted items went from 7 to 21, recovering dates, commitments and topics
+  that used to disappear. The problem was never the context window — it was attention.
+
+### Fixed
+- Models that "think out loud" (granite, qwen3, deepseek-r1) no longer stall the analysis.
+- Obsidian notes keep their properties when the title contains quotes.
+- Pronouns, common nouns and never-spoken names no longer show up among the mentioned entities.
+- The version shown in the app is the one actually installed.
+
 ## [0.2.1] - 2026-07-01
 
 Cross-platform release — VOKARI now runs on **macOS** (Apple Silicon) and **Linux**, in
@@ -114,7 +175,8 @@ First public release.
   text is sent to the AI, and even that stays local if you choose Ollama. API keys are
   stored in the OS keyring, never in files. No telemetry.
 
-[Unreleased]: https://github.com/salvoclemenza-hub/vokari/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/salvoclemenza-hub/vokari/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/salvoclemenza-hub/vokari/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/salvoclemenza-hub/vokari/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/salvoclemenza-hub/vokari/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/salvoclemenza-hub/vokari/releases/tag/v0.1.1

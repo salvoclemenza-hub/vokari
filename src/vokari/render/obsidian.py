@@ -5,6 +5,7 @@ YAML coerente + wikilink `[[...]]`. `export_to_vault` le scrive su disco senza
 sovrascrivere (suffisso numerico se il nome esiste già).
 """
 
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,13 +21,26 @@ class ObsidianNote:
     content: str
 
 
-_BAD = re.compile(r'[\\/:*?"<>|#\[\]]')
+# `^` incluso: Obsidian lo usa per i riferimenti a blocco (`nota#^id`) e in un nome file
+# confonde il parser dei link.
+_BAD = re.compile(r'[\\/:*?"<>|#^\[\]]')
 
 
 def safe(text: str) -> str:
     """Sanitizza un titolo per usarlo come nome file Obsidian (rimuove i caratteri non
     ammessi, preserva spazi/accenti/maiuscole). API pubblica del modulo."""
-    return _BAD.sub("", text).strip() or "Nota"
+    # Windows non accetta nomi che finiscono con punto o spazio: il file verrebbe rinominato
+    # in silenzio dal sistema, e il wikilink che punta al nome originale resterebbe rotto.
+    return _BAD.sub("", text).strip().rstrip(" .") or "Nota"
+
+
+def _yaml_str(value: str) -> str:
+    """Stringa YAML sempre valida, virgolette comprese. Un titolo come `Analisi "avocado"`
+    quotato a mano produce `title: "Analisi "avocado""`, che e' YAML INVALIDO — e Obsidian
+    in quel caso non degrada: perde TUTTE le proprieta' della nota (tag, data, tipo, source).
+    JSON e' un sottoinsieme di YAML, quindi json.dumps risolve escape e accenti in un colpo:
+    stessa tecnica gia' usata nel frontmatter del briefing."""
+    return json.dumps(value, ensure_ascii=False)
 
 
 _safe = safe  # retro-compat per gli usi interni storici
@@ -71,7 +85,7 @@ def render_obsidian_notes(
     body = [
         _frontmatter(
             {
-                "title": f'"{title}"',
+                "title": _yaml_str(title),
                 "created": date,
                 "type": "meeting" if a.meta.type == "meeting" else "permanent",
                 "status": "seedling",
@@ -118,11 +132,11 @@ def render_obsidian_notes(
             [
                 _frontmatter(
                     {
-                        "title": f'"{d.title or _short(d.decision)}"',
+                        "title": _yaml_str(d.title or _short(d.decision)),
                         "created": date,
                         "type": "decision",
                         "status": "seedling",
-                        "source": f'"[[{date} – {_safe(title)}]]"',
+                        "source": _yaml_str(f"[[{date} – {_safe(title)}]]"),
                         "tags": [i18n.t("obs.tag_decision", app_lang)],
                     }
                 ),

@@ -337,3 +337,37 @@ def test_parse_json_lenient_plain_json_still_works():
 def test_parse_json_lenient_raises_on_invalid():
     with pytest.raises(LLMError):
         parse_json_lenient("questo non è json")
+
+
+def test_connect_error_says_not_installed_when_ollama_is_missing(monkeypatch):
+    """Caso reale (primo avvio di un utente che non ha letto la configurazione): senza
+    l'eseguibile, "non raggiungibile — avvialo" manda a cercare un servizio inesistente."""
+    import httpx
+
+    from vokari.llm import ollama_provider as op
+
+    monkeypatch.setattr(op.shutil, "which", lambda _name: None)
+    msg = op._ollama_http_error_message("http://localhost:11434", httpx.ConnectError("refused"))
+    assert "non è installato" in msg and "ollama.com" in msg
+
+
+def test_connect_error_says_start_it_when_ollama_is_installed(monkeypatch):
+    """Controprova: se l'eseguibile c'è, il problema è che è fermo — e il consiglio cambia."""
+    import httpx
+
+    from vokari.llm import ollama_provider as op
+
+    monkeypatch.setattr(op.shutil, "which", lambda _name: r"C:\ollama\ollama.exe")
+    msg = op._ollama_http_error_message("http://localhost:11434", httpx.ConnectError("refused"))
+    assert "non raggiungibile" in msg and "avvialo" in msg
+
+
+def test_payload_disables_model_thinking():
+    """I modelli thinking su CPU sono inutilizzabili: misurato 94s vs 6s per la stessa
+    estrazione. Il campo è ignorato dai modelli che non pensano, quindi si manda sempre."""
+    from vokari.llm.ollama_provider import OllamaProvider
+
+    p = OllamaProvider(endpoint="http://x", model="m")
+    p.model_max_ctx = lambda: 8192
+    payload = p._payload("sys", "user", json_mode=True, json_schema=None, stream=False)
+    assert payload["think"] is False
